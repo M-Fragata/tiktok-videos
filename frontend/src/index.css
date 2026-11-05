@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Utilitário de stroke estilo TikTok para legendas de alto impacto */
+.tiktok-subtitle-stroke {
+  -webkit-text-stroke: 6px #000000;
+  paint-order: stroke fill;
+  text-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.95),
+    0 2px 4px rgba(0, 0, 0, 1);
+}
+

@@ -1,0 +1,15 @@
+{
+  "name": "tiktok-time-machine-poc",
+  "private": true,
+  "version": "1.0.0",
+  "description": "POC de Motor de Vídeos Automatizados para TikTok (História / Máquina do Tempo) com Remotion, Vite, Express e Prisma",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:studio": "npm --prefix frontend run studio",
+    "dev:backend": "npm --prefix backend run dev",
+    "db:up": "docker compose up -d",
+    "db:push": "npm --prefix backend run db:push",
+    "db:generate": "npm --prefix backend run db:generate"
+  }
+}
+
