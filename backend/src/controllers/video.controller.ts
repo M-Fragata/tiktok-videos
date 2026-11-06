@@ -15,12 +15,13 @@ import { generateNarrationWithTimestamps } from '../services/elevenlabs.service.
 import { generateAllSceneBackgrounds } from '../services/imagen.service.ts';
 
 /**
- * Flag temporária de MOCK:
- * Enquanto true, POST /api/generate-video utiliza os ficheiros locais em backend/storage/teste/
- * (scene_0.jpg, scene_1.jpg, scene_2.jpg e audio.mp3) sem chamar Gemini, ElevenLabs ou Imagen.
- * Mude para false quando quiser usar as APIs reais.
+ * Flag de MOCK:
+ * Definido como false para executar as chamadas reais aos 3 pilares de IA:
+ * 1. Google Gemini (Roteirista estruturado com 12 sprites)
+ * 2. ElevenLabs (/with-timestamps para áudio e legendas alinhadas)
+ * 3. Google Imagen (Múltiplos cenários 9:16 gerados em paralelo)
  */
-const USE_AI_MOCK = true;
+const USE_AI_MOCK = false;
 
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
