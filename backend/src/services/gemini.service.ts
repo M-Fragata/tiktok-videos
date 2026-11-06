@@ -17,6 +17,8 @@ export type AvatarSprite = (typeof VALID_AVATAR_SPRITES)[number];
 
 export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
+export type DurationPreset = 'short' | 'medium' | 'long';
+
 export interface ScriptScene {
   speaker: SpeakerType;
   text: string;
@@ -31,23 +33,53 @@ export interface GeneratedScript {
 
 const VALID_SPEAKERS: SpeakerType[] = ['protagonist', 'character', 'narrator'];
 
+const DURATION_RULES: Record<
+  DurationPreset,
+  { label: string; sceneRange: string; maxWords: number; targetSeconds: number }
+> = {
+  short: {
+    label: 'Curto (15s - máx 40 palavras)',
+    sceneRange: '3 a 4 cenas curtas',
+    maxWords: 40,
+    targetSeconds: 15,
+  },
+  medium: {
+    label: 'Médio (30s - máx 70 palavras)',
+    sceneRange: '4 a 6 cenas dinâmicas',
+    maxWords: 70,
+    targetSeconds: 30,
+  },
+  long: {
+    label: 'Longo (60s - máx 140 palavras)',
+    sceneRange: '6 a 8 cenas completas',
+    maxWords: 140,
+    targetSeconds: 60,
+  },
+};
+
 /**
  * Pilar 1 (O Roteirista):
  * Gera o roteiro estruturado em cenas no formato "Vlog de Viagem no Tempo" (POV + Stick Figures)
- * usando Google Gemini com Structured Outputs (responseSchema).
+ * usando Google Gemini com Structured Outputs (responseSchema) e limite de duração configurável.
  */
 export async function generateTimeMachineScript(
-  theme: string
+  theme: string,
+  durationPreset: DurationPreset = 'short'
 ): Promise<GeneratedScript> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY não configurada no ficheiro backend/.env.');
   }
 
+  const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
+
   const systemInstruction = `És um roteirista e diretor de arte para vídeos virais do TikTok no nicho "Máquina do Tempo / História".
 O formato é um Vlog de Viagem no Tempo caótico, onde um viajante moderno (um boneco de palito) interage com o passado.
 
-Duração: 3 a 5 cenas curtas (total de 15 a 20 segundos de fala).
+Duração Selecionada (${rule.label}):
+- Estrutura: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala).
+- LIMITE ESTRITO DE PALAVRAS: A soma de todas as falas ("text") de todas as cenas NÃO DEVE ultrapassar ${rule.maxWords} palavras no total.
+
 Estética Visual Obrigatória (Mídia Mista): Os cenários de fundo devem ser hiper-realistas e cinematográficos. No entanto, QUALQUER personagem histórico que apareça na imagem DEVE ser desenhado como um "stick figure" (boneco de palito de linhas pretas simples), diferenciado apenas por adereços fotorealistas na cabeça (ex: um boneco de palito usando um capacete de centurião romano detalhado, ou um boneco de palito com a peruca de Einstein).
 
 Regras de Roteiro:
@@ -108,7 +140,6 @@ Retorne APENAS um objeto JSON válido neste formato exato:
     required: ['scenes'],
   };
 
-  // Modelos disponíveis em ordem de preferência
   const candidateModels = [
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
@@ -155,7 +186,7 @@ Retorne APENAS um objeto JSON válido neste formato exato:
       const parsed = JSON.parse(rawJson) as GeneratedScript;
       if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
         console.log(
-          `[Gemini] Roteiro Multi-Voz gerado com sucesso usando ${model} (${parsed.scenes.length} cenas).`
+          `[Gemini] Roteiro Multi-Voz (${durationPreset}) gerado com sucesso usando ${model} (${parsed.scenes.length} cenas).`
         );
         return parsed;
       }

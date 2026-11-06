@@ -15,7 +15,13 @@ export const AVAILABLE_AVATAR_SPRITES = [
   'avatars/avatar_sad.png',
 ] as const;
 
-export type AvatarSpritePath = (typeof AVAILABLE_AVATAR_SPRITES)[number] | string;
+export type AvatarSpritePath =
+  | (typeof AVAILABLE_AVATAR_SPRITES)[number]
+  | string;
+
+export type SpeakerType = 'protagonist' | 'character' | 'narrator';
+
+export type DurationPreset = 'short' | 'medium' | 'long';
 
 export interface SubtitleItem {
   frameStart: number;
@@ -35,6 +41,32 @@ export interface BackgroundSegment {
   frameEnd: number;
 }
 
+export interface SceneFrameTiming {
+  sceneIndex: number;
+  startSecond: number;
+  endSecond: number;
+  frameStart: number;
+  frameEnd: number;
+}
+
+export interface StoryboardScene {
+  speaker: SpeakerType;
+  text: string;
+  avatarSprite: AvatarSpritePath;
+  imagePrompt: string;
+  sfx_suggestion?: string;
+  candidateImages: string[];
+  selectedImage: string | null;
+}
+
+export interface StoryboardState {
+  durationPreset: DurationPreset;
+  scenes: StoryboardScene[];
+  audioGenerated: boolean;
+  isAssembled: boolean;
+  sceneTimings?: SceneFrameTiming[];
+}
+
 export type TimeMachineVideoProps = {
   theme: string;
   durationInFrames?: number;
@@ -43,12 +75,13 @@ export type TimeMachineVideoProps = {
   audioSrc?: string;
   subtitles?: SubtitleItem[];
   avatarTimeline?: AvatarSegment[];
+  storyboard?: StoryboardState;
 };
 
 export interface VideoRecord {
   id: string;
   theme: string;
-  status: 'PENDING' | 'RENDERED' | 'FAILED' | string;
+  status: 'DRAFT' | 'PENDING' | 'RENDERED' | 'FAILED' | string;
   videoUrl: string | null;
   remotionProps?: TimeMachineVideoProps | null;
   createdAt: string;

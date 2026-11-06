@@ -6,6 +6,7 @@ export const Home: React.FC = () => {
   const navigate = useNavigate();
   const [videos, setVideos] = useState<VideoRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchVideos = async () => {
@@ -29,6 +30,38 @@ export const Home: React.FC = () => {
     void fetchVideos();
   }, []);
 
+  /**
+   * Cria um registo em rascunho (status: DRAFT, remotionProps: null)
+   * e abre diretamente o Studio na Etapa 1 (Briefing) sem gastar créditos de IA.
+   */
+  const handleCreateDraftVideo = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme: 'Novo Vídeo — Máquina do Tempo',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao iniciar rascunho de vídeo');
+      }
+
+      navigate(`/video/${data.video.id}`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Erro ao criar novo projeto'
+      );
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Top Header */}
@@ -43,17 +76,18 @@ export const Home: React.FC = () => {
                 Fábrica de Vídeos com IA
               </h1>
               <p className="text-xs text-slate-400">
-                Máquina do Tempo • TikTok 9:16 (1080x1920)
+                Máquina do Tempo • Storyboard 3 Etapas • TikTok 9:16
               </p>
             </div>
           </div>
 
           <button
-            onClick={() => navigate('/create')}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95"
+            onClick={handleCreateDraftVideo}
+            disabled={isCreating}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50"
           >
             <span className="text-base leading-none font-black">+</span>
-            <span>Criar Novo Vídeo</span>
+            <span>{isCreating ? 'A abrir Studio...' : 'Criar Novo Vídeo'}</span>
           </button>
         </div>
       </header>
@@ -66,7 +100,7 @@ export const Home: React.FC = () => {
               Histórico de Produções
             </h2>
             <p className="text-xs text-slate-400">
-              Gerações salvas no servidor prontas para edição fina no Studio
+              Rascunhos de Storyboard e vídeos renderizados prontos para edição no Studio
             </p>
           </div>
 
@@ -89,34 +123,43 @@ export const Home: React.FC = () => {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {/* Cartão 1: Criar Novo Vídeo */}
           <div
-            onClick={() => navigate('/create')}
+            onClick={handleCreateDraftVideo}
             className="group relative flex min-h-[380px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30 p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/60 hover:bg-amber-500/5 hover:shadow-xl hover:shadow-amber-500/5"
           >
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-amber-400 shadow-lg group-hover:scale-110 group-hover:border-amber-500/50 group-hover:bg-amber-500/20 transition-all duration-200">
               <span className="text-3xl font-light leading-none">+</span>
             </div>
             <h3 className="mt-5 text-base font-bold text-white group-hover:text-amber-400 transition">
-              Criar Novo Vídeo
+              {isCreating ? 'A abrir Studio...' : 'Criar Novo Vídeo'}
             </h3>
-            <p className="mt-1.5 max-w-[200px] text-xs text-slate-400">
-              Defina um tema histórico para gerar roteiro, narração e cenários via IA
+            <p className="mt-1.5 max-w-[210px] text-xs text-slate-400">
+              Inicie no Modo Storyboard: aprove o roteiro antes de gerar imagens B-Roll e locução
             </p>
           </div>
 
           {/* Cartões dos Vídeos no Histórico */}
           {videos.map((video) => {
+            const firstSelectedSceneImg =
+              video.remotionProps?.storyboard?.scenes?.find(
+                (s) => s.selectedImage
+              )?.selectedImage;
+
             const thumbnailSrc =
+              firstSelectedSceneImg ||
               video.remotionProps?.backgroundTimeline?.[0]?.imageSrc ||
               video.remotionProps?.backgroundSrc ||
               'background.jpg';
 
             const resolvedThumb = resolveAssetSrc(thumbnailSrc);
-            const dateStr = new Date(video.createdAt).toLocaleDateString('pt-BR', {
-              day: '2-digit',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+            const dateStr = new Date(video.createdAt).toLocaleDateString(
+              'pt-BR',
+              {
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              }
+            );
 
             return (
               <div
@@ -141,7 +184,9 @@ export const Home: React.FC = () => {
                           ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
                           : video.status === 'FAILED'
                             ? 'border-rose-500/40 bg-rose-500/20 text-rose-300'
-                            : 'animate-pulse border-amber-500/40 bg-amber-500/20 text-amber-300'
+                            : video.status === 'DRAFT'
+                              ? 'border-sky-500/40 bg-sky-500/20 text-sky-300'
+                              : 'animate-pulse border-amber-500/40 bg-amber-500/20 text-amber-300'
                       }`}
                     >
                       <span
@@ -150,7 +195,9 @@ export const Home: React.FC = () => {
                             ? 'bg-emerald-400'
                             : video.status === 'FAILED'
                               ? 'bg-rose-400'
-                              : 'bg-amber-400'
+                              : video.status === 'DRAFT'
+                                ? 'bg-sky-400'
+                                : 'bg-amber-400'
                         }`}
                       />
                       {video.status}
@@ -200,4 +247,3 @@ export const Home: React.FC = () => {
     </div>
   );
 };
-

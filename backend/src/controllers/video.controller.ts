@@ -2,6 +2,10 @@ import path from 'node:path';
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.ts';
 import {
+  createDraftVideoSchema,
+  generateAudioSchema,
+  generateSceneImagesSchema,
+  generateScriptSchema,
   generateVideoSchema,
   renderVideoSchema,
   type RenderVideoInput,
@@ -10,17 +14,16 @@ import {
   renderTimeMachineVideoOnDisk,
   STORAGE_OUTPUT_DIR,
 } from '../services/remotion.service.ts';
-import { generateTimeMachineScript } from '../services/gemini.service.ts';
+import {
+  generateTimeMachineScript,
+  type ScriptScene,
+} from '../services/gemini.service.ts';
 import { generateNarrationWithTimestamps } from '../services/elevenlabs.service.ts';
-import { generateAllSceneBackgrounds } from '../services/imagen.service.ts';
+import {
+  generateAllSceneBackgrounds,
+  generateSceneBrollImages,
+} from '../services/imagen.service.ts';
 
-/**
- * Flag de MOCK:
- * Definido como false para executar as chamadas reais aos 3 pilares de IA:
- * 1. Google Gemini (Roteirista estruturado com 12 sprites)
- * 2. ElevenLabs (/with-timestamps para áudio e legendas alinhadas)
- * 3. Google Imagen (Múltiplos cenários 9:16 gerados em paralelo)
- */
 const USE_AI_MOCK = false;
 
 function getPublicBaseUrl(): string {
@@ -32,104 +35,374 @@ function getPublicBaseUrl(): string {
 }
 
 /**
- * Objeto remotionProps fixo de MOCK apontando para backend/storage/teste/
+ * POST /api/videos
+ * Cria um novo vídeo em rascunho (status: 'DRAFT', remotionProps: null)
+ * para abrir diretamente na Etapa 1 (Briefing) do Studio.tsx sem gastar créditos de IA.
  */
-function buildMockRemotionProps(
-  theme: string,
-  publicBaseUrl: string
-): RenderVideoInput {
-  return {
-    theme,
-    durationInFrames: 450,
-    backgroundSrc: `${publicBaseUrl}/storage/teste/scene_0.jpg`,
-    backgroundTimeline: [
-      {
-        imageSrc: `${publicBaseUrl}/storage/teste/scene_0.jpg`,
-        frameStart: 0,
-        frameEnd: 149,
+export async function createDraftVideoController(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const parsedBody = createDraftVideoSchema.safeParse(req.body || {});
+  const theme = parsedBody.success
+    ? parsedBody.data.theme
+    : 'Novo Vídeo — Máquina do Tempo';
+
+  try {
+    const video = await prisma.video.create({
+      data: {
+        theme,
+        status: 'DRAFT',
       },
-      {
-        imageSrc: `${publicBaseUrl}/storage/teste/scene_1.jpg`,
-        frameStart: 150,
-        frameEnd: 299,
-      },
-      {
-        imageSrc: `${publicBaseUrl}/storage/teste/scene_2.jpg`,
-        frameStart: 300,
-        frameEnd: 450,
-      },
-    ],
-    audioSrc: `${publicBaseUrl}/storage/teste/audio.mp3`,
-    avatarTimeline: [
-      {
-        startSecond: 0,
-        endSecond: 5,
-        image: 'avatars/avatar_greeting.png',
-      },
-      {
-        startSecond: 5,
-        endSecond: 10,
-        image: 'avatars/avatar_neutral.png',
-      },
-      {
-        startSecond: 10,
-        endSecond: 15,
-        image: 'avatars/avatar_shocked.png',
-      },
-    ],
-    subtitles: [
-      {
-        frameStart: 0,
-        frameEnd: 49,
-        text: 'Viajante! Aterrámos em Pompeia',
-      },
-      {
-        frameStart: 50,
-        frameEnd: 99,
-        text: 'no ano 79 depois',
-      },
-      {
-        frameStart: 100,
-        frameEnd: 149,
-        text: 'de Cristo! Olha só!',
-      },
-      {
-        frameStart: 150,
-        frameEnd: 199,
-        text: 'Os romanos achavam que',
-      },
-      {
-        frameStart: 200,
-        frameEnd: 249,
-        text: 'o Vesúvio era apenas',
-      },
-      {
-        frameStart: 250,
-        frameEnd: 299,
-        text: 'uma montanha totalmente adormecida.',
-      },
-      {
-        frameStart: 300,
-        frameEnd: 349,
-        text: 'Mas o chão tremeu!',
-      },
-      {
-        frameStart: 350,
-        frameEnd: 399,
-        text: 'O vulcão acabou de',
-      },
-      {
-        frameStart: 400,
-        frameEnd: 450,
-        text: 'explodir! Volta para a máquina!',
-      },
-    ],
-  };
+    });
+
+    res.status(201).json({ video });
+  } catch (error) {
+    console.error('[Prisma] Erro ao criar rascunho de vídeo:', error);
+    res
+      .status(500)
+      .json({ error: 'Erro interno ao criar rascunho de vídeo.' });
+  }
 }
 
 /**
- * POST /api/generate-video
- * Orquestra os 3 pilares de IA (ou usa o MOCK local em storage/teste/ quando USE_AI_MOCK = true).
+ * Etapa 1 -> Etapa 2:
+ * POST /api/videos/:id/generate-script
+ * Chama apenas o Google Gemini com o tema e a duração escolhida,
+ * devolvendo a estrutura JSON das cenas para edição no Storyboard.
+ */
+export async function generateScriptController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateScriptSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Dados de Briefing inválidos',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { theme, durationPreset } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    console.log(
+      `[Storyboard - Etapa 1] Gerando roteiro no Gemini para "${theme}" (${durationPreset})...`
+    );
+    const { scenes } = await generateTimeMachineScript(theme, durationPreset);
+
+    const storyboardScenes = scenes.map((scene) => ({
+      speaker: scene.speaker,
+      text: scene.text,
+      avatarSprite: scene.avatarSprite,
+      imagePrompt: scene.imagePrompt,
+      sfx_suggestion: scene.sfx_suggestion || '',
+      candidateImages: [] as string[],
+      selectedImage: null as string | null,
+    }));
+
+    const remotionProps: RenderVideoInput = {
+      theme,
+      durationInFrames:
+        durationPreset === 'long'
+          ? 1800
+          : durationPreset === 'medium'
+            ? 900
+            : 450,
+      backgroundSrc: 'background.jpg',
+      backgroundTimeline: [],
+      audioSrc: 'audio.mp3',
+      subtitles: [],
+      avatarTimeline: [],
+      storyboard: {
+        durationPreset,
+        scenes: storyboardScenes,
+        audioGenerated: false,
+        isAssembled: false,
+        sceneTimings: [],
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        theme,
+        status: 'DRAFT',
+        remotionProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Roteiro gerado com sucesso.',
+      scenes: storyboardScenes,
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Storyboard] Erro ao gerar roteiro:', error);
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Erro ao gerar roteiro com IA.',
+    });
+  }
+}
+
+/**
+ * Etapa 3A (Por Cena):
+ * POST /api/videos/:id/generate-scene-images
+ * Recebe o sceneIndex e o imagePrompt (editável pelo utilizador),
+ * gera 2 variações de imagem 9:16 (B-Roll) no Fal.ai FLUX.1 e devolve o array com 2 URLs.
+ */
+export async function generateSceneImagesController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateSceneImagesSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para geração de imagens da cena',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { sceneIndex, imagePrompt, scenes: clientScenes } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+
+    const candidateUrls = await generateSceneBrollImages(
+      id,
+      sceneIndex,
+      imagePrompt,
+      storageVideoDir,
+      publicBaseUrl
+    );
+
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short' as const,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const baseScenes =
+      clientScenes && clientScenes.length > 0
+        ? clientScenes
+        : currentStoryboard.scenes;
+
+    const updatedScenes = baseScenes.map((scene, idx) => {
+      if (idx !== sceneIndex) return scene;
+      return {
+        ...scene,
+        imagePrompt,
+        candidateImages: candidateUrls,
+        selectedImage: scene.selectedImage || candidateUrls[0] || null,
+      };
+    });
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      theme: existingVideo.theme,
+      storyboard: {
+        ...currentStoryboard,
+        scenes: updatedScenes,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: `2 variações B-Roll geradas para a cena #${sceneIndex + 1}.`,
+      sceneIndex,
+      images: candidateUrls,
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Storyboard] Erro ao gerar imagens B-Roll da cena:', error);
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Erro ao gerar imagens para a cena.',
+    });
+  }
+}
+
+/**
+ * Etapa 3B (Global):
+ * POST /api/videos/:id/generate-audio
+ * Recebe o script editado (cenas com texto, speaker e avatarSprite),
+ * chama a ElevenLabs Multi-Voz (/with-timestamps) e concatena o audio.mp3 com FFmpeg.
+ */
+export async function generateAudioController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateAudioSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Cenas inválidas para gravação da narração',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { scenes } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+
+    const scriptScenesForTts: ScriptScene[] = scenes.map((s) => ({
+      speaker: s.speaker,
+      text: s.text,
+      avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
+      imagePrompt: s.imagePrompt,
+      sfx_suggestion: s.sfx_suggestion,
+    }));
+
+    const narrationResult = await generateNarrationWithTimestamps(
+      id,
+      scriptScenesForTts,
+      storageVideoDir,
+      publicBaseUrl
+    );
+
+    const cacheBustedAudioUrl = `${narrationResult.audioUrl}?v=${Date.now()}`;
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short' as const,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      theme: existingVideo.theme,
+      durationInFrames: narrationResult.durationInFrames,
+      audioSrc: cacheBustedAudioUrl,
+      subtitles: narrationResult.subtitles,
+      avatarTimeline: narrationResult.avatarTimeline,
+      storyboard: {
+        ...currentStoryboard,
+        scenes,
+        audioGenerated: true,
+        sceneTimings: narrationResult.sceneTimings,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Narração multi-voz gravada e sincronizada com sucesso.',
+      narration: {
+        ...narrationResult,
+        audioUrl: cacheBustedAudioUrl,
+      },
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Storyboard] Erro ao gerar narração multi-voz:', error);
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Erro ao gravar narração na ElevenLabs.',
+    });
+  }
+}
+
+/**
+ * PUT /api/videos/:id/storyboard
+ * Salva o estado montado do Storyboard (ex: ao clicar em "🎬 Montar Vídeo" ou selecionar imagens B-Roll)
+ * sem disparar a renderização pesada de MP4 no servidor.
+ */
+export async function saveStoryboardController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = renderVideoSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Dados de Storyboard inválidos',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        theme: parsedBody.data.theme,
+        remotionProps: parsedBody.data,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Storyboard atualizado com sucesso.',
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Prisma] Erro ao salvar estado do Storyboard:', error);
+    res.status(500).json({
+      error: 'Erro interno ao salvar estado do Storyboard.',
+    });
+  }
+}
+
+/**
+ * Rota legada POST /api/generate-video (mantida para compatibilidade)
  */
 export async function generateVideoController(
   req: Request,
@@ -158,73 +431,51 @@ export async function generateVideoController(
     void (async () => {
       try {
         const publicBaseUrl = getPublicBaseUrl();
-        let remotionProps: RenderVideoInput;
+        const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, videoRecord.id);
 
-        if (USE_AI_MOCK) {
-          console.log(
-            `[AI Pipeline - MOCK] Usando ficheiros locais de backend/storage/teste/ para o Job ${videoRecord.id}...`
-          );
-          remotionProps = buildMockRemotionProps(theme, publicBaseUrl);
-        } else {
-          const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, videoRecord.id);
+        const { scenes } = await generateTimeMachineScript(theme, 'short');
+        const [narrationResult, sceneImageUrls] = await Promise.all([
+          generateNarrationWithTimestamps(
+            videoRecord.id,
+            scenes,
+            storageVideoDir,
+            publicBaseUrl
+          ),
+          generateAllSceneBackgrounds(
+            videoRecord.id,
+            scenes,
+            storageVideoDir,
+            publicBaseUrl
+          ),
+        ]);
 
-          console.log(
-            `[AI Pipeline] (1/4) Gerando roteiro estruturado no Gemini para "${theme}" (Job ${videoRecord.id})...`
-          );
-          const { scenes } = await generateTimeMachineScript(theme);
-
-          console.log(
-            `[AI Pipeline] (2/4) Executando Promise.all: ElevenLabs (/with-timestamps) + ${scenes.length} cenários no Imagen...`
-          );
-          const [narrationResult, sceneImageUrls] = await Promise.all([
-            generateNarrationWithTimestamps(
-              videoRecord.id,
-              scenes,
-              storageVideoDir,
-              publicBaseUrl
-            ),
-            generateAllSceneBackgrounds(
-              videoRecord.id,
-              scenes,
-              storageVideoDir,
-              publicBaseUrl
-            ),
-          ]);
-
-          const backgroundTimeline = narrationResult.sceneTimings.map(
-            (timing, idx) => ({
-              imageSrc: sceneImageUrls[idx] ?? 'background.jpg',
-              frameStart: timing.frameStart,
-              frameEnd: timing.frameEnd,
-            })
-          );
-
-          remotionProps = {
-            theme,
-            durationInFrames: narrationResult.durationInFrames,
-            backgroundSrc: sceneImageUrls[0] ?? 'background.jpg',
-            backgroundTimeline,
-            audioSrc: narrationResult.audioUrl,
-            subtitles: narrationResult.subtitles,
-            avatarTimeline: narrationResult.avatarTimeline,
-          };
-        }
-
-        console.log(
-          `[AI Pipeline] Salvando remotionProps no PostgreSQL (${remotionProps.durationInFrames} frames)...`
+        const backgroundTimeline = narrationResult.sceneTimings.map(
+          (timing, idx) => ({
+            imageSrc: sceneImageUrls[idx] ?? 'background.jpg',
+            frameStart: timing.frameStart,
+            frameEnd: timing.frameEnd,
+          })
         );
+
+        const remotionProps: RenderVideoInput = {
+          theme,
+          durationInFrames: narrationResult.durationInFrames,
+          backgroundSrc: sceneImageUrls[0] ?? 'background.jpg',
+          backgroundTimeline,
+          audioSrc: narrationResult.audioUrl,
+          subtitles: narrationResult.subtitles,
+          avatarTimeline: narrationResult.avatarTimeline,
+        };
+
         await prisma.video.update({
           where: { id: videoRecord.id },
-          data: {
-            remotionProps,
-          },
+          data: { remotionProps },
         });
 
-        console.log(
-          `[AI Pipeline] Renderizando MP4 com @remotion/renderer para o Job ${videoRecord.id}...`
+        const { publicVideoUrl } = await renderTimeMachineVideoOnDisk(
+          videoRecord.id,
+          remotionProps
         );
-        const { outputFilePath, publicVideoUrl } =
-          await renderTimeMachineVideoOnDisk(videoRecord.id, remotionProps);
 
         await prisma.video.update({
           where: { id: videoRecord.id },
@@ -233,28 +484,20 @@ export async function generateVideoController(
             videoUrl: publicVideoUrl,
           },
         });
-
-        console.log(
-          `[AI Pipeline] Vídeo ${videoRecord.id} concluído com sucesso em: ${outputFilePath}`
-        );
       } catch (pipelineError) {
         console.error(
           `[AI Pipeline] Erro ao processar vídeo ${videoRecord.id}:`,
           pipelineError
         );
-
         await prisma.video.update({
           where: { id: videoRecord.id },
-          data: {
-            status: 'FAILED',
-          },
+          data: { status: 'FAILED' },
         });
       }
     })();
 
     res.status(202).json({
-      message:
-        'Pipeline iniciada em background. Consulte GET /api/videos/:id para acompanhar o status.',
+      message: 'Pipeline iniciada em background.',
       video: videoRecord,
     });
   } catch (dbError) {
@@ -267,8 +510,8 @@ export async function generateVideoController(
 
 /**
  * POST /api/videos/:id/rerender
- * Recebe as remotionProps editadas no @remotion/player do front-end,
- * atualiza o JSON no Prisma e re-renderiza o .mp4 usando os assets já retidos em /storage/ (sem custo de IA).
+ * Recebe as remotionProps montadas no Studio, atualiza o JSON no Prisma
+ * e renderiza o .mp4 final em background usando @remotion/renderer.
  */
 export async function rerenderVideoController(
   req: Request<{ id: string }>,
@@ -279,7 +522,7 @@ export async function rerenderVideoController(
 
   if (!parsedBody.success) {
     res.status(400).json({
-      error: 'Propriedades remotionProps inválidas para re-renderização',
+      error: 'Propriedades remotionProps inválidas para renderização',
       details: parsedBody.error.flatten().fieldErrors,
     });
     return;
@@ -307,7 +550,7 @@ export async function rerenderVideoController(
     void (async () => {
       try {
         console.log(
-          `[Remotion] Re-renderizando vídeo ${id} sem custo de IA...`
+          `[Remotion] Renderizando MP4 final do vídeo ${id} no servidor...`
         );
 
         const { outputFilePath, publicVideoUrl } =
@@ -322,11 +565,11 @@ export async function rerenderVideoController(
         });
 
         console.log(
-          `[Remotion] Re-renderização do vídeo ${id} concluída em: ${outputFilePath}`
+          `[Remotion] Renderização do vídeo ${id} concluída em: ${outputFilePath}`
         );
       } catch (renderError) {
         console.error(
-          `[Remotion] Falha ao re-renderizar o vídeo ${id}:`,
+          `[Remotion] Falha ao renderizar o vídeo ${id}:`,
           renderError
         );
 
@@ -341,20 +584,19 @@ export async function rerenderVideoController(
 
     res.status(202).json({
       message:
-        'Re-renderização iniciada em background. Consulte GET /api/videos/:id para acompanhar o status.',
+        'Renderização iniciada em background. Consulte GET /api/videos/:id para acompanhar o status.',
       video: updatedRecord,
     });
   } catch (dbError) {
-    console.error('[Prisma] Erro ao iniciar re-renderização:', dbError);
+    console.error('[Prisma] Erro ao iniciar renderização:', dbError);
     res.status(500).json({
-      error: 'Erro interno ao atualizar o vídeo para re-renderização.',
+      error: 'Erro interno ao atualizar o vídeo para renderização.',
     });
   }
 }
 
 /**
  * POST /api/render-video
- * Renderização direta a partir de remotionProps enviadas manualmente.
  */
 export async function renderVideoController(
   req: Request,
@@ -383,12 +625,10 @@ export async function renderVideoController(
 
     void (async () => {
       try {
-        console.log(
-          `[Remotion] Iniciando renderização manual do vídeo ${videoRecord.id} (Tema: "${inputData.theme}")...`
+        const { publicVideoUrl } = await renderTimeMachineVideoOnDisk(
+          videoRecord.id,
+          inputData
         );
-
-        const { outputFilePath, publicVideoUrl } =
-          await renderTimeMachineVideoOnDisk(videoRecord.id, inputData);
 
         await prisma.video.update({
           where: { id: videoRecord.id },
@@ -397,10 +637,6 @@ export async function renderVideoController(
             videoUrl: publicVideoUrl,
           },
         });
-
-        console.log(
-          `[Remotion] Vídeo ${videoRecord.id} renderizado com sucesso em: ${outputFilePath}`
-        );
       } catch (renderError) {
         console.error(
           `[Remotion] Falha ao renderizar o vídeo ${videoRecord.id}:`,
@@ -409,16 +645,13 @@ export async function renderVideoController(
 
         await prisma.video.update({
           where: { id: videoRecord.id },
-          data: {
-            status: 'FAILED',
-          },
+          data: { status: 'FAILED' },
         });
       }
     })();
 
     res.status(202).json({
-      message:
-        'Renderização iniciada em background. Consulte GET /api/videos/:id para acompanhar o status.',
+      message: 'Renderização iniciada em background.',
       video: videoRecord,
     });
   } catch (dbError) {
@@ -431,7 +664,6 @@ export async function renderVideoController(
 
 /**
  * GET /api/videos/:id
- * Permite ao frontend fazer polling do status ('PENDING' -> 'RENDERED' | 'FAILED') e obter remotionProps
  */
 export async function getVideoByIdController(
   req: Request<{ id: string }>,
@@ -457,7 +689,6 @@ export async function getVideoByIdController(
 
 /**
  * GET /api/videos
- * Lista o histórico de vídeos gerados
  */
 export async function listVideosController(
   _req: Request,
