@@ -6,26 +6,52 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import { resolveAssetSrc } from '../types';
+import { BackgroundSegment, resolveAssetSrc } from '../types';
 
 export interface BackgroundProps {
   src?: string;
+  backgroundTimeline?: BackgroundSegment[];
   theme?: string;
 }
 
 export const Background: React.FC<BackgroundProps> = ({
   src = 'background.jpg',
+  backgroundTimeline,
   theme,
 }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
 
-  // Efeito Ken Burns subtil (zoom lento de 1.0 até 1.12 ao longo dos 15 segundos)
-  const scale = interpolate(frame, [0, durationInFrames], [1, 1.12], {
-    extrapolateRight: 'clamp',
-  });
+  // Seleciona o cenário ativo da cena atual (Hard Cut sincronizado com o início da frase)
+  const activeSegment = backgroundTimeline?.find(
+    (segment) => frame >= segment.frameStart && frame <= segment.frameEnd
+  );
 
-  const resolvedSrc = resolveAssetSrc(src);
+  // Fallback para o último segmento se o frame estiver no buffer final (+0.5s)
+  const fallbackSegment =
+    !activeSegment && backgroundTimeline && backgroundTimeline.length > 0
+      ? backgroundTimeline[backgroundTimeline.length - 1]
+      : undefined;
+
+  const currentSegment = activeSegment ?? fallbackSegment;
+  const activeImageSrc = currentSegment ? currentSegment.imageSrc : src;
+  const segmentStart = currentSegment ? currentSegment.frameStart : 0;
+  const segmentEnd = currentSegment
+    ? currentSegment.frameEnd
+    : durationInFrames;
+
+  // Efeito Ken Burns subtil reiniciado a cada corte seco de cena
+  const scale = interpolate(
+    frame,
+    [segmentStart, Math.max(segmentStart + 1, segmentEnd)],
+    [1, 1.1],
+    {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
+
+  const resolvedSrc = resolveAssetSrc(activeImageSrc);
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#090d16' }}>
@@ -84,4 +110,3 @@ export const Background: React.FC<BackgroundProps> = ({
     </AbsoluteFill>
   );
 };
-

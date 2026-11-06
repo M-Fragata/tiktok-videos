@@ -3,6 +3,10 @@ dist/
 .env
 backend/renders/*.mp4
 !backend/renders/.gitkeep
+backend/storage/*
+!backend/storage/.gitkeep
+!backend/storage/teste/
+!backend/storage/teste/**
 *.log
 *.tsbuildinfo
 .DS_Store

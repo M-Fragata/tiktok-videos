@@ -8,12 +8,12 @@ datasource db {
 }
 
 model Video {
-  id        String   @id @default(uuid())
-  theme     String
-  status    String   @default("PENDING")
-  videoUrl  String?
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  theme         String
+  status        String   @default("PENDING")
+  videoUrl      String?
+  remotionProps Json?
+  createdAt     DateTime @default(now())
 
   @@map("videos")
 }
-

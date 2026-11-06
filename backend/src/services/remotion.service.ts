@@ -7,7 +7,15 @@ import type { RenderVideoInput } from '../schemas/video.schema.ts';
 const FRONTEND_DIR = path.resolve(import.meta.dirname, '../../../frontend');
 const REMOTION_ENTRY_POINT = path.join(FRONTEND_DIR, 'src/remotion/index.ts');
 const REMOTION_PUBLIC_DIR = path.join(FRONTEND_DIR, 'public');
-export const RENDERS_OUTPUT_DIR = path.resolve(import.meta.dirname, '../../renders');
+
+export const RENDERS_OUTPUT_DIR = path.resolve(
+  import.meta.dirname,
+  '../../renders'
+);
+export const STORAGE_OUTPUT_DIR = path.resolve(
+  import.meta.dirname,
+  '../../storage'
+);
 
 export interface RenderResult {
   outputFilePath: string;
@@ -16,6 +24,7 @@ export interface RenderResult {
 
 /**
  * Empacota a composição Remotion (TimeMachineVideo) do frontend e renderiza o ficheiro .mp4 no disco.
+ * Respeita o durationInFrames dinâmico calculado a partir da narração da ElevenLabs.
  */
 export async function renderTimeMachineVideoOnDisk(
   videoId: string,
@@ -34,14 +43,19 @@ export async function renderTimeMachineVideoOnDisk(
     publicDir: REMOTION_PUBLIC_DIR,
   });
 
-  // 2. Seleciona a composição TimeMachineVideo injetando as inputProps validadas pelo Zod
+  // 2. Seleciona a composição TimeMachineVideo injetando as inputProps
   const composition = await selectComposition({
     serveUrl: bundleLocation,
     id: 'TimeMachineVideo',
     inputProps,
   });
 
-  // 3. Renderiza o vídeo em formato MP4 (H.264) no disco
+  // 3. Aplica a duração dinâmica calculada no backend (durationInFrames = Math.ceil((ultimoTimestampSegundos + 0.5) * 30))
+  if (inputProps.durationInFrames && inputProps.durationInFrames > 0) {
+    composition.durationInFrames = inputProps.durationInFrames;
+  }
+
+  // 4. Renderiza o vídeo em formato MP4 (H.264) no disco
   await renderMedia({
     composition,
     serveUrl: bundleLocation,
@@ -55,4 +69,3 @@ export async function renderTimeMachineVideoOnDisk(
     publicVideoUrl: `/renders/${outputFileName}`,
   };
 }
-

@@ -29,13 +29,30 @@ export interface AvatarSegment {
   image: AvatarSpritePath;
 }
 
+export interface BackgroundSegment {
+  imageSrc: string;
+  frameStart: number;
+  frameEnd: number;
+}
+
 export type TimeMachineVideoProps = {
   theme: string;
+  durationInFrames?: number;
   backgroundSrc?: string;
+  backgroundTimeline?: BackgroundSegment[];
   audioSrc?: string;
   subtitles?: SubtitleItem[];
   avatarTimeline?: AvatarSegment[];
 };
+
+export interface VideoRecord {
+  id: string;
+  theme: string;
+  status: 'PENDING' | 'RENDERED' | 'FAILED' | string;
+  videoUrl: string | null;
+  remotionProps?: TimeMachineVideoProps | null;
+  createdAt: string;
+}
 
 export const DEFAULT_SUBTITLES: SubtitleItem[] = [
   {
@@ -88,20 +105,40 @@ export const DEFAULT_AVATAR_TIMELINE: AvatarSegment[] = [
   },
 ];
 
+export const DEFAULT_BACKGROUND_TIMELINE: BackgroundSegment[] = [
+  {
+    imageSrc: 'background.jpg',
+    frameStart: 0,
+    frameEnd: 149,
+  },
+  {
+    imageSrc: 'background.jpg',
+    frameStart: 150,
+    frameEnd: 299,
+  },
+  {
+    imageSrc: 'background.jpg',
+    frameStart: 300,
+    frameEnd: 450,
+  },
+];
+
 export const defaultTimeMachineProps: TimeMachineVideoProps = {
   theme: 'A Erupção do Vesúvio em Pompeia (79 d.C.)',
+  durationInFrames: 450,
   backgroundSrc: 'background.jpg',
+  backgroundTimeline: DEFAULT_BACKGROUND_TIMELINE,
   audioSrc: 'audio.mp3',
   subtitles: DEFAULT_SUBTITLES,
   avatarTimeline: DEFAULT_AVATAR_TIMELINE,
 };
 
 /**
- * Resolve o caminho de um asset: se for URL externa (http/https), retorna diretamente;
- * caso contrário, utiliza staticFile() do Remotion apontando para frontend/public/.
+ * Resolve o caminho de um asset: se for URL externa (http/https) ou rota servida pelo backend (/storage/...),
+ * retorna diretamente; caso contrário, utiliza staticFile() do Remotion apontando para frontend/public/.
  */
 export const resolveAssetSrc = (src: string): string => {
-  if (/^https?:\/\//i.test(src)) {
+  if (/^https?:\/\//i.test(src) || src.startsWith('/storage/')) {
     return src;
   }
   const normalizedPath = src.replace(/^\/+/, '');
