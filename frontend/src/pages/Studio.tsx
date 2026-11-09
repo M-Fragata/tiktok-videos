@@ -404,13 +404,21 @@ export const Studio: React.FC = () => {
     setSuccessMsg(null);
 
     try {
+      const sanitizedScenes = scenes.map((s) => ({
+        speaker: s.speaker,
+        text: s.text,
+        avatarSprite: s.avatarSprite,
+        imagePrompt: s.imagePrompt,
+        sfx_suggestion: s.sfx_suggestion || '',
+      }));
+
       const res = await fetch(`/api/videos/${id}/generate-scene-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sceneIndex,
           imagePrompt: targetScene.imagePrompt,
-          scenes,
+          scenes: sanitizedScenes,
         }),
       });
 
@@ -502,6 +510,10 @@ export const Studio: React.FC = () => {
         });
 
         const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Falha ao salvar imagem no servidor.');
+        }
+
         const finalUrl = data.imageUrl || base64Data;
 
         setScenes((prev) =>
@@ -586,10 +598,18 @@ export const Studio: React.FC = () => {
     setSuccessMsg(null);
 
     try {
+      const sanitizedScenes = scenes.map((s) => ({
+        speaker: s.speaker,
+        text: s.text,
+        avatarSprite: s.avatarSprite,
+        imagePrompt: s.imagePrompt,
+        sfx_suggestion: s.sfx_suggestion || '',
+      }));
+
       const res = await fetch(`/api/videos/${id}/generate-audio`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenes }),
+        body: JSON.stringify({ scenes: sanitizedScenes }),
       });
 
       const data = await res.json();
