@@ -67,7 +67,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   hasStroke: true,
   hasBackground: false,
   positionX: 50,
-  positionY: 68,
+  positionY: 88,
 };
 
 export interface AvatarSegment {

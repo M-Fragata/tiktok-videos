@@ -828,7 +828,7 @@ export const Studio: React.FC = () => {
     const rawY = ((clientY - rect.top) / rect.height) * 100;
 
     const clampedX = Math.round(Math.max(15, Math.min(85, rawX)));
-    const clampedY = Math.round(Math.max(10, Math.min(88, rawY)));
+    const clampedY = Math.round(Math.max(10, Math.min(92, rawY)));
 
     setSubtitleStyle((prev) => ({
       ...prev,
@@ -2010,13 +2010,13 @@ export const Studio: React.FC = () => {
                       <div className="space-y-2 border-t border-white/[0.06] pt-3">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-semibold text-slate-300">
-                            Posição no Vídeo (ou arraste no Player)
+                            Posição no Vídeo
                           </span>
                           <div className="flex items-center gap-1">
                             {[
                               { label: 'Topo', x: 50, y: 20 },
                               { label: 'Centro', x: 50, y: 50 },
-                              { label: 'Base', x: 50, y: 68 },
+                              { label: 'Base', x: 50, y: 88 },
                             ].map((preset) => (
                               <button
                                 key={preset.label}
@@ -2056,7 +2056,7 @@ export const Studio: React.FC = () => {
                             <input
                               type="range"
                               min={10}
-                              max={88}
+                              max={92}
                               value={subtitleStyle.positionY}
                               onChange={(e) =>
                                 handleSubtitleStyleChange(

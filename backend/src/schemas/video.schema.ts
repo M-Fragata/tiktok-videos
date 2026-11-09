@@ -31,7 +31,7 @@ export const subtitleStyleSchema = z.object({
   hasStroke: z.boolean().optional().default(true),
   hasBackground: z.boolean().optional().default(false),
   positionX: z.number().min(5).max(95).optional().default(50),
-  positionY: z.number().min(5).max(95).optional().default(68),
+  positionY: z.number().min(5).max(95).optional().default(88),
 });
 
 export const avatarSegmentSchema = z
