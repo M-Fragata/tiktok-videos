@@ -22,9 +22,9 @@ app.use('/storage', express.static(STORAGE_OUTPUT_DIR));
 app.use('/api', videoRoutes);
 
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', service: 'tiktok-videos-backend' });
+  res.status(200).json({ status: 'ok', service: 'fragata-shorts-backend' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Back-end Express em execução em http://localhost:${PORT}`);
+  console.log(`🚀 Fragata Shorts Back-end Express em execução em http://localhost:${PORT}`);
 });

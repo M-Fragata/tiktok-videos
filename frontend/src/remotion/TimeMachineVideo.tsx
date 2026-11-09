@@ -8,6 +8,7 @@ import {
   DEFAULT_AVATAR_TIMELINE,
   DEFAULT_BACKGROUND_TIMELINE,
   DEFAULT_SUBTITLES,
+  DEFAULT_SUBTITLE_STYLE,
   TimeMachineVideoProps,
 } from './types';
 
@@ -17,6 +18,7 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
   backgroundTimeline = DEFAULT_BACKGROUND_TIMELINE,
   audioSrc = 'audio.mp3',
   subtitles = DEFAULT_SUBTITLES,
+  subtitleStyle = DEFAULT_SUBTITLE_STYLE,
   avatarTimeline = DEFAULT_AVATAR_TIMELINE,
 }) => {
   return (
@@ -34,8 +36,8 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
       {/* Camada 3: Personagem Principal na parte inferior central sincronizado por cena */}
       <Avatar timeline={avatarTimeline} />
 
-      {/* Camada 4: Legendas dinâmicas estilo TikTok (3-5 palavras) no centro do ecrã */}
-      <Subtitles subtitles={subtitles} />
+      {/* Camada 4: Legendas dinâmicas customizáveis (Karaokê, Pop TikTok ou Hormozi) */}
+      <Subtitles subtitles={subtitles} subtitleStyle={subtitleStyle} />
     </AbsoluteFill>
   );
 };

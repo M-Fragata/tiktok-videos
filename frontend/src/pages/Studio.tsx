@@ -1,20 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Player } from '@remotion/player';
+import { Player, PlayerRef } from '@remotion/player';
 import { TimeMachineVideo } from '../remotion/TimeMachineVideo';
 import {
   AVAILABLE_AVATAR_SPRITES,
   AvatarSegment,
   BackgroundSegment,
+  DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
+  ensureSubtitleWordTimings,
   resolveAssetSrc,
   SceneFrameTiming,
   SpeakerType,
+  splitSceneTextIntoSubtitleChunks,
   StoryboardScene,
+  SubtitleAnimationType,
+  SubtitleFontFamily,
   SubtitleItem,
+  SubtitleStyleConfig,
   TimeMachineVideoProps,
   VideoRecord,
 } from '../remotion/types';
+
+type InspectorTab = 'briefing' | 'storyboard' | 'subtitles';
 
 const SUGGESTED_THEMES = [
   'A Erupção do Vesúvio em Pompeia (79 d.C.)',
@@ -30,17 +38,49 @@ const SPEAKER_LABELS: Record<SpeakerType, string> = {
 };
 
 const DURATION_OPTIONS: Array<{ value: DurationPreset; label: string }> = [
-  { value: 'short', label: 'Curto (15s - máx 40 palavras)' },
-  { value: 'medium', label: 'Médio (30s - máx 70 palavras)' },
-  { value: 'long', label: 'Longo (60s - máx 140 palavras)' },
+  { value: 'short', label: 'Curto (15s • máx 40 palavras)' },
+  { value: 'medium', label: 'Médio (30s • máx 70 palavras)' },
+  { value: 'long', label: 'Longo (60s • máx 140 palavras)' },
 ];
+
+/**
+ * Formata frames (30 fps) para MM:SS (ex: 00:02 / 00:15)
+ */
+const formatShortTime = (frame: number, fps = 30): string => {
+  const safeFrame = Math.max(0, Math.floor(frame));
+  const totalSeconds = Math.floor(safeFrame / fps);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+/**
+ * Alturas pseudo-aleatórias determinísticas para desenhar as ondas de áudio (waveform) na faixa de áudio
+ */
+const WAVEFORM_BARS = Array.from({ length: 76 }, (_, i) => {
+  const v = Math.sin(i * 0.65) * 0.4 + Math.cos(i * 1.35) * 0.35 + 0.5;
+  return Math.max(16, Math.min(92, Math.round(v * 100)));
+});
 
 export const Studio: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const playerRef = useRef<PlayerRef>(null);
 
   // Registo principal do banco
   const [videoRecord, setVideoRecord] = useState<VideoRecord | null>(null);
+
+  // Navegação de Abas Horizontais do Painel Esquerdo
+  const [activeTab, setActiveTab] = useState<InspectorTab>('briefing');
+
+  // Controlo de recolhimento (accordion) dos cards de cena e das secções de legendas
+  const [collapsedScenes, setCollapsedScenes] = useState<
+    Record<number, boolean>
+  >({});
+  const [isSubtitleStyleCollapsed, setIsSubtitleStyleCollapsed] =
+    useState<boolean>(true);
+  const [isSubtitleBlocksCollapsed, setIsSubtitleBlocksCollapsed] =
+    useState<boolean>(false);
 
   // Etapa 1: Briefing
   const [theme, setTheme] = useState<string>('');
@@ -58,7 +98,7 @@ export const Studio: React.FC = () => {
   const [isAssembled, setIsAssembled] = useState<boolean>(false);
   const [sceneTimings, setSceneTimings] = useState<SceneFrameTiming[]>([]);
 
-  // Dados injetados no @remotion/player após "Montar Vídeo"
+  // Dados injetados no @remotion/player
   const [durationInFrames, setDurationInFrames] = useState<number>(450);
   const [audioSrc, setAudioSrc] = useState<string>('audio.mp3');
   const [backgroundSrc, setBackgroundSrc] = useState<string>('background.jpg');
@@ -66,24 +106,74 @@ export const Studio: React.FC = () => {
     BackgroundSegment[]
   >([]);
   const [subtitles, setSubtitles] = useState<SubtitleItem[]>([]);
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(
+    DEFAULT_SUBTITLE_STYLE
+  );
   const [avatarTimeline, setAvatarTimeline] = useState<AvatarSegment[]>([]);
+
+  // Estado de Reprodução do Player & Agulha da Timeline
+  const [currentFrame, setCurrentFrame] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isScrubbingTimeline, setIsScrubbingTimeline] =
+    useState<boolean>(false);
+  const [isDraggingSubtitle, setIsDraggingSubtitle] = useState<boolean>(false);
+
+  // Modal de Visualização Ampliada de Cenário B-Roll
+  const [previewBrollModal, setPreviewBrollModal] = useState<{
+    sceneIndex: number;
+    optionIndex: number;
+    imageUrl: string;
+  } | null>(null);
 
   // Estados gerais de UI
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRerendering, setIsRerendering] = useState<boolean>(false);
+  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const videoCanvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreviewBrollModal(null);
+        setIsOptionsMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        optionsMenuRef.current &&
+        !optionsMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsOptionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const hydrateFromProps = (
     props: TimeMachineVideoProps,
     recordTheme?: string
   ) => {
-    const resolvedTheme =
-      props.theme && props.theme !== 'Novo Vídeo — Máquina do Tempo'
-        ? props.theme
-        : recordTheme && recordTheme !== 'Novo Vídeo — Máquina do Tempo'
-          ? recordTheme
-          : '';
+    const isDefaultTheme = (t?: string) =>
+      !t ||
+      t === 'Novo Vídeo — Fragata Shorts' ||
+      t === 'Novo Vídeo — Máquina do Tempo';
+
+    const resolvedTheme = !isDefaultTheme(props.theme)
+      ? props.theme
+      : !isDefaultTheme(recordTheme)
+        ? (recordTheme as string)
+        : '';
     setTheme(resolvedTheme);
 
     if (props.durationInFrames && props.durationInFrames > 0) {
@@ -95,21 +185,30 @@ export const Studio: React.FC = () => {
       setBackgroundTimeline(props.backgroundTimeline);
     }
     if (props.subtitles) setSubtitles(props.subtitles);
+    if (props.subtitleStyle) {
+      setSubtitleStyle({
+        ...DEFAULT_SUBTITLE_STYLE,
+        ...props.subtitleStyle,
+      });
+    }
     if (props.avatarTimeline) setAvatarTimeline(props.avatarTimeline);
 
     if (props.storyboard) {
       setDurationPreset(props.storyboard.durationPreset || 'short');
-      setScenes(props.storyboard.scenes || []);
+      const loadedScenes = props.storyboard.scenes || [];
+      setScenes(loadedScenes);
       setAudioGenerated(Boolean(props.storyboard.audioGenerated));
       setIsAssembled(Boolean(props.storyboard.isAssembled));
       setSceneTimings(props.storyboard.sceneTimings || []);
+      if (loadedScenes.length > 0) {
+        setActiveTab('storyboard');
+      }
     } else if (
       props.backgroundTimeline &&
       props.backgroundTimeline.length > 0 &&
       props.subtitles &&
       props.subtitles.length > 0
     ) {
-      // Compatibilidade retroativa para vídeos antigos já renderizados antes do Storyboard Mode
       setAudioGenerated(true);
       setIsAssembled(true);
       const legacyScenes: StoryboardScene[] = props.backgroundTimeline.map(
@@ -121,22 +220,26 @@ export const Studio: React.FC = () => {
           avatarSprite:
             props.avatarTimeline?.[idx]?.image ||
             'avatars/avatar_greeting.png',
-          imagePrompt: 'Cenário histórico previamente gerado',
+          imagePrompt:
+            'POV historical time-travel scene with hyper-realistic background and stick figure character, 9:16 vertical',
           sfx_suggestion: '',
           candidateImages: [bg.imageSrc],
           selectedImage: bg.imageSrc,
         })
       );
       setScenes(legacyScenes);
+      setActiveTab('storyboard');
     }
   };
 
   const fetchVideoData = async () => {
     if (!id) return;
     try {
+      setIsLoading(true);
       const res = await fetch(`/api/videos/${id}`);
       if (!res.ok) {
-        throw new Error(`Falha ao consultar vídeo (${res.status})`);
+        setIsLoading(false);
+        return;
       }
 
       const data: VideoRecord = await res.json();
@@ -146,6 +249,7 @@ export const Studio: React.FC = () => {
         hydrateFromProps(data.remotionProps, data.theme);
       } else if (
         data.theme &&
+        data.theme !== 'Novo Vídeo — Fragata Shorts' &&
         data.theme !== 'Novo Vídeo — Máquina do Tempo'
       ) {
         setTheme(data.theme);
@@ -161,6 +265,31 @@ export const Studio: React.FC = () => {
     void fetchVideoData();
   }, [id]);
 
+  // Sincronização de eventos de frame e play/pause com @remotion/player
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    const onFrameUpdate = (e: { detail: { frame: number } }) => {
+      setCurrentFrame(e.detail.frame);
+    };
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => setIsPlaying(false);
+
+    player.addEventListener('frameupdate', onFrameUpdate);
+    player.addEventListener('play', onPlay);
+    player.addEventListener('pause', onPause);
+    player.addEventListener('ended', onEnded);
+
+    return () => {
+      player.removeEventListener('frameupdate', onFrameUpdate);
+      player.removeEventListener('play', onPlay);
+      player.removeEventListener('pause', onPause);
+      player.removeEventListener('ended', onEnded);
+    };
+  }, [isLoading]);
+
   // Polling automático enquanto estiver a renderizar o MP4 no servidor (status === 'PENDING')
   useEffect(() => {
     if (!id || !videoRecord || videoRecord.status !== 'PENDING') {
@@ -175,7 +304,7 @@ export const Studio: React.FC = () => {
         setVideoRecord(data);
         if (data.status === 'RENDERED') {
           setSuccessMsg(
-            'MP4 renderizado com sucesso! Clique em "Baixar MP4" no topo.'
+            'MP4 renderizado com sucesso! Clique em "Baixar MP4" na barra superior.'
           );
         }
       } catch (err) {
@@ -224,8 +353,9 @@ export const Studio: React.FC = () => {
         setScenes(data.scenes);
       }
 
+      setActiveTab('storyboard');
       setSuccessMsg(
-        `Roteiro gerado com ${data.scenes?.length || 0} cenas! Revise as falas e aprove a geração de imagens e narração.`
+        `Roteiro gerado com ${data.scenes?.length || 0} cenas! Gere as imagens B-Roll e a narração.`
       );
     } catch (err) {
       setErrorMsg(
@@ -251,8 +381,15 @@ export const Studio: React.FC = () => {
     );
   };
 
+  const toggleSceneCollapse = (sceneIndex: number) => {
+    setCollapsedScenes((prev) => ({
+      ...prev,
+      [sceneIndex]: !prev[sceneIndex],
+    }));
+  };
+
   // ========================================================
-  // ETAPA 3A: Gerar 2 Imagens B-Roll por Cena (POST /api/videos/:id/generate-scene-images)
+  // ETAPA 3A: Gerar 2 Imagens B-Roll por Cena
   // ========================================================
   const handleGenerateSceneImages = async (sceneIndex: number) => {
     if (!id) return;
@@ -300,7 +437,7 @@ export const Studio: React.FC = () => {
       }
 
       setSuccessMsg(
-        `2 opções de B-Roll geradas para a Cena #${sceneIndex + 1}! Clique na miniatura favorita para selecioná-la.`
+        `2 opções de B-Roll geradas para a Cena #${sceneIndex + 1}!`
       );
     } catch (err) {
       setErrorMsg(
@@ -322,8 +459,7 @@ export const Studio: React.FC = () => {
     );
     setScenes(updatedScenes);
 
-    // Se o vídeo já estiver montado no Player, atualiza também a backgroundTimeline ao vivo
-    if (isAssembled && backgroundTimeline.length > sceneIndex) {
+    if (backgroundTimeline.length > sceneIndex) {
       setBackgroundTimeline((prev) =>
         prev.map((seg, idx) =>
           idx === sceneIndex ? { ...seg, imageSrc: imageUrl } : seg
@@ -336,7 +472,7 @@ export const Studio: React.FC = () => {
   };
 
   // ========================================================
-  // ETAPA 3B: Gravar Narração Multi-Voz Global (POST /api/videos/:id/generate-audio)
+  // ETAPA 3B: Gravar Narração Multi-Voz Global
   // ========================================================
   const handleGenerateAudio = async () => {
     if (!id || scenes.length === 0) return;
@@ -372,7 +508,7 @@ export const Studio: React.FC = () => {
       }
 
       setSuccessMsg(
-        'Narração Multi-Voz gravada e concatenada com sucesso! Quando todas as cenas tiverem imagem selecionada, clique em "🎬 Montar Vídeo".'
+        'Narração Multi-Voz gravada com sucesso! Clique em "Montar Vídeo" para atualizar.'
       );
     } catch (err) {
       setErrorMsg(
@@ -384,14 +520,14 @@ export const Studio: React.FC = () => {
   };
 
   // ========================================================
-  // ETAPA 3C: Montar Vídeo no @remotion/player (PUT /api/videos/:id/storyboard)
+  // ETAPA 3C: Montar Vídeo no @remotion/player
   // ========================================================
   const allScenesHaveSelectedImage =
     scenes.length > 0 && scenes.every((s) => Boolean(s.selectedImage));
   const canAssembleVideo = allScenesHaveSelectedImage && audioGenerated;
 
   const handleAssembleVideo = async () => {
-    if (!id || !canAssembleVideo) return;
+    if (!id || scenes.length === 0) return;
     setErrorMsg(null);
 
     const totalFrames = Math.max(30, durationInFrames);
@@ -436,18 +572,27 @@ export const Studio: React.FC = () => {
     setAvatarTimeline(assembledAvatarTimeline);
     setIsAssembled(true);
 
+    const subtitlesToPersist =
+      subtitles.length > 0
+        ? subtitles.map((sub) => ({
+            ...sub,
+            words: ensureSubtitleWordTimings(sub),
+          }))
+        : effectiveSubtitles;
+
     const payload: TimeMachineVideoProps = {
       theme: theme || 'Vlog de Viagem no Tempo',
       durationInFrames: totalFrames,
       backgroundSrc: primaryBg,
       backgroundTimeline: assembledBackgroundTimeline,
       audioSrc,
-      subtitles,
+      subtitles: subtitlesToPersist,
+      subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
       storyboard: {
         durationPreset,
         scenes,
-        audioGenerated: true,
+        audioGenerated,
         isAssembled: true,
         sceneTimings,
       },
@@ -464,7 +609,7 @@ export const Studio: React.FC = () => {
         setVideoRecord(data.video);
       }
       setSuccessMsg(
-        'Vídeo montado no Player! Confira o preview à esquerda e clique em "Renderizar MP4 no Servidor" quando estiver pronto.'
+        'Vídeo e estilos de legenda salvos e sincronizados com o Player!'
       );
     } catch (err) {
       console.warn('Aviso ao persistir montagem no banco:', err);
@@ -475,19 +620,24 @@ export const Studio: React.FC = () => {
   // Renderização Final do MP4 no Servidor (POST /api/videos/:id/rerender)
   // ========================================================
   const handleRenderMp4OnServer = async () => {
-    if (!id || !isAssembled) return;
+    if (!id) return;
+    if (!isAssembled && canAssembleVideo) {
+      await handleAssembleVideo();
+    }
+
     setIsRerendering(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const payload: TimeMachineVideoProps = {
       theme: theme || 'Vlog de Viagem no Tempo',
-      durationInFrames,
-      backgroundSrc,
-      backgroundTimeline,
+      durationInFrames: effectiveTotalFrames,
+      backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
+      backgroundTimeline: effectiveBackgroundTimeline,
       audioSrc,
-      subtitles,
-      avatarTimeline,
+      subtitles: effectiveSubtitles,
+      subtitleStyle,
+      avatarTimeline: effectiveAvatarTimeline,
       storyboard: {
         durationPreset,
         scenes,
@@ -510,8 +660,9 @@ export const Studio: React.FC = () => {
       }
 
       setVideoRecord(data.video);
+      setIsAssembled(true);
       setSuccessMsg(
-        'Renderização do MP4 iniciada no servidor! O status atualizará automaticamente assim que concluir.'
+        'Exportação MP4 iniciada no servidor! Acompanhe o status no topo.'
       );
     } catch (err) {
       setErrorMsg(
@@ -522,18 +673,39 @@ export const Studio: React.FC = () => {
     }
   };
 
+  const handleSubtitleStyleChange = <K extends keyof SubtitleStyleConfig>(
+    field: K,
+    value: SubtitleStyleConfig[K]
+  ) => {
+    setSubtitleStyle((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
   const handleSubtitleChange = (
     index: number,
     field: keyof SubtitleItem,
     value: string | number
   ) => {
-    setSubtitles((prev) =>
-      prev.map((item, idx) =>
-        idx === index ? { ...item, [field]: value } : item
-      )
-    );
+    setSubtitles((prev) => {
+      const baseList = prev.length > 0 ? prev : effectiveSubtitles;
+      return baseList.map((item, idx) => {
+        if (idx !== index) return item;
+        const updatedItem: SubtitleItem = {
+          ...item,
+          [field]: value,
+          words: undefined,
+        };
+        updatedItem.words = ensureSubtitleWordTimings(updatedItem);
+        return updatedItem;
+      });
+    });
   };
 
+  // ========================================================
+  // DADOS DERIVADOS PARA O PLAYER E TIMELINE
+  // ========================================================
   const hasScript = scenes.length > 0;
   const isPending = videoRecord?.status === 'PENDING';
   const selectedImagesCount = scenes.filter((s) =>
@@ -545,843 +717,2037 @@ export const Studio: React.FC = () => {
     0
   );
 
+  const effectiveTotalFrames = useMemo(() => {
+    if (durationInFrames && durationInFrames > 0) return durationInFrames;
+    if (durationPreset === 'long') return 1800;
+    if (durationPreset === 'medium') return 900;
+    return 450;
+  }, [durationInFrames, durationPreset]);
+
+  const effectiveBackgroundTimeline = useMemo<BackgroundSegment[]>(() => {
+    if (
+      backgroundTimeline.length > 0 &&
+      backgroundTimeline.length === scenes.length
+    ) {
+      return backgroundTimeline.map((seg, idx) => ({
+        ...seg,
+        imageSrc:
+          scenes[idx]?.selectedImage || seg.imageSrc || 'background.jpg',
+      }));
+    }
+    if (scenes.length > 0) {
+      const framesPerScene = Math.floor(effectiveTotalFrames / scenes.length);
+      return scenes.map((scene, idx) => {
+        const timing = sceneTimings[idx];
+        const frameStart = timing ? timing.frameStart : idx * framesPerScene;
+        const frameEnd = timing
+          ? timing.frameEnd
+          : idx === scenes.length - 1
+            ? effectiveTotalFrames
+            : (idx + 1) * framesPerScene - 1;
+        return {
+          imageSrc:
+            scene.selectedImage ||
+            scene.candidateImages?.[0] ||
+            'background.jpg',
+          frameStart,
+          frameEnd,
+        };
+      });
+    }
+    return backgroundTimeline;
+  }, [backgroundTimeline, scenes, sceneTimings, effectiveTotalFrames]);
+
+  const effectiveAvatarTimeline = useMemo<AvatarSegment[]>(() => {
+    if (avatarTimeline.length > 0 && avatarTimeline.length === scenes.length) {
+      return avatarTimeline.map((seg, idx) => ({
+        ...seg,
+        image: scenes[idx]?.avatarSprite || seg.image,
+      }));
+    }
+    if (scenes.length > 0) {
+      const secPerScene = effectiveTotalFrames / 30 / scenes.length;
+      return scenes.map((scene, idx) => {
+        const timing = sceneTimings[idx];
+        return {
+          startSecond: timing ? timing.startSecond : idx * secPerScene,
+          endSecond: timing ? timing.endSecond : (idx + 1) * secPerScene,
+          image: scene.avatarSprite,
+        };
+      });
+    }
+    return avatarTimeline;
+  }, [avatarTimeline, scenes, sceneTimings, effectiveTotalFrames]);
+
+  const effectiveSubtitles = useMemo<SubtitleItem[]>(() => {
+    if (subtitles.length > 0) {
+      return subtitles.flatMap((sub) => {
+        const wordCount = sub.text.trim().split(/\s+/).filter(Boolean).length;
+        // Se for um registro antigo que guardou a frase inteira da cena num único bloco (> 6 palavras sem array words), divide em blocos de 4 palavras
+        if (!sub.words && wordCount > 6) {
+          return splitSceneTextIntoSubtitleChunks(
+            sub.text,
+            sub.frameStart,
+            sub.frameEnd,
+            4
+          );
+        }
+        return [
+          {
+            ...sub,
+            words: ensureSubtitleWordTimings(sub),
+          },
+        ];
+      });
+    }
+    if (scenes.length > 0) {
+      return effectiveBackgroundTimeline.flatMap((seg, idx) => {
+        const sceneText = scenes[idx]?.text || `Cena ${idx + 1}`;
+        return splitSceneTextIntoSubtitleChunks(
+          sceneText,
+          seg.frameStart,
+          seg.frameEnd,
+          4
+        );
+      });
+    }
+    return [];
+  }, [subtitles, scenes, effectiveBackgroundTimeline]);
+
+  // Arraste direto da caixa de legenda sobre o Player 9:16 (sem disparar Play/Pause)
+  const updateSubtitlePositionFromClientXY = (
+    clientX: number,
+    clientY: number
+  ) => {
+    const canvas = videoCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const rawX = ((clientX - rect.left) / rect.width) * 100;
+    const rawY = ((clientY - rect.top) / rect.height) * 100;
+
+    const clampedX = Math.round(Math.max(15, Math.min(85, rawX)));
+    const clampedY = Math.round(Math.max(10, Math.min(88, rawY)));
+
+    setSubtitleStyle((prev) => ({
+      ...prev,
+      positionX: clampedX,
+      positionY: clampedY,
+    }));
+  };
+
+  const handleSubtitleDragMouseDown = (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDraggingSubtitle(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingSubtitle) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      updateSubtitlePositionFromClientXY(e.clientX, e.clientY);
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsDraggingSubtitle(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isDraggingSubtitle]);
+
+  // Controlos de transporte do Player
+  const togglePlayPause = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  };
+
+  const toggleMute = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (isMuted) {
+      player.unmute();
+      setIsMuted(false);
+    } else {
+      player.mute();
+      setIsMuted(true);
+    }
+  };
+
+  const seekToFrame = (frame: number) => {
+    const clamped = Math.max(0, Math.min(frame, effectiveTotalFrames - 1));
+    setCurrentFrame(clamped);
+    playerRef.current?.seekTo(clamped);
+  };
+
+  const handleTimelineSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const ratio = rect.width > 0 ? clickX / rect.width : 0;
+    const targetFrame = Math.round(ratio * Math.max(0, effectiveTotalFrames - 1));
+    seekToFrame(targetFrame);
+  };
+
+  const seekTimelineByClientX = (clientX: number) => {
+    const container = timelineContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const ratio = rect.width > 0 ? offsetX / rect.width : 0;
+    const targetFrame = Math.round(
+      ratio * Math.max(0, effectiveTotalFrames - 1)
+    );
+    const clamped = Math.max(0, Math.min(targetFrame, effectiveTotalFrames - 1));
+    setCurrentFrame(clamped);
+    playerRef.current?.seekTo(clamped);
+  };
+
+  const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (isPlaying) {
+      playerRef.current?.pause();
+    }
+    setIsScrubbingTimeline(true);
+    seekTimelineByClientX(e.clientX);
+  };
+
+  useEffect(() => {
+    if (!isScrubbingTimeline) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      seekTimelineByClientX(e.clientX);
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsScrubbingTimeline(false);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isScrubbingTimeline, effectiveTotalFrames]);
+
+  // Identifica qual Cena e qual Legenda estão ativas no frame atual da agulha
+  const activeSceneIndexAtPlayhead = useMemo(() => {
+    return effectiveBackgroundTimeline.findIndex(
+      (seg) => currentFrame >= seg.frameStart && currentFrame <= seg.frameEnd
+    );
+  }, [effectiveBackgroundTimeline, currentFrame]);
+
+  const activeSubtitleIndexAtPlayhead = useMemo(() => {
+    return effectiveSubtitles.findIndex(
+      (sub) => currentFrame >= sub.frameStart && currentFrame <= sub.frameEnd
+    );
+  }, [effectiveSubtitles, currentFrame]);
+
+  // Marcações da Régua de Tempo (00:00, 00:05, 00:10, 00:15...)
+  const rulerMarks = useMemo(() => {
+    const totalSeconds = Math.max(5, Math.ceil(effectiveTotalFrames / 30));
+    const step = totalSeconds <= 20 ? 5 : totalSeconds <= 45 ? 10 : 15;
+    const marks: Array<{ second: number; pct: number; label: string }> = [];
+    for (let s = 0; s <= totalSeconds; s += step) {
+      const pct = Math.min(100, ((s * 30) / effectiveTotalFrames) * 100);
+      const mins = Math.floor(s / 60);
+      const secs = s % 60;
+      marks.push({
+        second: s,
+        pct,
+        label: `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`,
+      });
+    }
+    return marks;
+  }, [effectiveTotalFrames]);
+
+  const playheadPercent = Math.min(
+    100,
+    Math.max(0, (currentFrame / Math.max(1, effectiveTotalFrames - 1)) * 100)
+  );
+
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
+      <div className="flex h-screen w-screen items-center justify-center bg-[#0f0f11] text-slate-200">
         <div className="flex items-center gap-3 text-sm font-semibold">
           <span className="h-3 w-3 animate-ping rounded-full bg-amber-500" />
-          <span>A carregar Studio...</span>
+          <span>A carregar Fragata Shorts Studio...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Header da Ilha de Edição */}
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-900/75 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white"
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0f0f11] text-slate-200 select-none">
+      {/* ====================================================================
+          1. BARRA SUPERIOR (Top Bar - 60px)
+         ==================================================================== */}
+      <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#2c2c32]/50 bg-[#141418] px-5 z-30">
+        {/* Esquerda: Apenas Ícone de Seta para Voltar ao Dashboard */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            title="Voltar ao Dashboard"
+            aria-label="Voltar ao Dashboard"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#2c2c32]/80 bg-[#1c1c22] text-slate-200 transition hover:border-white/20 hover:bg-[#24242c] hover:text-white"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.2}
             >
-              <span>←</span>
-              <span>Dashboard</span>
-            </button>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-amber-400">
-                  STORYBOARD STUDIO
-                </span>
-                <span className="text-slate-600">•</span>
-                <span className="font-mono text-xs text-slate-400">
-                  #{id?.slice(0, 8)}
-                </span>
-              </div>
-              <h1 className="line-clamp-1 max-w-md text-sm font-bold text-white sm:max-w-xl">
-                {theme || 'Etapa 1: Defina o Briefing Histórico'}
-              </h1>
-            </div>
-          </div>
-
-          {/* Indicador de Etapas + Status */}
-          <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/90 px-3 py-1.5 text-[11px] font-semibold md:flex">
-              <span
-                className={
-                  !hasScript ? 'text-amber-400 font-bold' : 'text-emerald-400'
-                }
-              >
-                1. Briefing {hasScript ? '✓' : ''}
-              </span>
-              <span className="text-slate-600">→</span>
-              <span
-                className={
-                  hasScript && !isAssembled
-                    ? 'text-amber-400 font-bold'
-                    : isAssembled
-                      ? 'text-emerald-400'
-                      : 'text-slate-500'
-                }
-              >
-                2. Storyboard & B-Roll {isAssembled ? '✓' : ''}
-              </span>
-              <span className="text-slate-600">→</span>
-              <span
-                className={
-                  isAssembled ? 'text-amber-400 font-bold' : 'text-slate-500'
-                }
-              >
-                3. Preview & MP4
-              </span>
-            </div>
-
+          {videoRecord?.status && videoRecord.status !== 'DRAFT' && (
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider shadow-md ${
-                videoRecord?.status === 'RENDERED'
-                  ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
-                  : videoRecord?.status === 'FAILED'
-                    ? 'border-rose-500/40 bg-rose-500/20 text-rose-300'
-                    : videoRecord?.status === 'DRAFT'
-                      ? 'border-sky-500/40 bg-sky-500/20 text-sky-300'
-                      : 'animate-pulse border-amber-500/40 bg-amber-500/20 text-amber-300'
+              className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                videoRecord.status === 'RENDERED'
+                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                  : videoRecord.status === 'FAILED'
+                    ? 'border-rose-500/40 bg-rose-500/15 text-rose-300'
+                    : 'animate-pulse border-amber-500/40 bg-amber-500/15 text-amber-300'
               }`}
             >
               <span
-                className={`h-2 w-2 rounded-full ${
-                  videoRecord?.status === 'RENDERED'
+                className={`h-1.5 w-1.5 rounded-full ${
+                  videoRecord.status === 'RENDERED'
                     ? 'bg-emerald-400'
-                    : videoRecord?.status === 'FAILED'
+                    : videoRecord.status === 'FAILED'
                       ? 'bg-rose-400'
-                      : videoRecord?.status === 'DRAFT'
-                        ? 'bg-sky-400'
-                        : 'bg-amber-400'
+                      : 'bg-amber-400'
                 }`}
               />
-              {videoRecord?.status || 'DRAFT'}
+              {videoRecord.status}
             </span>
+          )}
+        </div>
 
-            {videoRecord?.status === 'RENDERED' && videoRecord.videoUrl && (
-              <a
-                href={videoRecord.videoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 shadow-md transition hover:bg-amber-400"
+        {/* Centro: Título do Vídeo em Destaque */}
+        <div className="flex items-center gap-3 min-w-0 px-4">
+          <h1 className="truncate max-w-[260px] sm:max-w-[460px] md:max-w-[600px] text-[15px] font-semibold tracking-tight text-slate-100">
+            {theme || 'Sem Título'}
+          </h1>
+
+          {/* Notificação Compacta Flutuante */}
+          {errorMsg && (
+            <div className="hidden xl:flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1 text-[11px] text-rose-200">
+              <span className="truncate max-w-[240px]">{errorMsg}</span>
+              <button
+                type="button"
+                onClick={() => setErrorMsg(null)}
+                className="text-rose-400 hover:text-white font-bold"
               >
-                <span>Baixar MP4</span>
-                <span>↗</span>
-              </a>
+                ×
+              </button>
+            </div>
+          )}
+          {!errorMsg && successMsg && (
+            <div className="hidden xl:flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-[11px] text-emerald-200">
+              <span className="truncate max-w-[240px]">{successMsg}</span>
+              <button
+                type="button"
+                onClick={() => setSuccessMsg(null)}
+                className="text-emerald-400 hover:text-white font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Direita: Menu de 3 Pontos Verticais com Opção Exportar MP4 */}
+        <div className="relative flex items-center gap-2.5" ref={optionsMenuRef}>
+          {videoRecord?.status === 'RENDERED' && videoRecord.videoUrl && (
+            <a
+              href={videoRecord.videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/30"
+            >
+              <span>⬇ Baixar MP4</span>
+            </a>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsOptionsMenuOpen((prev) => !prev)}
+            title="Mais opções"
+            aria-label="Mais opções"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#2c2c32]/80 bg-[#1c1c22] text-slate-200 transition hover:border-white/20 hover:bg-[#24242c] hover:text-white"
+          >
+            {isRerendering || isPending ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+            ) : (
+              <svg
+                className="h-5 w-5"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="5" r="1.8" />
+                <circle cx="12" cy="12" r="1.8" />
+                <circle cx="12" cy="19" r="1.8" />
+              </svg>
             )}
-          </div>
+          </button>
+
+          {isOptionsMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-1.5 shadow-2xl shadow-black/90 z-50">
+              <button
+                type="button"
+                disabled={isRerendering || isPending || !hasScript}
+                onClick={() => {
+                  setIsOptionsMenuOpen(false);
+                  void handleRenderMp4OnServer();
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-100 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg
+                  className="h-4 w-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"
+                  />
+                </svg>
+                <span>
+                  {isRerendering || isPending
+                    ? 'Exportando MP4...'
+                    : 'Exportar MP4'}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      {/* Corpo Principal de Duas Colunas */}
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        {errorMsg && (
-          <div className="mb-6 rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-xs text-rose-300">
-            {errorMsg}
-          </div>
-        )}
+      {/* ====================================================================
+          2. WORKSPACE PRINCIPAL (Sidebar Esquerda + Coluna Direita Player/Timeline)
+         ==================================================================== */}
+      <div className="flex flex-1 min-h-0 flex-row gap-3 p-3 overflow-hidden">
+        {/* ------------------------------------------------------------------
+            SIDEBAR ESQUERDA (Inspetor com Abas Horizontais + Footer de Ação)
+           ------------------------------------------------------------------ */}
+        <aside className="flex w-[390px] xl:w-[420px] shrink-0 flex-col rounded-2xl border border-[#2c2c32]/50 bg-[#18181c] overflow-hidden shadow-2xl">
+          {/* Abas Horizontais no Topo da Sidebar */}
+          <div className="grid grid-cols-3 border-b border-[#2c2c32]/60 bg-[#151519] px-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('briefing')}
+              className={`flex items-center justify-center gap-1.5 border-b-2 py-3.5 px-3 text-xs font-semibold transition-all ${
+                activeTab === 'briefing'
+                  ? 'border-amber-500 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-[13px]">📝</span>
+              <span>1. Roteiro</span>
+            </button>
 
-        {successMsg && (
-          <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs text-emerald-300">
-            {successMsg}
-          </div>
-        )}
+            <button
+              type="button"
+              onClick={() => setActiveTab('storyboard')}
+              className={`flex items-center justify-center gap-1.5 border-b-2 py-3.5 px-3 text-xs font-semibold transition-all ${
+                activeTab === 'storyboard'
+                  ? 'border-amber-500 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-[13px]">🎬</span>
+              <span>2. Cenas</span>
+            </button>
 
-        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-          {/* ========================================================
-              COLUNA ESQUERDA (Fixa/Pegajosa):
-              - Etapa 1: Formulário de Briefing (se ainda não houver roteiro/montagem)
-              - Etapa 2: Checklist de Montagem + Re-gerar Briefing
-              - Etapa 3: @remotion/player 9:16 (após clicar em "🎬 Montar Vídeo")
-             ======================================================== */}
-          <section className="lg:col-span-5 lg:sticky lg:top-24 space-y-5">
-            {!isAssembled ? (
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                  <span>Etapa 1</span>
-                  <span>•</span>
-                  <span>Briefing do Roteiro</span>
+            <button
+              type="button"
+              onClick={() => setActiveTab('subtitles')}
+              className={`flex items-center justify-center gap-1.5 border-b-2 py-3.5 px-3 text-xs font-semibold transition-all ${
+                activeTab === 'subtitles'
+                  ? 'border-amber-500 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-[13px]">💬</span>
+              <span>3. Legendas</span>
+            </button>
+          </div>
+
+          {/* Feedback Mobile/Tablet */}
+          {(errorMsg || successMsg) && (
+            <div className="xl:hidden px-4 pt-3 shrink-0">
+              {errorMsg && (
+                <div className="flex items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
+                  <span>{errorMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setErrorMsg(null)}
+                    className="ml-2 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {!errorMsg && successMsg && (
+                <div className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs text-emerald-200">
+                  <span>{successMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSuccessMsg(null)}
+                    className="ml-2 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Conteúdo Scrollável da Sidebar */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+            {/* ==============================================================
+                ABA 1: BRIEFING (Tema, Chips de Sugestão, Duração)
+               ============================================================== */}
+            {activeTab === 'briefing' && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-5 space-y-4">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100">
+                      Configuração do Roteiro
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-400 leading-relaxed">
+                      Escolha o tema histórico e o formato. O Gemini criará as cenas, falas e direção visual automaticamente.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleGenerateScript} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                        Tema Histórico
+                      </label>
+                      <input
+                        type="text"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value)}
+                        required
+                        disabled={isGeneratingScript}
+                        placeholder="Ex: A Construção das Pirâmides de Gizé (2560 a.C.)"
+                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none transition"
+                      />
+                    </div>
+
+                    {/* Chips de Sugestões Rápidas */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-2">
+                        Sugestões Rápidas
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {SUGGESTED_THEMES.map((suggested) => {
+                          const isCurrent = theme === suggested;
+                          return (
+                            <button
+                              key={suggested}
+                              type="button"
+                              onClick={() => setTheme(suggested)}
+                              className={`rounded-lg border px-3 py-1.5 text-[11px] font-medium text-left transition-all ${
+                                isCurrent
+                                  ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                                  : 'border-[#2c2c32]/80 bg-[#121214] text-slate-300 hover:border-amber-500/40 hover:bg-amber-500/[0.06] hover:text-slate-100'
+                              }`}
+                            >
+                              {suggested}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                        Duração do Vídeo
+                      </label>
+                      <select
+                        value={durationPreset}
+                        onChange={(e) =>
+                          setDurationPreset(e.target.value as DurationPreset)
+                        }
+                        disabled={isGeneratingScript}
+                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-3 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                      >
+                        {DURATION_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGeneratingScript || !theme.trim()}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isGeneratingScript ? (
+                        <>
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                          <span>Gerando Roteiro no Gemini...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📝</span>
+                          <span>
+                            {hasScript
+                              ? 'Regerar Roteiro com IA'
+                              : 'Gerar Roteiro com IA'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </form>
                 </div>
 
-                <h2 className="mt-3 text-lg font-extrabold text-white">
-                  {hasScript
-                    ? 'Configuração do Roteiro Atual'
-                    : 'Configurar Novo Vlog no Tempo'}
-                </h2>
-                <p className="mt-1 text-xs text-slate-400">
-                  Gere primeiro apenas o JSON do roteiro no Gemini (custo zero de imagem/voz) para revisar antes de produzir os assets.
-                </p>
-
-                <form onSubmit={handleGenerateScript} className="mt-5 space-y-4">
-                  {/* Input do Tema Histórico */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Tema Histórico
-                    </label>
-                    <input
-                      type="text"
-                      value={theme}
-                      onChange={(e) => setTheme(e.target.value)}
-                      required
-                      disabled={isGeneratingScript}
-                      placeholder="Ex: A Erupção do Vesúvio em Pompeia (79 d.C.)"
-                      className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
-                    />
+                {/* Resumo de Progresso */}
+                <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      Status do Projeto
+                    </span>
+                    <span className="font-mono text-[11px] text-amber-400">
+                      {scenes.length} cenas • {totalWordsCount} palavras
+                    </span>
                   </div>
 
-                  {/* Dropdown de Duração */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Duração & Limite de Palavras
-                    </label>
-                    <select
-                      value={durationPreset}
-                      onChange={(e) =>
-                        setDurationPreset(e.target.value as DurationPreset)
-                      }
-                      disabled={isGeneratingScript}
-                      className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-white focus:border-amber-500 focus:outline-none"
-                    >
-                      {DURATION_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Botão Gerar Roteiro com IA */}
-                  <button
-                    type="submit"
-                    disabled={isGeneratingScript || !theme.trim()}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-3.5 text-sm font-black text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isGeneratingScript ? (
-                      <>
-                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-                        <span>A gerar roteiro no Gemini...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>📝</span>
-                        <span>
-                          {hasScript
-                            ? 'Regerar Roteiro com IA'
-                            : 'Gerar Roteiro com IA'}
-                        </span>
-                      </>
-                    )}
-                  </button>
-                </form>
-
-                {/* Checklist de Progresso para Desbloquear o Player */}
-                {hasScript && (
-                  <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Status da Montagem
-                      </span>
-                      <span className="font-mono text-xs text-amber-400">
-                        {scenes.length} cenas • {totalWordsCount} palavras
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
+                      <span className="text-slate-400">1. Roteiro Estruturado</span>
+                      <span
+                        className={
+                          hasScript
+                            ? 'font-semibold text-emerald-400'
+                            : 'text-slate-500'
+                        }
+                      >
+                        {hasScript ? `✓ ${scenes.length} cenas` : 'Pendente'}
                       </span>
                     </div>
 
-                    <div className="space-y-2 text-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-300">
-                          1. Roteiro Estruturado:
-                        </span>
-                        <span className="font-bold text-emerald-400">
-                          ✓ Pronto ({scenes.length} cenas)
-                        </span>
+                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
+                      <span className="text-slate-400">2. B-Rolls Aprovados</span>
+                      <span
+                        className={
+                          allScenesHaveSelectedImage
+                            ? 'font-semibold text-emerald-400'
+                            : 'text-amber-400'
+                        }
+                      >
+                        {selectedImagesCount}/{scenes.length || 0} cenas
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
+                      <span className="text-slate-400">3. Narração ElevenLabs</span>
+                      <span
+                        className={
+                          audioGenerated
+                            ? 'font-semibold text-emerald-400'
+                            : 'text-amber-400'
+                        }
+                      >
+                        {audioGenerated ? '✓ Gravada' : 'Pendente'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ==============================================================
+                ABA 2: STORYBOARD (Cards de Cena Espaçados + B-Roll 9:16)
+               ============================================================== */}
+            {activeTab === 'storyboard' && (
+              <>
+                {!hasScript ? (
+                  <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-6 text-center space-y-3">
+                    <div className="text-2xl">🎬</div>
+                    <h3 className="text-sm font-bold text-slate-100">
+                      Nenhum Roteiro Ativo
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Comece na aba 1. Roteiro para gerar as cenas do seu vídeo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('briefing')}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950"
+                    >
+                      <span>Ir para 1. Roteiro</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    {scenes.map((scene, index) => {
+                      const isGeneratingImg = Boolean(
+                        generatingImageForScene[index]
+                      );
+                      const isCollapsed = Boolean(collapsedScenes[index]);
+                      const spriteUrl = resolveAssetSrc(scene.avatarSprite);
+                      const sceneSegment = effectiveBackgroundTimeline[index];
+
+                      return (
+                        <div
+                          key={index}
+                          className="p-5 rounded-xl bg-[#202024]/60 border border-white/[0.04] mb-4 hover:border-white/[0.1] transition-all"
+                        >
+                          {/* Cabeçalho do Card da Cena */}
+                          <div
+                            onClick={() => toggleSceneCollapse(index)}
+                            className="flex cursor-pointer items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (sceneSegment) {
+                                    seekToFrame(sceneSegment.frameStart);
+                                  }
+                                }}
+                                title="Posicionar agulha nesta cena"
+                                className="text-sm font-bold text-slate-100 hover:text-amber-400 transition"
+                              >
+                                Cena #{index + 1}
+                              </button>
+                              {scene.selectedImage && (
+                                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                  ✓ Pronta
+                                </span>
+                              )}
+                            </div>
+
+                            <span className="text-xs text-slate-400 transition-transform">
+                              {isCollapsed ? '⌄' : '⌃'}
+                            </span>
+                          </div>
+
+                          {/* Corpo da Cena */}
+                          {!isCollapsed && (
+                            <div className="mt-4 space-y-3.5">
+                              {/* Campo: Texto */}
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1.5">
+                                  Texto
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={scene.text}
+                                  onChange={(e) =>
+                                    handleSceneFieldChange(
+                                      index,
+                                      'text',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-2.5 text-xs text-slate-100 leading-relaxed focus:border-amber-500 focus:outline-none transition"
+                                />
+                              </div>
+
+                              {/* Campo: Voz (Speaker) */}
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1.5">
+                                  Voz
+                                </label>
+                                <select
+                                  value={scene.speaker}
+                                  onChange={(e) =>
+                                    handleSceneFieldChange(
+                                      index,
+                                      'speaker',
+                                      e.target.value as SpeakerType
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] py-2 px-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                                >
+                                  <option value="protagonist">
+                                    Protagonista
+                                  </option>
+                                  <option value="character">
+                                    Personagem Histórico
+                                  </option>
+                                  <option value="narrator">
+                                    Narrador Épico
+                                  </option>
+                                </select>
+                              </div>
+
+                              {/* Campo: Expressão do Avatar */}
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1.5">
+                                  Expressão
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={spriteUrl}
+                                    alt="Avatar"
+                                    className="h-8 w-8 shrink-0 rounded-lg border border-[#2c2c32]/80 bg-[#121214] object-contain p-0.5"
+                                  />
+                                  <select
+                                    value={scene.avatarSprite}
+                                    onChange={(e) =>
+                                      handleSceneFieldChange(
+                                        index,
+                                        'avatarSprite',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] py-2 px-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                                  >
+                                    {AVAILABLE_AVATAR_SPRITES.map((sprite) => (
+                                      <option key={sprite} value={sprite}>
+                                        {sprite.replace('avatars/', '')}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Campo: Prompt visual */}
+                              <div>
+                                <label className="block text-xs text-slate-400 mb-1.5">
+                                  Prompt visual
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  value={scene.imagePrompt}
+                                  onChange={(e) =>
+                                    handleSceneFieldChange(
+                                      index,
+                                      'imagePrompt',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-2.5 text-xs text-slate-300 leading-relaxed focus:border-amber-500 focus:outline-none transition"
+                                />
+                              </div>
+
+                              {/* Secção B-Roll */}
+                              <div>
+                                <div className="flex items-center justify-between mb-2">
+                                  <label className="block text-xs text-slate-400">
+                                    B-Roll
+                                  </label>
+                                  {scene.selectedImage && (
+                                    <span className="text-[11px] font-medium text-emerald-400">
+                                      ✓ Imagem Aprovada
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Cards B-Roll Verticais 9:16 com Overlay e Badge */}
+                                {scene.candidateImages &&
+                                  scene.candidateImages.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                      {scene.candidateImages.map(
+                                        (imgUrl, optIdx) => {
+                                          const isSelected =
+                                            scene.selectedImage === imgUrl;
+                                          return (
+                                            <div
+                                              key={`${optIdx}-${imgUrl}`}
+                                              onClick={() =>
+                                                handleSelectBrollImage(
+                                                  index,
+                                                  imgUrl
+                                                )
+                                              }
+                                              className={`group relative cursor-pointer overflow-hidden rounded-lg border-2 transition-all duration-200 ${
+                                                isSelected
+                                                  ? 'border-emerald-400 ring-2 ring-emerald-400/25 shadow-lg shadow-emerald-500/10 scale-[1.01]'
+                                                  : 'border-[#2c2c32]/80 opacity-80 hover:border-white/25 hover:opacity-100'
+                                              }`}
+                                            >
+                                              <div className="aspect-[9/16] max-h-40 w-full bg-[#121214]">
+                                                <img
+                                                  src={resolveAssetSrc(imgUrl)}
+                                                  alt={`Cena ${index + 1} - Opção ${optIdx + 1}`}
+                                                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                                />
+                                              </div>
+
+                                              {/* Overlay Gradiente Subtil */}
+                                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/40" />
+
+                                              {/* Badge Superior Esquerdo: Opção 1 / Opção 2 */}
+                                              <span className="absolute top-2 left-2 rounded-md bg-black/65 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-white/10">
+                                                Opção {optIdx + 1}
+                                              </span>
+
+                                              {/* Botão Superior Direito (Hover): Ampliar / Visualizar Cenário */}
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setPreviewBrollModal({
+                                                    sceneIndex: index,
+                                                    optionIndex: optIdx,
+                                                    imageUrl: imgUrl,
+                                                  });
+                                                }}
+                                                title="Ampliar cenário"
+                                                aria-label={`Ampliar Cena ${index + 1} - Opção ${optIdx + 1}`}
+                                                className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/75 text-slate-100 opacity-0 shadow-md backdrop-blur-xs transition-all duration-150 group-hover:opacity-100 hover:scale-105 hover:border-amber-400/60 hover:bg-black/90 hover:text-amber-300"
+                                              >
+                                                <svg
+                                                  className="h-3.5 w-3.5"
+                                                  fill="none"
+                                                  viewBox="0 0 24 24"
+                                                  stroke="currentColor"
+                                                  strokeWidth={2}
+                                                >
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                                  />
+                                                </svg>
+                                              </button>
+
+                                              {/* Indicador de Aprovação (Check Verde Brilhante) */}
+                                              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                                                {isSelected ? (
+                                                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-slate-950 shadow-sm">
+                                                    <span>✓</span>
+                                                    <span>Aprovada</span>
+                                                  </span>
+                                                ) : (
+                                                  <span className="rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    Selecionar
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+                                      )}
+                                    </div>
+                                  )}
+
+                                {/* Botão Integrado de Gerar / Regerar Imagens */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleGenerateSceneImages(index)
+                                  }
+                                  disabled={
+                                    isGeneratingImg ||
+                                    !scene.imagePrompt.trim()
+                                  }
+                                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/[0.07] bg-[#282830] py-2.5 px-3 text-xs font-semibold text-slate-200 transition hover:border-white/[0.15] hover:bg-[#32323c] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {isGeneratingImg ? (
+                                    <>
+                                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                                      <span>Gerando 2 opções...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>🎨</span>
+                                      <span>
+                                        {scene.candidateImages?.length > 0
+                                          ? 'Gerar Novas Opções'
+                                          : 'Gerar Imagens B-Roll'}
+                                      </span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ==============================================================
+                ABA 3: LEGENDAS (Estilos Customizáveis + Posição + Blocos Sincronizados)
+               ============================================================== */}
+            {activeTab === 'subtitles' && (
+              <div className="space-y-3.5">
+                {/* 1. Card Recolhível: Estilo & Animação das Legendas (Padrão: Recolhido) */}
+                <div className="rounded-xl bg-[#202024]/70 border border-white/[0.06] p-4 hover:border-white/[0.1] transition-all">
+                  <div
+                    onClick={() =>
+                      setIsSubtitleStyleCollapsed((prev) => !prev)
+                    }
+                    className="flex cursor-pointer items-center justify-between gap-2"
+                  >
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-100">
+                        Estilo &amp; Animação das Legendas
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Alterações aplicadas em tempo real no vídeo
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleAssembleVideo();
+                        }}
+                        disabled={!hasScript}
+                        className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 shadow-sm hover:bg-amber-400 transition disabled:opacity-40"
+                      >
+                        Salvar Estilo
+                      </button>
+                      <span className="text-xs text-slate-400 transition-transform">
+                        {isSubtitleStyleCollapsed ? '⌄' : '⌃'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!isSubtitleStyleCollapsed && (
+                    <div className="mt-4 space-y-4 border-t border-white/[0.05] pt-4">
+                      {/* 1. Tipo de Animação (Karaokê / Pop TikTok / Hormozi) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-300">
+                          Tipo de Animação
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(
+                            [
+                              {
+                                id: 'karaoke',
+                                icon: '🎤',
+                                title: 'Karaokê',
+                                desc: 'Realce por palavra',
+                              },
+                              {
+                                id: 'pop',
+                                icon: '💥',
+                                title: 'Pop TikTok',
+                                desc: 'Blocos 3-4 palavras',
+                              },
+                              {
+                                id: 'hormozi',
+                                icon: '⚡',
+                                title: 'Hormozi',
+                                desc: '1 palavra por vez',
+                              },
+                            ] as Array<{
+                              id: SubtitleAnimationType;
+                              icon: string;
+                              title: string;
+                              desc: string;
+                            }>
+                          ).map((opt) => {
+                            const isSelected =
+                              subtitleStyle.animationType === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() =>
+                                  handleSubtitleStyleChange(
+                                    'animationType',
+                                    opt.id
+                                  )
+                                }
+                                className={`flex flex-col items-start rounded-xl border p-2.5 text-left transition ${
+                                  isSelected
+                                    ? 'border-amber-500 bg-amber-500/15 text-white shadow-sm'
+                                    : 'border-[#2c2c32]/80 bg-[#141418] text-slate-300 hover:border-white/20'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 text-xs font-bold">
+                                  <span>{opt.icon}</span>
+                                  <span>{opt.title}</span>
+                                </div>
+                                <span className="mt-0.5 text-[10px] text-slate-400">
+                                  {opt.desc}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-300">
-                          2. Imagens B-Roll Selecionadas:
-                        </span>
-                        <span
-                          className={`font-bold ${
-                            allScenesHaveSelectedImage
-                              ? 'text-emerald-400'
-                              : 'text-amber-400'
-                          }`}
-                        >
-                          {selectedImagesCount} / {scenes.length} selecionadas
-                        </span>
+                      {/* 2. Estilo da Fonte */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-300">
+                          Fonte
+                        </label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {(
+                            [
+                              { id: 'impact', label: 'Impacto' },
+                              { id: 'montserrat', label: 'Montserrat' },
+                              { id: 'grotesque', label: 'Grotesque' },
+                              { id: 'script', label: 'Script' },
+                            ] as Array<{
+                              id: SubtitleFontFamily;
+                              label: string;
+                            }>
+                          ).map((fontOpt) => {
+                            const active =
+                              subtitleStyle.fontFamily === fontOpt.id;
+                            return (
+                              <button
+                                key={fontOpt.id}
+                                type="button"
+                                onClick={() =>
+                                  handleSubtitleStyleChange(
+                                    'fontFamily',
+                                    fontOpt.id
+                                  )
+                                }
+                                className={`rounded-lg border py-1.5 px-2 text-[11px] font-semibold transition ${
+                                  active
+                                    ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                                    : 'border-[#2c2c32]/80 bg-[#141418] text-slate-300 hover:border-white/20'
+                                }`}
+                              >
+                                {fontOpt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-300">
-                          3. Narração Multi-Voz (ElevenLabs):
-                        </span>
-                        <span
-                          className={`font-bold ${
-                            audioGenerated
-                              ? 'text-emerald-400'
-                              : 'text-amber-400'
-                          }`}
+                      {/* 3. Tamanho do Texto (Slider) */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-slate-300">
+                            Tamanho do Texto
+                          </span>
+                          <span className="font-mono text-amber-400">
+                            {subtitleStyle.fontSize}px
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={36}
+                          max={96}
+                          step={2}
+                          value={subtitleStyle.fontSize}
+                          onChange={(e) =>
+                            handleSubtitleStyleChange(
+                              'fontSize',
+                              Number(e.target.value)
+                            )
+                          }
+                          className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-[#121214] accent-amber-500"
+                        />
+                      </div>
+
+                      {/* 4. Paleta de Cores (Cor Principal + Cor de Destaque) */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Cor Principal */}
+                        <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-300">
+                              Cor Principal
+                            </span>
+                            <input
+                              type="color"
+                              value={subtitleStyle.primaryColor}
+                              onChange={(e) =>
+                                handleSubtitleStyleChange(
+                                  'primaryColor',
+                                  e.target.value
+                                )
+                              }
+                              className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {['#FFFFFF', '#F8FAFC', '#FEF08A', '#A7F3D0'].map(
+                              (hex) => (
+                                <button
+                                  key={hex}
+                                  type="button"
+                                  onClick={() =>
+                                    handleSubtitleStyleChange(
+                                      'primaryColor',
+                                      hex
+                                    )
+                                  }
+                                  style={{ backgroundColor: hex }}
+                                  className={`h-5 w-5 rounded-full border transition ${
+                                    subtitleStyle.primaryColor.toLowerCase() ===
+                                    hex.toLowerCase()
+                                      ? 'scale-110 border-amber-400 ring-2 ring-amber-400/40'
+                                      : 'border-white/25 opacity-80 hover:opacity-100'
+                                  }`}
+                                />
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Cor de Destaque */}
+                        <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-300">
+                              Cor de Destaque
+                            </span>
+                            <input
+                              type="color"
+                              value={subtitleStyle.highlightColor}
+                              onChange={(e) =>
+                                handleSubtitleStyleChange(
+                                  'highlightColor',
+                                  e.target.value
+                                )
+                              }
+                              className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {[
+                              '#FBBF24',
+                              '#22C55E',
+                              '#EF4444',
+                              '#38BDF8',
+                              '#F472B6',
+                            ].map((hex) => (
+                              <button
+                                key={hex}
+                                type="button"
+                                onClick={() =>
+                                  handleSubtitleStyleChange(
+                                    'highlightColor',
+                                    hex
+                                  )
+                                }
+                                style={{ backgroundColor: hex }}
+                                className={`h-5 w-5 rounded-full border transition ${
+                                  subtitleStyle.highlightColor.toLowerCase() ===
+                                  hex.toLowerCase()
+                                    ? 'scale-110 border-white ring-2 ring-amber-400/50'
+                                    : 'border-white/25 opacity-80 hover:opacity-100'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. Efeitos de Estilo (Switches: Sombra, Borda Preta, Fundo Translúcido) */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-300">
+                          Efeitos de Leitura
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(
+                            [
+                              { field: 'hasStroke', label: 'Borda Preta' },
+                              { field: 'hasShadow', label: 'Sombra' },
+                              { field: 'hasBackground', label: 'Fundo Box' },
+                            ] as Array<{
+                              field: 'hasStroke' | 'hasShadow' | 'hasBackground';
+                              label: string;
+                            }>
+                          ).map((eff) => {
+                            const isOn = Boolean(subtitleStyle[eff.field]);
+                            return (
+                              <button
+                                key={eff.field}
+                                type="button"
+                                onClick={() =>
+                                  handleSubtitleStyleChange(eff.field, !isOn)
+                                }
+                                className={`flex items-center justify-between rounded-lg border px-2.5 py-2 text-[11px] font-medium transition ${
+                                  isOn
+                                    ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                                    : 'border-[#2c2c32]/80 bg-[#141418] text-slate-400 hover:border-white/15'
+                                }`}
+                              >
+                                <span>{eff.label}</span>
+                                <span
+                                  className={`h-2 w-2 rounded-full ${
+                                    isOn ? 'bg-emerald-400' : 'bg-slate-600'
+                                  }`}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 6. Posicionamento no Vídeo (Presets + Sliders + Arraste Direto) */}
+                      <div className="space-y-2 border-t border-white/[0.06] pt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-300">
+                            Posição no Vídeo (ou arraste no Player)
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {[
+                              { label: 'Topo', x: 50, y: 20 },
+                              { label: 'Centro', x: 50, y: 50 },
+                              { label: 'Base', x: 50, y: 68 },
+                            ].map((preset) => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => {
+                                  handleSubtitleStyleChange(
+                                    'positionX',
+                                    preset.x
+                                  );
+                                  handleSubtitleStyleChange(
+                                    'positionY',
+                                    preset.y
+                                  );
+                                }}
+                                className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold transition ${
+                                  Math.abs(
+                                    subtitleStyle.positionY - preset.y
+                                  ) <= 3
+                                    ? 'border-amber-500/60 bg-amber-500/20 text-amber-300'
+                                    : 'border-[#2c2c32] bg-[#141418] text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                              <span>Vertical (Y)</span>
+                              <span className="font-mono text-slate-200">
+                                {subtitleStyle.positionY}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={10}
+                              max={88}
+                              value={subtitleStyle.positionY}
+                              onChange={(e) =>
+                                handleSubtitleStyleChange(
+                                  'positionY',
+                                  Number(e.target.value)
+                                )
+                              }
+                              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-[#121214] accent-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                              <span>Horizontal (X)</span>
+                              <span className="font-mono text-slate-200">
+                                {subtitleStyle.positionX}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={15}
+                              max={85}
+                              value={subtitleStyle.positionX}
+                              onChange={(e) =>
+                                handleSubtitleStyleChange(
+                                  'positionX',
+                                  Number(e.target.value)
+                                )
+                              }
+                              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-[#121214] accent-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Card Recolhível: Blocos de Fala (Padrão: Aberto) */}
+                <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-4 hover:border-white/[0.1] transition-all">
+                  <div
+                    onClick={() =>
+                      setIsSubtitleBlocksCollapsed((prev) => !prev)
+                    }
+                    className="flex cursor-pointer items-center justify-between gap-2"
+                  >
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-100">
+                        Blocos de Fala ({effectiveSubtitles.length})
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Frases curtas sincronizadas com o ritmo da fala (30 FPS)
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-400 transition-transform">
+                      {isSubtitleBlocksCollapsed ? '⌄' : '⌃'}
+                    </span>
+                  </div>
+
+                  {!isSubtitleBlocksCollapsed && (
+                    <div className="mt-4 border-t border-white/[0.05] pt-3.5">
+                      {effectiveSubtitles.length === 0 ? (
+                        <div className="rounded-xl bg-[#141418] border border-white/[0.04] p-5 text-center space-y-2">
+                          <p className="text-xs text-slate-400">
+                            Gere o roteiro na aba 1 para visualizar e editar os blocos de legenda.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {effectiveSubtitles.map((sub, index) => {
+                            const isCurrentBlock =
+                              index === activeSubtitleIndexAtPlayhead;
+                            return (
+                              <div
+                                key={index}
+                                className={`rounded-xl border p-3.5 transition-all space-y-2 ${
+                                  isCurrentBlock
+                                    ? 'bg-[#26262e] border-amber-500/50 shadow-sm'
+                                    : 'bg-[#18181c] border-white/[0.04] hover:border-white/[0.1]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => seekToFrame(sub.frameStart)}
+                                    title="Ir para este trecho no Player"
+                                    className="shrink-0 rounded-md bg-[#121214] border border-[#2c2c32] px-2 py-1 font-mono text-[10px] font-bold text-amber-400 hover:border-amber-500/50"
+                                  >
+                                    #{index + 1}
+                                  </button>
+
+                                  <input
+                                    type="text"
+                                    value={sub.text}
+                                    onChange={(e) =>
+                                      handleSubtitleChange(
+                                        index,
+                                        'text',
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-1.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
+                                  />
+                                </div>
+
+                                {/* Informação de Frame Mono-espaçada abaixo do Input */}
+                                <div className="flex items-center justify-between pl-1">
+                                  <span className="font-mono text-[10px] text-slate-400 opacity-60">
+                                    Frames: {sub.frameStart}f – {sub.frameEnd}f (
+                                    {(sub.frameStart / 30).toFixed(1)}s –{' '}
+                                    {(sub.frameEnd / 30).toFixed(1)}s)
+                                  </span>
+
+                                  <div className="flex items-center gap-1 font-mono text-[10px]">
+                                    <input
+                                      type="number"
+                                      value={sub.frameStart}
+                                      onChange={(e) =>
+                                        handleSubtitleChange(
+                                          index,
+                                          'frameStart',
+                                          Number(e.target.value)
+                                        )
+                                      }
+                                      className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
+                                    />
+                                    <span className="text-slate-600">-</span>
+                                    <input
+                                      type="number"
+                                      value={sub.frameEnd}
+                                      onChange={(e) =>
+                                        handleSubtitleChange(
+                                          index,
+                                          'frameEnd',
+                                          Number(e.target.value)
+                                        )
+                                      }
+                                      className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rodapé Fixo da Sidebar Esquerda: Botões "Gravar Narração" e "Montar Vídeo" */}
+          <div className="shrink-0 border-t border-[#2c2c32]/60 bg-[#141418] p-3.5 space-y-2.5">
+            {audioGenerated && audioSrc && (
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-[#1c1c22] px-3 py-1.5 border border-white/[0.05]">
+                <span className="text-[11px] font-medium text-emerald-400">
+                  ✓ Narração Pronta
+                </span>
+                <audio
+                  controls
+                  src={resolveAssetSrc(audioSrc)}
+                  className="h-6 max-w-[190px]"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={handleGenerateAudio}
+                disabled={isGeneratingAudio || !hasScript}
+                className="flex items-center justify-center gap-2 rounded-xl border border-[#2c2c32] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-[#2a2a32] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isGeneratingAudio ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+                    <span>Gravando...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🎙️</span>
+                    <span>Gravar Narração</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAssembleVideo}
+                disabled={!hasScript}
+                className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 px-3 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>🎬</span>
+                <span>Montar Vídeo</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* ------------------------------------------------------------------
+            COLUNA DIREITA (Monitor Player 9:16 em cima + Timeline em baixo)
+           ------------------------------------------------------------------ */}
+        <div className="flex flex-1 min-w-0 flex-col gap-3 overflow-hidden">
+          {/* ================================================================
+              PAINEL DO PLAYER CENTRAL (Vertical 9:16 + Barra Compacta)
+             ================================================================ */}
+          <section className="relative flex flex-1 min-h-0 flex-col items-center justify-center rounded-2xl border border-[#2c2c32]/50 bg-[#141417] p-4 overflow-hidden shadow-2xl">
+            {isPending && (
+              <div className="absolute top-4 right-4 z-20 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-[#18181c]/90 px-3 py-1.5 text-xs font-semibold text-amber-300 backdrop-blur">
+                <span className="h-2 w-2 animate-ping rounded-full bg-amber-400" />
+                <span>Renderizando MP4 no servidor...</span>
+              </div>
+            )}
+
+            {/* Wrapper Vertical 9:16 Único (Garante Mesma Largura para Vídeo e Controles) */}
+            <div
+              className="flex h-full max-h-full flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-black shadow-2xl shadow-black/80"
+              style={{ aspectRatio: '9 / 16' }}
+            >
+              {/* Área Clicável do Vídeo (Clique para Pausar / Despausar) */}
+              <div
+                ref={videoCanvasRef}
+                onClick={togglePlayPause}
+                className="group/canvas relative flex-1 min-h-0 w-full cursor-pointer overflow-hidden bg-black"
+              >
+                <Player
+                  ref={playerRef}
+                  component={TimeMachineVideo}
+                  inputProps={{
+                    theme: theme || 'Sem título',
+                    durationInFrames: effectiveTotalFrames,
+                    backgroundSrc:
+                      effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
+                    backgroundTimeline: effectiveBackgroundTimeline,
+                    audioSrc,
+                    subtitles: effectiveSubtitles,
+                    subtitleStyle,
+                    avatarTimeline: effectiveAvatarTimeline,
+                  }}
+                  durationInFrames={effectiveTotalFrames}
+                  compositionWidth={1080}
+                  compositionHeight={1920}
+                  fps={30}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                  }}
+                  loop
+                />
+
+                {/* Alça Interativa para Arrastar a Posição da Legenda sem Pausar/Despausar o Vídeo */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={handleSubtitleDragMouseDown}
+                  title="Arraste para posicionar a legenda no vídeo"
+                  style={{
+                    left: `${subtitleStyle.positionX}%`,
+                    top: `${subtitleStyle.positionY}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                  className={`group/subdrag absolute z-20 flex w-[82%] min-h-[54px] cursor-grab active:cursor-grabbing items-center justify-center rounded-xl border-2 border-dashed transition-all ${
+                    isDraggingSubtitle
+                      ? 'border-amber-400 bg-amber-500/15 opacity-100 shadow-lg'
+                      : activeTab === 'subtitles'
+                        ? 'border-amber-400/55 bg-black/15 opacity-90 hover:border-amber-400 hover:bg-amber-500/10 hover:opacity-100'
+                        : 'border-transparent opacity-0 group-hover/canvas:border-white/30 group-hover/canvas:opacity-100 hover:!border-amber-400 hover:!bg-amber-500/10'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none -mt-11 rounded-md border border-amber-400/50 bg-black/85 px-2 py-0.5 text-[10px] font-semibold text-amber-300 shadow-md backdrop-blur-xs transition-opacity ${
+                      isDraggingSubtitle
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover/subdrag:opacity-100'
+                    }`}
+                  >
+                    ✥ Arrastar Legenda ({subtitleStyle.positionX}%,{' '}
+                    {subtitleStyle.positionY}%)
+                  </span>
+                </div>
+
+                {/* Overlay Central quando o Vídeo está Pausado */}
+                {!isPlaying && !isDraggingSubtitle && (
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/25 transition-opacity">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-black/65 text-white shadow-2xl backdrop-blur-md">
+                        <svg
+                          className="h-6 w-6 translate-x-0.5"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          {audioGenerated ? '✓ Gravada' : 'Pendente'}
-                        </span>
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
-            ) : (
-              /* Player Remotion 9:16 Ativo após "🎬 Montar Vídeo" */
-              <div className="space-y-4">
-                <div className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-3xl border border-slate-800 bg-black shadow-2xl shadow-black/80">
-                  <Player
-                    component={TimeMachineVideo}
-                    inputProps={{
-                      theme,
-                      durationInFrames,
-                      backgroundSrc,
-                      backgroundTimeline,
-                      audioSrc,
-                      subtitles,
-                      avatarTimeline,
-                    }}
-                    durationInFrames={Math.max(30, durationInFrames)}
-                    compositionWidth={1080}
-                    compositionHeight={1920}
-                    fps={30}
-                    style={{
-                      width: '100%',
-                      aspectRatio: '9 / 16',
-                    }}
-                    controls
-                    loop
-                  />
 
-                  {isPending && (
-                    <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between rounded-xl border border-amber-500/30 bg-slate-900/90 p-3 shadow-xl backdrop-blur">
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex h-2.5 w-2.5 animate-ping rounded-full bg-amber-400" />
-                        <span className="text-xs font-bold text-amber-300">
-                          A renderizar MP4 no servidor...
-                        </span>
-                      </div>
-                      <span className="font-mono text-[11px] text-slate-400">
-                        Auto-sync
-                      </span>
-                    </div>
-                  )}
+              {/* Barra Compacta de Reprodução na Mesma Largura do Vídeo */}
+              <div className="w-full shrink-0 border-t border-white/[0.08] bg-[#1c1c22] px-3.5 py-2.5">
+                {/* Barra de Progresso Fina Clicável */}
+                <div
+                  onClick={handleTimelineSeek}
+                  className="mb-2 h-1 w-full cursor-pointer overflow-hidden rounded-full bg-white/15"
+                >
+                  <div
+                    className="h-full rounded-full bg-slate-200 transition-all duration-75"
+                    style={{ width: `${playheadPercent}%` }}
+                  />
                 </div>
 
-                <div className="mx-auto max-w-[360px] rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 text-xs text-slate-400 space-y-2">
-                  <div className="flex items-center justify-between font-mono">
-                    <span>Duração Total:</span>
-                    <span className="font-bold text-white">
-                      {durationInFrames} frames (
-                      {(durationInFrames / 30).toFixed(1)}s)
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* Botão Único Play / Pause */}
+                    <button
+                      type="button"
+                      onClick={togglePlayPause}
+                      title={isPlaying ? 'Pausar' : 'Reproduzir'}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-200 hover:bg-white/10 hover:text-white transition"
+                    >
+                      {isPlaying ? (
+                        <svg
+                          className="h-4 w-4"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {/* Botão Volume / Mute */}
+                    <button
+                      type="button"
+                      onClick={toggleMute}
+                      title={isMuted ? 'Ativar som' : 'Silenciar'}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-300 hover:bg-white/10 hover:text-white transition"
+                    >
+                      {isMuted ? (
+                        <svg
+                          className="h-4 w-4 text-rose-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="font-mono text-[11px] font-medium text-slate-300">
+                    <span className="text-slate-100">
+                      {formatShortTime(currentFrame)}
+                    </span>
+                    <span className="mx-1 text-slate-500">/</span>
+                    <span className="text-slate-400">
+                      {formatShortTime(effectiveTotalFrames)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between font-mono">
-                    <span>Resolução:</span>
-                    <span className="text-amber-400">
-                      1080 × 1920 (9:16) • 30 FPS
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAssembled(false)}
-                    className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950 py-2 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:text-white"
-                  >
-                    ← Voltar para Configuração de Briefing
-                  </button>
                 </div>
               </div>
-            )}
+            </div>
           </section>
 
-          {/* ========================================================
-              COLUNA DIREITA (Scrollável):
-              - Estado Inicial (Sem Roteiro): Guia das 3 Etapas + Sugestões de Temas
-              - Com Roteiro: Barra Global da Fábrica + Cartões de Cena (Storyboard) + Legendas/Render
-             ======================================================== */}
-          <section className="lg:col-span-7 space-y-6">
-            {!hasScript ? (
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-8 shadow-xl">
-                <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400">
-                  Fluxo Storyboard em 3 Etapas
+          {/* ================================================================
+              3. RODAPÉ DIREITO: LINHA DE TEMPO MULTI-TRACK
+             ================================================================ */}
+          <footer className="flex h-[225px] shrink-0 flex-col rounded-2xl border border-[#2c2c32]/50 bg-[#18181c] px-5 py-3.5 overflow-hidden shadow-2xl">
+            {/* Cabeçalho da Timeline + Indicador ao Vivo do Momento da Agulha */}
+            <div className="flex items-center justify-between gap-4 mb-2 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="shrink-0 text-xs font-semibold text-slate-200">
+                  Linha de Tempo
                 </span>
-                <h3 className="mt-4 text-xl font-bold text-white">
-                  Controlo Granular sem Desperdício de Créditos
-                </h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  Comece preenchendo o Tema Histórico e a Duração na coluna à esquerda. Você poderá revisar e editar todo o roteiro antes de acionar o Fal.ai (FLUX.1) ou a ElevenLabs.
-                </p>
+                {activeSceneIndexAtPlayhead >= 0 && (
+                  <div className="flex items-center gap-2 min-w-0 rounded-md border border-white/[0.08] bg-[#121216] px-2.5 py-0.5 text-[11px]">
+                    <span className="shrink-0 font-mono font-bold text-red-400">
+                      {formatShortTime(currentFrame)}
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span className="shrink-0 font-semibold text-teal-300">
+                      Cena #{activeSceneIndexAtPlayhead + 1}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                {effectiveBackgroundTimeline.length} cenas •{' '}
+                {effectiveSubtitles.length} legendas
+              </span>
+            </div>
 
-                <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="text-lg">📝 1. Briefing</div>
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      O Gemini gera o JSON com falas, speakers, expressões do avatar e prompts POV + Stick Figure.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="text-lg">🎨 2. B-Roll (2x)</div>
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      Ajuste o prompt em inglês e gere 2 variações de imagem por cena para escolher a melhor miniatura.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="text-lg">🎬 3. Montagem</div>
-                    <p className="mt-1.5 text-xs text-slate-400">
-                      Grave a locução multi-voz, monte no Player 9:16 e exporte o MP4 final.
-                    </p>
-                  </div>
+            {/* Corpo das Faixas + Régua */}
+            <div className="flex flex-1 min-h-0 flex-row overflow-hidden">
+              {/* Coluna Esquerda: Labels das Tracks */}
+              <div className="flex w-36 shrink-0 flex-col pr-3 z-20">
+                {/* Espaço da Régua */}
+                <div className="h-6 shrink-0" />
+
+                {/* Label Track 1: Vídeo */}
+                <div className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-300">
+                  <span className="text-xs opacity-80">📹</span>
+                  <span className="truncate">Cenários</span>
                 </div>
 
-                <div className="mt-8">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Sugestões Rápidas de Temas (Clique para preencher):
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {SUGGESTED_THEMES.map((suggested) => (
-                      <button
-                        key={suggested}
-                        type="button"
-                        onClick={() => setTheme(suggested)}
-                        className="rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2 text-xs text-slate-300 transition hover:border-amber-500/50 hover:text-amber-400"
-                      >
-                        {suggested}
-                      </button>
-                    ))}
-                  </div>
+                {/* Label Track 2: Áudio */}
+                <div className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-300">
+                  <span className="text-xs opacity-80">🎵</span>
+                  <span className="truncate">Narração</span>
+                </div>
+
+                {/* Label Track 3: Legendas */}
+                <div className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-300">
+                  <span className="text-xs opacity-80">💬</span>
+                  <span className="truncate">Legendas</span>
                 </div>
               </div>
-            ) : (
-              <>
-                {/* ========================================================
-                    PAINEL GLOBAL DA FÁBRICA (Passo 3: Gravar Narração & Montar Vídeo)
-                   ======================================================== */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                        Etapa 3 • Fábrica Global
-                      </span>
-                      <h3 className="text-base font-bold text-white">
-                        Produção de Áudio & Montagem Final
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Grave a narração com as 3 vozes e selecione 1 imagem B-Roll em cada cena para habilitar a montagem.
-                      </p>
-                    </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Botão Global: Gravar Narração */}
-                      <button
-                        type="button"
-                        onClick={handleGenerateAudio}
-                        disabled={isGeneratingAudio || scenes.length === 0}
-                        className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isGeneratingAudio ? (
-                          <>
-                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-                            <span>A gravar vozes...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>🎙️</span>
-                            <span>
-                              {audioGenerated
-                                ? 'Regravar Narração'
-                                : 'Gravar Narração'}
-                            </span>
-                          </>
-                        )}
-                      </button>
+              {/* Área Direita: Régua de Tempo + 3 Faixas + Agulha Vermelha Arrastável */}
+              <div
+                ref={timelineContainerRef}
+                onMouseDown={handleTimelineMouseDown}
+                className={`relative flex flex-1 flex-col select-none ${
+                  isScrubbingTimeline ? 'cursor-ew-resize' : 'cursor-pointer'
+                }`}
+              >
+                {/* Agulha de Reprodução Arrastável (Playhead Vermelha Viva) */}
+                <div
+                  onMouseDown={handleTimelineMouseDown}
+                  title="Arraste para navegar pelos cenários e legendas"
+                  className="group/playhead absolute top-0 bottom-0 z-30 -ml-2 flex w-4 cursor-ew-resize justify-center"
+                  style={{ left: `${playheadPercent}%` }}
+                >
+                  {/* Linha Vertical Vermelha */}
+                  <div className="h-full w-[2px] bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.95)]" />
 
-                      {/* Botão Global: Montar Vídeo */}
-                      <button
-                        type="button"
-                        onClick={handleAssembleVideo}
-                        disabled={!canAssembleVideo}
-                        title={
-                          !canAssembleVideo
-                            ? 'Selecione 1 imagem em todas as cenas e grave a narração primeiro'
-                            : 'Injetar dados no Remotion Player'
-                        }
-                        className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <span>🎬</span>
-                        <span>Montar Vídeo</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Player de Áudio Rápido quando a locução já foi gerada */}
-                  {audioGenerated && audioSrc && (
-                    <div className="mt-4 flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
-                        <span>✓ Áudio Multi-Voz Sincronizado</span>
-                        <span className="font-mono text-slate-400">
-                          ({(durationInFrames / 30).toFixed(1)}s •{' '}
-                          {subtitles.length} legendas)
-                        </span>
-                      </div>
-                      <audio
-                        controls
-                        src={resolveAssetSrc(audioSrc)}
-                        className="h-8 max-w-xs"
-                      />
-                    </div>
-                  )}
+                  {/* Cabeça da Agulha no Topo */}
+                  <div
+                    className={`absolute top-0 h-4 w-3 rounded-xs bg-red-500 shadow-md transition-transform ${
+                      isScrubbingTimeline
+                        ? 'scale-125 ring-2 ring-red-300/70'
+                        : 'group-hover/playhead:scale-110'
+                    }`}
+                  />
                 </div>
 
-                {/* ========================================================
-                    LISTA DE CARTÕES DO STORYBOARD (Passo 2 & Passo 3 por Cena)
-                   ======================================================== */}
-                <div className="space-y-5">
-                  {scenes.map((scene, index) => {
-                    const isGeneratingImg = Boolean(
-                      generatingImageForScene[index]
-                    );
-                    const spriteUrl = resolveAssetSrc(scene.avatarSprite);
+                {/* Régua de Timecode Superior */}
+                <div className="relative h-6 shrink-0 border-b border-white/[0.08]">
+                  {rulerMarks.map((mark) => (
+                    <div
+                      key={mark.second}
+                      className="absolute top-0 bottom-0 flex flex-col justify-between"
+                      style={{ left: `${mark.pct}%` }}
+                    >
+                      <span className="-ml-3 font-mono text-[10px] text-slate-400">
+                        {mark.label}
+                      </span>
+                      <span className="h-1.5 w-px bg-slate-500/70" />
+                    </div>
+                  ))}
+                </div>
 
+                {/* FAIXA 1: VÍDEO (Cenários em Teal com Miniatura e Destaque no Momento Atual) */}
+                <div className="relative flex-1 my-1">
+                  {effectiveBackgroundTimeline.map((seg, idx) => {
+                    const leftPct =
+                      (seg.frameStart / Math.max(1, effectiveTotalFrames)) *
+                      100;
+                    const widthPct =
+                      ((seg.frameEnd - seg.frameStart + 1) /
+                        Math.max(1, effectiveTotalFrames)) *
+                      100;
+                    const thumbSrc = resolveAssetSrc(
+                      seg.imageSrc || 'background.jpg'
+                    );
+                    const isActiveScene = idx === activeSceneIndexAtPlayhead;
                     return (
                       <div
-                        key={index}
-                        className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-lg transition hover:border-slate-700/80"
+                        key={idx}
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${Math.max(1, widthPct - 0.4)}%`,
+                        }}
+                        className={`absolute inset-y-0 overflow-hidden rounded-lg border flex items-center gap-2 pr-2 shadow-sm transition ${
+                          isActiveScene
+                            ? 'border-teal-200 bg-[#2f7d75] ring-1 ring-teal-300/40 brightness-110'
+                            : 'border-teal-300/40 bg-[#266760] hover:brightness-110'
+                        }`}
                       >
-                        {/* Cabeçalho do Cartão da Cena */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3.5">
-                          <div className="flex items-center gap-2.5">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 font-mono text-xs font-black text-slate-950">
-                              #{index + 1}
-                            </span>
-                            <div>
-                              <h4 className="text-sm font-bold text-white">
-                                Cena {index + 1}
-                              </h4>
-                              <p className="text-[11px] text-slate-400">
-                                {SPEAKER_LABELS[scene.speaker]}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {scene.selectedImage ? (
-                              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-bold text-emerald-300">
-                                ✓ Imagem Selecionada
-                              </span>
-                            ) : (
-                              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300">
-                                Aguardando B-Roll
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Corpo do Cartão da Cena */}
-                        <div className="mt-4 space-y-4">
-                          {/* 1. Texto da Fala */}
-                          <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                              Texto da Fala (Narrado)
-                            </label>
-                            <textarea
-                              rows={2}
-                              value={scene.text}
-                              onChange={(e) =>
-                                handleSceneFieldChange(
-                                  index,
-                                  'text',
-                                  e.target.value
-                                )
-                              }
-                              className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-sm text-white focus:border-amber-500 focus:outline-none"
-                            />
-                          </div>
-
-                          {/* 2. Grid: Casting de Voz (Speaker) + Expressão do Avatar + SFX Injection */}
-                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            {/* Casting de Voz (Speaker) */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                Casting de Voz (Speaker)
-                              </label>
-                              <select
-                                value={scene.speaker}
-                                onChange={(e) =>
-                                  handleSceneFieldChange(
-                                    index,
-                                    'speaker',
-                                    e.target.value as SpeakerType
-                                  )
-                                }
-                                className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
-                              >
-                                <option value="protagonist">
-                                  protagonist (Viajante)
-                                </option>
-                                <option value="character">
-                                  character (Histórico)
-                                </option>
-                                <option value="narrator">
-                                  narrator (Documentário)
-                                </option>
-                              </select>
-                            </div>
-
-                            {/* Expressão do Avatar */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                Expressão do Avatar
-                              </label>
-                              <div className="mt-1.5 flex items-center gap-2">
-                                <img
-                                  src={spriteUrl}
-                                  alt="Avatar"
-                                  className="h-8 w-8 shrink-0 rounded-lg border border-slate-800 bg-slate-950 object-contain p-0.5"
-                                />
-                                <select
-                                  value={scene.avatarSprite}
-                                  onChange={(e) =>
-                                    handleSceneFieldChange(
-                                      index,
-                                      'avatarSprite',
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full rounded-xl border border-slate-800 bg-slate-950 px-2.5 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
-                                >
-                                  {AVAILABLE_AVATAR_SPRITES.map((sprite) => (
-                                    <option key={sprite} value={sprite}>
-                                      {sprite
-                                        .replace('avatars/avatar_', '')
-                                        .replace('.png', '')}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* SFX Injection */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                Efeito Sonoro Sugerido (SFX)
-                              </label>
-                              <input
-                                type="text"
-                                value={scene.sfx_suggestion || ''}
-                                onChange={(e) =>
-                                  handleSceneFieldChange(
-                                    index,
-                                    'sfx_suggestion',
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Ex: Som de explosão"
-                                className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:border-amber-500 focus:outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          {/* 3. Direção de Arte (imagePrompt em Inglês) */}
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
-                                Direção de Arte (Image Prompt em Inglês)
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => handleGenerateSceneImages(index)}
-                                disabled={
-                                  isGeneratingImg || !scene.imagePrompt.trim()
-                                }
-                                className="flex items-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500 hover:text-slate-950 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {isGeneratingImg ? (
-                                  <>
-                                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                    <span>A gerar 2 opções...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span>🎨</span>
-                                    <span>
-                                      {scene.candidateImages?.length > 0
-                                        ? 'Regerar Imagens (2x)'
-                                        : 'Gerar Imagens'}
-                                    </span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            <textarea
-                              rows={3}
-                              value={scene.imagePrompt}
-                              onChange={(e) =>
-                                handleSceneFieldChange(
-                                  index,
-                                  'imagePrompt',
-                                  e.target.value
-                                )
-                              }
-                              className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 font-mono text-xs text-slate-300 focus:border-amber-500 focus:outline-none"
-                            />
-                          </div>
-
-                          {/* 4. Seletor de Miniaturas B-Roll (2 variações geradas) */}
-                          {scene.candidateImages &&
-                            scene.candidateImages.length > 0 && (
-                              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
-                                <p className="mb-2.5 text-xs font-semibold text-slate-300">
-                                  Escolha a imagem oficial da Cena #{index + 1}{' '}
-                                  (B-Roll):
-                                </p>
-                                <div className="grid grid-cols-2 gap-4 sm:max-w-md">
-                                  {scene.candidateImages.map(
-                                    (imgUrl, optIdx) => {
-                                      const isSelected =
-                                        scene.selectedImage === imgUrl;
-                                      return (
-                                        <div
-                                          key={`${optIdx}-${imgUrl}`}
-                                          onClick={() =>
-                                            handleSelectBrollImage(
-                                              index,
-                                              imgUrl
-                                            )
-                                          }
-                                          className={`group relative cursor-pointer overflow-hidden rounded-xl border-2 transition-all ${
-                                            isSelected
-                                              ? 'border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
-                                              : 'border-slate-800 opacity-75 hover:border-slate-600 hover:opacity-100'
-                                          }`}
-                                        >
-                                          <div className="aspect-[9/16] max-h-52 w-full bg-black">
-                                            <img
-                                              src={resolveAssetSrc(imgUrl)}
-                                              alt={`Cena ${index + 1} - Opção ${optIdx + 1}`}
-                                              className="h-full w-full object-cover"
-                                            />
-                                          </div>
-                                          <div
-                                            className={`flex items-center justify-between px-2.5 py-1.5 text-[11px] font-bold ${
-                                              isSelected
-                                                ? 'bg-amber-500 text-slate-950'
-                                                : 'bg-slate-900 text-slate-300'
-                                            }`}
-                                          >
-                                            <span>Opção {optIdx + 1}</span>
-                                            <span>
-                                              {isSelected
-                                                ? '✓ Oficial'
-                                                : 'Selecionar'}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    }
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                        </div>
+                        <img
+                          src={thumbSrc}
+                          alt={`Cena ${idx + 1}`}
+                          draggable={false}
+                          className="h-full w-9 shrink-0 object-cover border-r border-teal-300/30"
+                        />
+                        <span className="truncate text-xs font-semibold text-white drop-shadow-xs">
+                          Cena #{idx + 1}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* ========================================================
-                    AJUSTE FINO DE LEGENDAS & RENDERIZAÇÃO MP4 (Visível após Montar Vídeo)
-                   ======================================================== */}
-                {isAssembled && (
-                  <>
-                    <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-sm font-bold text-white">
-                            Legendas Sincronizadas (TikTok Style)
-                          </h3>
-                          <p className="text-xs text-slate-400">
-                            Ajuste fino opcional de frames e blocos de texto
-                          </p>
-                        </div>
-                        <span className="rounded-md bg-slate-800 px-2 py-1 font-mono text-[11px] text-slate-300">
-                          {subtitles.length} blocos
+                {/* FAIXA 2: ÁUDIO (Narração em Azul com Ondas Sonoras) */}
+                <div className="relative flex-1 my-1">
+                  <div className="absolute inset-0 overflow-hidden rounded-lg border border-sky-400/35 bg-[#24537a] flex items-center px-2">
+                    {/* Waveform Bars Visual */}
+                    <div className="flex w-full items-center justify-between gap-[2px] h-full py-1.5 opacity-85">
+                      {WAVEFORM_BARS.map((heightPct, idx) => (
+                        <span
+                          key={idx}
+                          className="flex-1 rounded-full bg-sky-200/80"
+                          style={{ height: `${heightPct}%` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* FAIXA 3: LEGENDAS (Container Escuro com Pílulas Cinzas e Destaque no Momento Atual) */}
+                <div className="relative flex-1 my-1 rounded-lg bg-[#232329] border border-white/[0.05] overflow-hidden">
+                  {effectiveSubtitles.map((sub, idx) => {
+                    const leftPct =
+                      (sub.frameStart / Math.max(1, effectiveTotalFrames)) *
+                      100;
+                    const widthPct =
+                      ((sub.frameEnd - sub.frameStart + 1) /
+                        Math.max(1, effectiveTotalFrames)) *
+                      100;
+                    const isActiveSubtitle =
+                      idx === activeSubtitleIndexAtPlayhead;
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          left: `${leftPct}%`,
+                          width: `${Math.max(1.2, widthPct - 0.5)}%`,
+                        }}
+                        title={sub.text}
+                        className={`absolute inset-y-1 overflow-hidden rounded-md border px-2 flex items-center transition ${
+                          isActiveSubtitle
+                            ? 'border-amber-400/70 bg-[#5b5b6b] text-white shadow-sm'
+                            : 'border-white/10 bg-[#484854] text-slate-100 hover:bg-[#565664]'
+                        }`}
+                      >
+                        <span className="truncate text-[10px] font-medium">
+                          {sub.text}
                         </span>
                       </div>
-
-                      <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
-                        {subtitles.map((sub, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center gap-2 rounded-xl border border-slate-800/80 bg-slate-950 p-2"
-                          >
-                            <div className="flex items-center gap-1 font-mono text-xs">
-                              <input
-                                type="number"
-                                value={sub.frameStart}
-                                onChange={(e) =>
-                                  handleSubtitleChange(
-                                    index,
-                                    'frameStart',
-                                    Number(e.target.value)
-                                  )
-                                }
-                                className="w-16 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-center text-slate-200 focus:border-amber-500 focus:outline-none"
-                              />
-                              <span className="text-slate-500">–</span>
-                              <input
-                                type="number"
-                                value={sub.frameEnd}
-                                onChange={(e) =>
-                                  handleSubtitleChange(
-                                    index,
-                                    'frameEnd',
-                                    Number(e.target.value)
-                                  )
-                                }
-                                className="w-16 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-center text-slate-200 focus:border-amber-500 focus:outline-none"
-                              />
-                            </div>
-
-                            <input
-                              type="text"
-                              value={sub.text}
-                              onChange={(e) =>
-                                handleSubtitleChange(
-                                  index,
-                                  'text',
-                                  e.target.value
-                                )
-                              }
-                              className="w-full rounded-md border border-slate-800 bg-slate-900 px-3 py-1 text-xs text-white focus:border-amber-500 focus:outline-none"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Barra Fixa Inferior para Renderizar MP4 no Servidor */}
-                    <div className="sticky bottom-4 z-20 flex items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/95 p-4 shadow-2xl backdrop-blur">
-                      <div>
-                        <p className="text-xs font-bold text-white">
-                          Vídeo Montado e Pronto para Exportação!
-                        </p>
-                        <p className="text-[11px] text-slate-400">
-                          Renderiza o ficheiro .mp4 final no servidor usando os assets aprovados (sem custo extra de IA).
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleRenderMp4OnServer}
-                        disabled={isRerendering || isPending}
-                        className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isRerendering || isPending ? (
-                          <span>A renderizar MP4...</span>
-                        ) : (
-                          <>
-                            <span>🚀</span>
-                            <span>Renderizar MP4 no Servidor</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </section>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </footer>
         </div>
-      </main>
+      </div>
+
+      {/* ====================================================================
+          MODAL DE VISUALIZAÇÃO AMPLIADA DO CENÁRIO (B-ROLL 9:16)
+         ==================================================================== */}
+      {previewBrollModal && (
+        <div
+          onClick={() => setPreviewBrollModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#18181c] shadow-2xl"
+          >
+            {/* Topo do Modal */}
+            <div className="flex items-center justify-between border-b border-white/10 bg-[#141418] px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-100">
+                  Cena #{previewBrollModal.sceneIndex + 1}
+                </span>
+                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                  Opção {previewBrollModal.optionIndex + 1}
+                </span>
+                {scenes[previewBrollModal.sceneIndex]?.selectedImage ===
+                  previewBrollModal.imageUrl && (
+                  <span className="rounded-md bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                    ✓ Aprovada
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewBrollModal(null)}
+                title="Fechar visualização (Esc)"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-300 hover:bg-white/15 hover:text-white transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Imagem Vertical 9:16 Ampliada */}
+            <div className="relative flex flex-1 min-h-0 items-center justify-center bg-black p-3">
+              <img
+                src={resolveAssetSrc(previewBrollModal.imageUrl)}
+                alt={`Cena ${previewBrollModal.sceneIndex + 1} - Opção ${previewBrollModal.optionIndex + 1}`}
+                className="max-h-[72vh] w-auto rounded-xl border border-white/10 object-contain shadow-2xl"
+              />
+            </div>
+
+            {/* Rodapé do Modal: Trocar entre Opções da Cena ou Selecionar Cenário */}
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-[#141418] px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                {scenes[previewBrollModal.sceneIndex]?.candidateImages?.map(
+                  (candidateUrl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() =>
+                        setPreviewBrollModal({
+                          sceneIndex: previewBrollModal.sceneIndex,
+                          optionIndex: idx,
+                          imageUrl: candidateUrl,
+                        })
+                      }
+                      className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
+                        previewBrollModal.optionIndex === idx
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'border border-white/10 bg-[#202026] text-slate-300 hover:bg-[#2a2a32]'
+                      }`}
+                    >
+                      Opção {idx + 1}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleSelectBrollImage(
+                    previewBrollModal.sceneIndex,
+                    previewBrollModal.imageUrl
+                  );
+                }}
+                disabled={
+                  scenes[previewBrollModal.sceneIndex]?.selectedImage ===
+                  previewBrollModal.imageUrl
+                }
+                className="rounded-lg bg-emerald-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 shadow-md transition hover:bg-emerald-400 disabled:cursor-default disabled:bg-emerald-500/25 disabled:text-emerald-300"
+              >
+                {scenes[previewBrollModal.sceneIndex]?.selectedImage ===
+                previewBrollModal.imageUrl
+                  ? '✓ Cenário Selecionado'
+                  : 'Selecionar este Cenário'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

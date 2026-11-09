@@ -25,10 +25,17 @@ export const SPEAKER_VOICE_MAP: Record<SpeakerType, string> = {
 
 const FALLBACK_FREE_VOICE_ID = 'IKne3meq5aSn9XLyUdCD'; // Charlie (Premade fallback)
 
+export interface SubtitleWordTiming {
+  word: string;
+  frameStart: number;
+  frameEnd: number;
+}
+
 export interface SubtitleItem {
   frameStart: number;
   frameEnd: number;
   text: string;
+  words?: SubtitleWordTiming[];
 }
 
 export interface AvatarSegment {
@@ -252,10 +259,21 @@ function buildSubtitlesFromWords(
     const frameStart = Math.floor(startSecond * FPS);
     const frameEnd = Math.max(frameStart + 1, Math.ceil(endSecond * FPS));
 
+    const wordTimings: SubtitleWordTiming[] = chunk.map((w) => {
+      const wStart = Math.floor(w.startSecond * FPS);
+      const wEnd = Math.max(wStart + 1, Math.ceil(w.endSecond * FPS));
+      return {
+        word: w.word,
+        frameStart: wStart,
+        frameEnd: wEnd,
+      };
+    });
+
     subtitles.push({
       frameStart,
       frameEnd,
       text: chunk.map((w) => w.word).join(' '),
+      words: wordTimings,
     });
   }
 

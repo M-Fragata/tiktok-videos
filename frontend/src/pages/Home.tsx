@@ -44,7 +44,7 @@ export const Home: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          theme: 'Novo Vídeo — Máquina do Tempo',
+          theme: 'Novo Vídeo — Fragata Shorts',
         }),
       });
 
@@ -73,10 +73,10 @@ export const Home: React.FC = () => {
             </span>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white">
-                Fábrica de Vídeos com IA
+                Fragata Shorts
               </h1>
               <p className="text-xs text-slate-400">
-                Máquina do Tempo • Storyboard 3 Etapas • TikTok 9:16
+                Fábrica de Vídeos com IA • Storyboard 3 Etapas • 9:16
               </p>
             </div>
           </div>

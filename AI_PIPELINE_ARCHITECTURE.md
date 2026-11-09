@@ -1,4 +1,4 @@
-# Arquitetura da Pipeline de IA — Máquina do Tempo TikTok
+# Arquitetura da Pipeline de IA — Fragata Shorts
 
 Este documento especifica a arquitetura técnica e a implementação detalhada dos **3 pilares de Inteligência Artificial** do motor de vídeos automatizados para o TikTok:
 

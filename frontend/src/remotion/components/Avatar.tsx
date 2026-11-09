@@ -103,7 +103,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       >
         <Img
           src={resolvedAvatarSrc}
-          alt="Avatar Máquina do Tempo"
+          alt="Avatar Fragata Shorts"
           style={{
             width: 560,
             height: 560,

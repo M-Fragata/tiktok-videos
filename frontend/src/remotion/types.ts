@@ -23,11 +23,52 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
+export interface SubtitleWordTiming {
+  word: string;
+  frameStart: number;
+  frameEnd: number;
+}
+
 export interface SubtitleItem {
   frameStart: number;
   frameEnd: number;
   text: string;
+  words?: SubtitleWordTiming[];
 }
+
+export type SubtitleAnimationType = 'karaoke' | 'pop' | 'hormozi';
+
+export type SubtitleFontFamily =
+  | 'impact'
+  | 'grotesque'
+  | 'script'
+  | 'montserrat';
+
+export interface SubtitleStyleConfig {
+  animationType: SubtitleAnimationType;
+  fontFamily: SubtitleFontFamily;
+  fontSize: number;
+  primaryColor: string;
+  highlightColor: string;
+  hasShadow: boolean;
+  hasStroke: boolean;
+  hasBackground: boolean;
+  positionX: number;
+  positionY: number;
+}
+
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
+  animationType: 'karaoke',
+  fontFamily: 'impact',
+  fontSize: 64,
+  primaryColor: '#FFFFFF',
+  highlightColor: '#FBBF24',
+  hasShadow: true,
+  hasStroke: true,
+  hasBackground: false,
+  positionX: 50,
+  positionY: 68,
+};
 
 export interface AvatarSegment {
   startSecond: number;
@@ -74,6 +115,7 @@ export type TimeMachineVideoProps = {
   backgroundTimeline?: BackgroundSegment[];
   audioSrc?: string;
   subtitles?: SubtitleItem[];
+  subtitleStyle?: SubtitleStyleConfig;
   avatarTimeline?: AvatarSegment[];
   storyboard?: StoryboardState;
 };
@@ -163,7 +205,111 @@ export const defaultTimeMachineProps: TimeMachineVideoProps = {
   backgroundTimeline: DEFAULT_BACKGROUND_TIMELINE,
   audioSrc: 'audio.mp3',
   subtitles: DEFAULT_SUBTITLES,
+  subtitleStyle: DEFAULT_SUBTITLE_STYLE,
   avatarTimeline: DEFAULT_AVATAR_TIMELINE,
+};
+
+/**
+ * Garante que um SubtitleItem possua o array `words` com os intervalos de frame
+ * de cada palavra (usando os timestamps reais da ElevenLabs se presentes, ou
+ * dividindo proporcionalmente o intervalo do bloco entre as palavras no modo DRAFT/Preview).
+ */
+export const ensureSubtitleWordTimings = (
+  item: SubtitleItem
+): SubtitleWordTiming[] => {
+  const rawWords = item.text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (rawWords.length === 0) {
+    return [];
+  }
+
+  if (item.words && item.words.length === rawWords.length) {
+    return item.words;
+  }
+
+  const totalFrames = Math.max(1, item.frameEnd - item.frameStart + 1);
+  const framesPerWord = totalFrames / rawWords.length;
+
+  return rawWords.map((word, idx) => {
+    const wStart = Math.round(item.frameStart + idx * framesPerWord);
+    const wEnd =
+      idx === rawWords.length - 1
+        ? item.frameEnd
+        : Math.max(
+            wStart,
+            Math.round(item.frameStart + (idx + 1) * framesPerWord) - 1
+          );
+    return {
+      word,
+      frameStart: wStart,
+      frameEnd: wEnd,
+    };
+  });
+};
+
+/**
+ * Divide uma fala longa (ex: texto bruto de uma cena no modo DRAFT antes de gravar áudio)
+ * em blocos dinâmicos curtos de 3 a 4 palavras distribuídos ao longo de [frameStart, frameEnd],
+ * já com os tempos simulados por palavra para o efeito Karaokê / Pop / Hormozi.
+ */
+export const splitSceneTextIntoSubtitleChunks = (
+  text: string,
+  frameStart: number,
+  frameEnd: number,
+  wordsPerChunk = 4
+): SubtitleItem[] => {
+  const cleanWords = text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (cleanWords.length === 0) {
+    return [];
+  }
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < cleanWords.length; i += wordsPerChunk) {
+    chunks.push(cleanWords.slice(i, i + wordsPerChunk));
+  }
+
+  const totalFrames = Math.max(chunks.length, frameEnd - frameStart + 1);
+  const totalWords = cleanWords.length;
+
+  const result: SubtitleItem[] = [];
+  let consumedWords = 0;
+
+  for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+    const chunkWords = chunks[cIdx];
+    const startRatio = consumedWords / totalWords;
+    const endRatio = (consumedWords + chunkWords.length) / totalWords;
+
+    const cStart =
+      cIdx === 0
+        ? frameStart
+        : Math.min(frameEnd, Math.round(frameStart + startRatio * totalFrames));
+    const cEnd =
+      cIdx === chunks.length - 1
+        ? frameEnd
+        : Math.max(
+            cStart,
+            Math.round(frameStart + endRatio * totalFrames) - 1
+          );
+
+    const chunkItem: SubtitleItem = {
+      frameStart: cStart,
+      frameEnd: cEnd,
+      text: chunkWords.join(' '),
+    };
+    chunkItem.words = ensureSubtitleWordTimings(chunkItem);
+    result.push(chunkItem);
+
+    consumedWords += chunkWords.length;
+  }
+
+  return result;
 };
 
 /**

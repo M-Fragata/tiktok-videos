@@ -1,8 +1,8 @@
 {
-  "name": "tiktok-time-machine-poc",
+  "name": "fragata-shorts",
   "private": true,
   "version": "1.0.0",
-  "description": "POC de Motor de Vídeos Automatizados para TikTok (História / Máquina do Tempo) com Remotion, Vite, Express e Prisma",
+  "description": "Fragata Shorts — Motor de Vídeos Automatizados e Curtos (História / Máquina do Tempo) com Remotion, Vite, Express e Prisma",
   "scripts": {
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:studio": "npm --prefix frontend run studio",

@@ -11,3 +11,27 @@
     0 2px 4px rgba(0, 0, 0, 1);
 }
 
+/* Scrollbar customizada escura estilo NLE (CapCut / Filmora) */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #2c2c34 #16161a;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #16161a;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #2c2c34;
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #3f3f4a;
+}
+

@@ -1,15 +1,38 @@
 import { z } from 'zod';
 
+export const subtitleWordTimingSchema = z.object({
+  word: z.string().min(1),
+  frameStart: z.number().int().min(0),
+  frameEnd: z.number().int().min(1),
+});
+
 export const subtitleItemSchema = z
   .object({
     frameStart: z.number().int().min(0),
     frameEnd: z.number().int().min(1),
     text: z.string().min(1, 'O texto da legenda não pode estar vazio'),
+    words: z.array(subtitleWordTimingSchema).optional(),
   })
   .refine((data) => data.frameEnd >= data.frameStart, {
     message: 'frameEnd deve ser maior ou igual a frameStart',
     path: ['frameEnd'],
   });
+
+export const subtitleStyleSchema = z.object({
+  animationType: z.enum(['karaoke', 'pop', 'hormozi']).optional().default('karaoke'),
+  fontFamily: z
+    .enum(['impact', 'grotesque', 'script', 'montserrat'])
+    .optional()
+    .default('impact'),
+  fontSize: z.number().min(28).max(120).optional().default(64),
+  primaryColor: z.string().optional().default('#FFFFFF'),
+  highlightColor: z.string().optional().default('#FBBF24'),
+  hasShadow: z.boolean().optional().default(true),
+  hasStroke: z.boolean().optional().default(true),
+  hasBackground: z.boolean().optional().default(false),
+  positionX: z.number().min(5).max(95).optional().default(50),
+  positionY: z.number().min(5).max(95).optional().default(68),
+});
 
 export const avatarSegmentSchema = z
   .object({
@@ -77,7 +100,7 @@ export const createDraftVideoSchema = z.object({
     .string()
     .max(180)
     .optional()
-    .default('Novo Vídeo — Máquina do Tempo'),
+    .default('Novo Vídeo — Fragata Shorts'),
 });
 
 /**
@@ -134,6 +157,7 @@ export const renderVideoSchema = z.object({
   backgroundTimeline: z.array(backgroundSegmentSchema).optional(),
   audioSrc: z.string().optional().default('audio.mp3'),
   subtitles: z.array(subtitleItemSchema).optional(),
+  subtitleStyle: subtitleStyleSchema.optional(),
   avatarTimeline: z.array(avatarSegmentSchema).optional(),
   storyboard: storyboardStateSchema.optional(),
 });

@@ -73,7 +73,7 @@ export async function generateTimeMachineScript(
 
   const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
 
-  const systemInstruction = `És um roteirista e diretor de arte para vídeos virais do TikTok no nicho "Máquina do Tempo / História".
+  const systemInstruction = `És um roteirista e diretor de arte para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
 O formato é um Vlog de Viagem no Tempo caótico, onde um viajante moderno (um boneco de palito) interage com o passado.
 
 Duração Selecionada (${rule.label}):

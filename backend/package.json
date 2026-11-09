@@ -1,5 +1,5 @@
 {
-  "name": "tiktok-videos-backend",
+  "name": "fragata-shorts-backend",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -14,12 +14,12 @@
     "@fal-ai/client": "^1.10.1",
     "@google/genai": "^2.32.0",
     "@prisma/client": "^6.2.1",
-    "@remotion/bundler": "4.0.242",
-    "@remotion/renderer": "4.0.242",
+    "@remotion/bundler": "4.0.542",
+    "@remotion/renderer": "4.0.542",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "fluent-ffmpeg": "^2.1.3",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -27,5 +27,8 @@
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^22.10.5",
     "prisma": "^6.2.1"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }

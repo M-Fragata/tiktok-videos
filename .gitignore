@@ -9,5 +9,7 @@ backend/storage/*
 !backend/storage/teste/**
 *.log
 *.tsbuildinfo
+*.db
+*.db-journal
 .DS_Store
 

@@ -46,7 +46,7 @@ export async function createDraftVideoController(
   const parsedBody = createDraftVideoSchema.safeParse(req.body || {});
   const theme = parsedBody.success
     ? parsedBody.data.theme
-    : 'Novo Vídeo — Máquina do Tempo';
+    : 'Novo Vídeo — Fragata Shorts';
 
   try {
     const video = await prisma.video.create({
