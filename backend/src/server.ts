@@ -6,6 +6,12 @@ import {
   STORAGE_OUTPUT_DIR,
 } from './services/remotion.service.ts';
 
+// Previne falhas de SSL (SELF_SIGNED_CERT_IN_CHAIN) causadas por inspeção de tráfego HTTPS
+// de antivírus locais (Kaspersky, Avast, ESET), firewalls corporativos ou proxies de rede local
+if (process.env.NODE_ENV !== 'production' && !process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3333;
 
