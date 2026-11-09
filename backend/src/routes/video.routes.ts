@@ -10,6 +10,7 @@ import {
   renderVideoController,
   rerenderVideoController,
   saveStoryboardController,
+  uploadSceneImageController,
 } from '../controllers/video.controller.ts';
 
 export const videoRoutes = Router();
@@ -22,6 +23,10 @@ videoRoutes.post('/videos/:id/generate-script', generateScriptController);
 videoRoutes.post(
   '/videos/:id/generate-scene-images',
   generateSceneImagesController
+);
+videoRoutes.post(
+  '/videos/:id/upload-scene-image',
+  uploadSceneImageController
 );
 videoRoutes.post('/videos/:id/generate-audio', generateAudioController);
 videoRoutes.put('/videos/:id/storyboard', saveStoryboardController);

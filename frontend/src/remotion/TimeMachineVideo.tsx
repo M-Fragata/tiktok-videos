@@ -20,6 +20,7 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
   subtitles = DEFAULT_SUBTITLES,
   subtitleStyle = DEFAULT_SUBTITLE_STYLE,
   avatarTimeline = DEFAULT_AVATAR_TIMELINE,
+  showAvatarOverlay = false,
 }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: '#000000' }}>
@@ -33,8 +34,8 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
       {/* Camada 2: Ficheiro de Áudio de Narração / Fundo */}
       <AudioTrack src={audioSrc} />
 
-      {/* Camada 3: Personagem Principal na parte inferior central sincronizado por cena */}
-      <Avatar timeline={avatarTimeline} />
+      {/* Camada 3: Overlay opcional do Avatar 2D (desativado por padrão pois o personagem já está integrado na cena Mixed Media) */}
+      {showAvatarOverlay && <Avatar timeline={avatarTimeline} />}
 
       {/* Camada 4: Legendas dinâmicas customizáveis (Karaokê, Pop TikTok ou Hormozi) */}
       <Subtitles subtitles={subtitles} subtitleStyle={subtitleStyle} />

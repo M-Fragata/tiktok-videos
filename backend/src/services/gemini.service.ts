@@ -73,25 +73,35 @@ export async function generateTimeMachineScript(
 
   const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
 
-  const systemInstruction = `És um roteirista e diretor de arte para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
-O formato é um Vlog de Viagem no Tempo caótico, onde um viajante moderno (um boneco de palito) interage com o passado.
+  const systemInstruction = `És um roteirista sénior e Diretor de Arte especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
+O formato é uma narrativa histórica dinâmica e imersiva onde personagens em estilo "2D Stickman / Doodle" vivem e interagem fisicamente dentro de mundos históricos 3D cinematográficos e hiper-detalhados.
 
 Duração Selecionada (${rule.label}):
 - Estrutura: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala).
 - LIMITE ESTRITO DE PALAVRAS: A soma de todas as falas ("text") de todas as cenas NÃO DEVE ultrapassar ${rule.maxWords} palavras no total.
 
-Estética Visual Obrigatória (Mídia Mista): Os cenários de fundo devem ser hiper-realistas e cinematográficos. No entanto, QUALQUER personagem histórico que apareça na imagem DEVE ser desenhado como um "stick figure" (boneco de palito de linhas pretas simples), diferenciado apenas por adereços fotorealistas na cabeça (ex: um boneco de palito usando um capacete de centurião romano detalhado, ou um boneco de palito com a peruca de Einstein).
+DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
+Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminologia de modelos de difusão (FLUX / Imagen) para forçar a estética "Mixed Media Illustration" (evitando que a IA gere humanos de carne e osso):
+1. GATILHO DE ESTILO (Style Anchor): Comece SEMPRE o prompt com:
+   "Mixed media 2D/3D illustration, a 2D cartoon stickman character with a smooth round white head, expressive simple black ink facial features, and thin black stick-figure limbs, integrated seamlessly into a realistic 3D cinematic environment."
+2. ANATOMIA E TRAJES DO PERSONAGEM (Character & Attire):
+   - Qualquer personagem na cena (seja o viajante estudioso com óculos redondos e colete ou figuras históricas como soldados, reis, cavaleiros ou camponeses) DEVE ter cabeça redonda branca 2D plana em estilo doodle/comic, olhos e boca expressivos desenhados a traço preto simples e braços/pernas de palito pretos finos.
+   - Sobre o corpo de palito, o personagem veste trajes ou armaduras históricas texturizadas (ex: "wearing a textured medieval knight armor and red cape", "wearing a weathered WWI helmet and trench coat", "wearing round glasses, curly black hair, and an olive explorer vest").
+   - NUNCA descreva pele humana realista; inclua sempre a restrição implícita de estilo ("stylized 2D white doodle head, no realistic human skin or photorealistic faces").
+3. INTERAÇÃO FÍSICA, ILUMINAÇÃO E SOMBRAS 3D (Lighting & Physical Integration):
+   - O personagem 2D não pode parecer um adesivo colado; ele DEVE interagir fisicamente com objetos e cenários 3D realistas (ex: segurando uma lupa que refrata um osso fóssil realista, montado num cavalo 3D em pleno campo de batalha com fumo e fogo, segurando uma espada e escudo, ou examinando um crânio numa mesa de madeira iluminada).
+   - Inclua SEMPRE termos de integração luminosa no final: "integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
 
 Regras de Roteiro:
-1. GANCHO DE URGÊNCIA: A cena 1 começa no meio do caos. O viajante está em apuros imediatos.
-2. DINÂMICA DE VOZES: O roteiro deve alternar entre 3 vozes:
-   - "protagonist": O viajante (fala coloquial, desesperada ou entusiasmada, quebrando a quarta parede).
-   - "character": O personagem histórico de palito interagindo com o viajante.
-   - "narrator": Voz épica de documentário para dar contexto rápido (opcional, usar com moderação).
-3. CLIFFHANGER: O vídeo corta abruptamente no pico da tensão na última cena.
+1. GANCHO DE URGÊNCIA: A cena 1 começa no meio da ação ou de uma descoberta intrigante.
+2. DINÂMICA DE VOZES: O roteiro pode alternar entre 3 vozes:
+   - "protagonist": O viajante/apresentador curioso ou em apuros interagindo diretamente com a cena.
+   - "character": O personagem histórico de palito reagindo ou contracenando na época.
+   - "narrator": Voz épica de documentário para contexto dramático.
+3. CLIFFHANGER / FECHO IMPACTANTE: A última cena termina no ápice visual ou dramático do evento histórico.
 
 Regras de Saída (JSON Estrito):
-O campo "avatarSprite" dita a expressão do nosso protagonista na tela. Deve ser ESTRITAMENTE UMA destas strings:
+O campo "avatarSprite" dita a expressão associada à cena. Deve ser ESTRITAMENTE UMA destas strings:
 ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}
 
 Retorne APENAS um objeto JSON válido neste formato exato:
@@ -99,10 +109,10 @@ Retorne APENAS um objeto JSON válido neste formato exato:
   "scenes": [
     {
       "speaker": "protagonist", 
-      "text": "Eita, o vulcão já está cuspindo fogo! Corre!", 
-      "avatarSprite": "avatars/avatar_panicked.png", 
-      "imagePrompt": "POV, first-person view. Cinematic hyper-realistic background of ancient Pompeii streets. Mount Vesuvius erupting in the background. In the foreground, a simple black-line stick figure character wearing a highly detailed historical roman tunic and helmet, looking directly at the camera in shock. 9:16 vertical.",
-      "sfx_suggestion": "loud volcano explosion rumble"
+      "text": "Olha este crânio antigo... mas espera, o chão está a tremer lá fora!", 
+      "avatarSprite": "avatars/avatar_shocked.png", 
+      "imagePrompt": "Mixed media 2D/3D illustration, a 2D cartoon stickman character with a smooth round white head, expressive simple black ink facial features, round glasses, and thin black stick-figure limbs, integrated seamlessly into a realistic 3D cinematic environment. The stickman is wearing an olive green explorer vest in a dusty candlelit study, holding a realistic brass magnifying glass inspecting an ancient 3D skull on a wooden desk. Warm sunlight streams through a window with floating dust motes. Stylized 2D white doodle head, no realistic human skin, integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the desk, shallow depth of field, 9:16 vertical composition.",
+      "sfx_suggestion": "low ominous rumble and rustling papers"
     }
   ]
 }`;

@@ -10,7 +10,8 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3333;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve os ficheiros .mp4 renderizados em /renders/<id>.mp4
 app.use('/renders', express.static(RENDERS_OUTPUT_DIR));

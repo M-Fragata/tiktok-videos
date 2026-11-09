@@ -93,6 +93,9 @@ export const Studio: React.FC = () => {
   const [generatingImageForScene, setGeneratingImageForScene] = useState<
     Record<number, boolean>
   >({});
+  const [isUploadingManualImage, setIsUploadingManualImage] = useState<
+    Record<number, boolean>
+  >({});
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [audioGenerated, setAudioGenerated] = useState<boolean>(false);
   const [isAssembled, setIsAssembled] = useState<boolean>(false);
@@ -469,6 +472,107 @@ export const Studio: React.FC = () => {
         setBackgroundSrc(imageUrl);
       }
     }
+  };
+
+  const handleManualImageUpload = async (sceneIndex: number, file: File) => {
+    if (!id || !file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg(
+        'Por favor selecione um arquivo de imagem válido (JPG, PNG, WebP).'
+      );
+      return;
+    }
+
+    setIsUploadingManualImage((prev) => ({ ...prev, [sceneIndex]: true }));
+    setErrorMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      try {
+        const res = await fetch(`/api/videos/${id}/upload-scene-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneIndex,
+            imageBase64: base64Data,
+            fileName: file.name,
+          }),
+        });
+
+        const data = await res.json();
+        const finalUrl = data.imageUrl || base64Data;
+
+        setScenes((prev) =>
+          prev.map((scene, idx) =>
+            idx === sceneIndex
+              ? {
+                  ...scene,
+                  candidateImages: [
+                    finalUrl,
+                    ...(scene.candidateImages || []).filter(
+                      (u) => u !== finalUrl
+                    ),
+                  ],
+                  selectedImage: finalUrl,
+                }
+              : scene
+          )
+        );
+
+        if (backgroundTimeline.length > sceneIndex) {
+          setBackgroundTimeline((prev) =>
+            prev.map((seg, idx) =>
+              idx === sceneIndex ? { ...seg, imageSrc: finalUrl } : seg
+            )
+          );
+          if (sceneIndex === 0) {
+            setBackgroundSrc(finalUrl);
+          }
+        }
+
+        if (data.video) {
+          setVideoRecord(data.video);
+        }
+
+        setSuccessMsg(
+          `Imagem manual adicionada com sucesso à Cena #${sceneIndex + 1}!`
+        );
+      } catch (err) {
+        console.warn(
+          'Erro ao enviar imagem ao servidor, aplicando localmente:',
+          err
+        );
+        handleSelectBrollImage(sceneIndex, base64Data);
+        setScenes((prev) =>
+          prev.map((scene, idx) =>
+            idx === sceneIndex
+              ? {
+                  ...scene,
+                  candidateImages: [
+                    base64Data,
+                    ...(scene.candidateImages || []).filter(
+                      (u) => u !== base64Data
+                    ),
+                  ],
+                  selectedImage: base64Data,
+                }
+              : scene
+          )
+        );
+        setSuccessMsg(`Imagem aplicada à Cena #${sceneIndex + 1}!`);
+      } finally {
+        setIsUploadingManualImage((prev) => ({ ...prev, [sceneIndex]: false }));
+      }
+    };
+
+    reader.onerror = () => {
+      setErrorMsg('Falha ao ler o arquivo de imagem.');
+      setIsUploadingManualImage((prev) => ({ ...prev, [sceneIndex]: false }));
+    };
+
+    reader.readAsDataURL(file);
   };
 
   // ========================================================
@@ -1659,34 +1763,74 @@ export const Studio: React.FC = () => {
                                     </div>
                                   )}
 
-                                {/* Botão Integrado de Gerar / Regerar Imagens */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleGenerateSceneImages(index)
-                                  }
-                                  disabled={
-                                    isGeneratingImg ||
-                                    !scene.imagePrompt.trim()
-                                  }
-                                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/[0.07] bg-[#282830] py-2.5 px-3 text-xs font-semibold text-slate-200 transition hover:border-white/[0.15] hover:bg-[#32323c] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {isGeneratingImg ? (
-                                    <>
-                                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-                                      <span>Gerando 2 opções...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span>🎨</span>
-                                      <span>
-                                        {scene.candidateImages?.length > 0
-                                          ? 'Gerar Novas Opções'
-                                          : 'Gerar Imagens B-Roll'}
-                                      </span>
-                                    </>
-                                  )}
-                                </button>
+                                {/* Botões de Imagem: Adicionar Manual (Esquerda) e Gerar IA (Direita) */}
+                                <div className="grid grid-cols-2 gap-2.5">
+                                  {/* Botão da Esquerda: Adicionar Imagem Manualmente */}
+                                  <label
+                                    htmlFor={`upload-scene-file-${index}`}
+                                    className={`flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-[#2c2c34] active:scale-[0.99] cursor-pointer ${
+                                      Boolean(isUploadingManualImage[index])
+                                        ? 'cursor-not-allowed opacity-60'
+                                        : ''
+                                    }`}
+                                  >
+                                    {Boolean(isUploadingManualImage[index]) ? (
+                                      <>
+                                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+                                        <span>Enviando...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>📁</span>
+                                        <span>Adicionar Imagem</span>
+                                      </>
+                                    )}
+                                  </label>
+                                  <input
+                                    type="file"
+                                    id={`upload-scene-file-${index}`}
+                                    accept="image/*"
+                                    disabled={Boolean(
+                                      isUploadingManualImage[index]
+                                    )}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        void handleManualImageUpload(
+                                          index,
+                                          file
+                                        );
+                                      }
+                                      e.target.value = '';
+                                    }}
+                                  />
+
+                                  {/* Botão da Direita: Gerar IA */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleGenerateSceneImages(index)
+                                    }
+                                    disabled={
+                                      isGeneratingImg ||
+                                      !scene.imagePrompt.trim()
+                                    }
+                                    className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 py-2.5 px-3 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 hover:border-amber-500/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {isGeneratingImg ? (
+                                      <>
+                                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+                                        <span>Gerando...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>✨</span>
+                                        <span>Gerar IA</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )}

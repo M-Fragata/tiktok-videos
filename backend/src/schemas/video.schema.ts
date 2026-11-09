@@ -159,7 +159,14 @@ export const renderVideoSchema = z.object({
   subtitles: z.array(subtitleItemSchema).optional(),
   subtitleStyle: subtitleStyleSchema.optional(),
   avatarTimeline: z.array(avatarSegmentSchema).optional(),
+  showAvatarOverlay: z.boolean().optional().default(false),
   storyboard: storyboardStateSchema.optional(),
+});
+
+export const uploadSceneImageSchema = z.object({
+  sceneIndex: z.number().int().min(0),
+  imageBase64: z.string().min(10, 'Imagem base64 inválida'),
+  fileName: z.string().optional(),
 });
 
 export type GenerateVideoInput = z.infer<typeof generateVideoSchema>;

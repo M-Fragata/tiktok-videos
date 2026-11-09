@@ -117,6 +117,7 @@ export type TimeMachineVideoProps = {
   subtitles?: SubtitleItem[];
   subtitleStyle?: SubtitleStyleConfig;
   avatarTimeline?: AvatarSegment[];
+  showAvatarOverlay?: boolean;
   storyboard?: StoryboardState;
 };
 
@@ -317,7 +318,12 @@ export const splitSceneTextIntoSubtitleChunks = (
  * retorna diretamente; caso contrário, utiliza staticFile() do Remotion apontando para frontend/public/.
  */
 export const resolveAssetSrc = (src: string): string => {
-  if (/^https?:\/\//i.test(src) || src.startsWith('/storage/')) {
+  if (
+    /^https?:\/\//i.test(src) ||
+    src.startsWith('/storage/') ||
+    src.startsWith('data:') ||
+    src.startsWith('blob:')
+  ) {
     return src;
   }
   const normalizedPath = src.replace(/^\/+/, '');

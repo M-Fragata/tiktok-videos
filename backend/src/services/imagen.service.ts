@@ -8,6 +8,9 @@ const MOCK_STORAGE_DIR = path.resolve(
   '../../storage/teste'
 );
 
+const MIXED_MEDIA_STYLE_SUFFIX =
+  'Mixed media 2D/3D illustration, 2D white round-headed stickman cartoon character with simple black ink facial features and thin black stick-figure limbs integrated seamlessly into a realistic 3D cinematic historical environment, casting realistic 3D shadows, warm volumetric lighting, no photorealistic human faces, no flesh skin, vertical 9:16 aspect ratio, no text, no captions, no watermarks.';
+
 /**
  * Gera uma imagem usando Pollinations.ai (FLUX) de forma 100% gratuita.
  * Não exige cartão de crédito nem configuração obrigatória de API key.
@@ -20,7 +23,7 @@ async function generateImageWithPollinations(
   apiKey?: string
 ): Promise<Buffer | null> {
   const cleanPrompt = encodeURIComponent(
-    `${prompt}. Vertical 9:16 aspect ratio, cinematic historical setting, ultra-detailed background photography, 8k, authentic lighting, no text, no captions, no watermarks.`
+    `${prompt}. ${MIXED_MEDIA_STYLE_SUFFIX}`
   );
   const url = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=${width}&height=${height}&model=flux&nologo=true&seed=${seed}`;
 
@@ -90,7 +93,7 @@ export async function generateSceneBrollImages(
 
         const result: any = await fal.subscribe(endpoint, {
           input: {
-            prompt: `${imagePrompt}. Vertical 9:16 aspect ratio, cinematic historical setting, ultra-detailed background photography, authentic lighting, no text, no captions, no watermarks.`,
+            prompt: `${imagePrompt}. ${MIXED_MEDIA_STYLE_SUFFIX}`,
             image_size: 'portrait_16_9',
             num_images: 2,
             enable_safety_checker: true,

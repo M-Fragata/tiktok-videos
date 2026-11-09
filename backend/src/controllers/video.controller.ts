@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.ts';
@@ -8,6 +9,7 @@ import {
   generateScriptSchema,
   generateVideoSchema,
   renderVideoSchema,
+  uploadSceneImageSchema,
   type RenderVideoInput,
 } from '../schemas/video.schema.ts';
 import {
@@ -703,5 +705,122 @@ export async function listVideosController(
   } catch (error) {
     console.error('[Prisma] Erro ao listar vídeos:', error);
     res.status(500).json({ error: 'Erro interno ao listar os vídeos.' });
+  }
+}
+
+/**
+ * POST /api/videos/:id/upload-scene-image
+ * Permite adicionar manualmente uma imagem a uma cena do Storyboard.
+ */
+export async function uploadSceneImageController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = uploadSceneImageSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para envio de imagem manual',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { sceneIndex, imageBase64, fileName } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+    fs.mkdirSync(storageVideoDir, { recursive: true });
+
+    // Extrai extensão ou padrão png
+    let ext = 'png';
+    const matchExt = fileName?.match(/\.(jpe?g|png|webp|avif)$/i);
+    if (matchExt) {
+      ext = matchExt[1].toLowerCase().replace('jpeg', 'jpg');
+    }
+
+    // Remove prefixo data:image/xxx;base64, se presente
+    const base64Data = imageBase64.replace(/^data:image\/[a-z0-9-+.]+;base64,/i, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const outputFileName = `manual_scene_${sceneIndex}_${Date.now()}.${ext}`;
+    const outputFilePath = path.join(storageVideoDir, outputFileName);
+    fs.writeFileSync(outputFilePath, buffer);
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const cacheBust = Date.now();
+    const publicImageUrl = `${publicBaseUrl}/storage/${id}/${outputFileName}?v=${cacheBust}`;
+
+    // Atualiza o remotionProps com a nova imagem na lista de candidatos e selecionada
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short' as const,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const baseScenes = currentStoryboard.scenes || [];
+    const updatedScenes = baseScenes.map((scene, idx) => {
+      if (idx !== sceneIndex) return scene;
+      const candidates = scene.candidateImages || [];
+      return {
+        ...scene,
+        candidateImages: [publicImageUrl, ...candidates.filter((u) => u !== publicImageUrl)],
+        selectedImage: publicImageUrl,
+      };
+    });
+
+    const updatedBackgroundTimeline = (currentProps.backgroundTimeline || []).map(
+      (seg, idx) => {
+        if (idx !== sceneIndex) return seg;
+        return {
+          ...seg,
+          imageSrc: publicImageUrl,
+        };
+      }
+    );
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      theme: existingVideo.theme,
+      backgroundSrc:
+        sceneIndex === 0 ? publicImageUrl : currentProps.backgroundSrc || publicImageUrl,
+      backgroundTimeline: updatedBackgroundTimeline,
+      storyboard: {
+        ...currentStoryboard,
+        scenes: updatedScenes,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: `Imagem manual adicionada com sucesso à cena #${sceneIndex + 1}.`,
+      sceneIndex,
+      imageUrl: publicImageUrl,
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Upload] Erro ao salvar imagem manual da cena:', error);
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Erro ao salvar a imagem enviada manualmente.',
+    });
   }
 }
