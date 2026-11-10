@@ -2407,22 +2407,6 @@ export const Studio: React.FC = () => {
                         Alterações aplicadas em tempo real no vídeo
                       </p>
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleAssembleVideo();
-                        }}
-                        disabled={!hasScript}
-                        className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 shadow-sm hover:bg-amber-400 transition disabled:opacity-40"
-                      >
-                        Salvar Estilo
-                      </button>
-                      <span className="text-xs text-slate-400 transition-transform">
-                        {isSubtitleStyleCollapsed ? '⌄' : '⌃'}
-                      </span>
-                    </div>
                   </div>
 
                   {!isSubtitleStyleCollapsed && (
@@ -2779,6 +2763,20 @@ export const Studio: React.FC = () => {
                           </div>
                         </div>
                       </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleAssembleVideo();
+                          }}
+                          disabled={!hasScript}
+                          className=" rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 shadow-sm hover:bg-amber-400 transition disabled:opacity-40"
+                        >
+                          Salvar Estilo
+                        </button>
+                    </div>
                     </div>
                   )}
                 </div>

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
+import { AvatarStage } from './AvatarStage.tsx';
 import {
   AVAILABLE_AVATAR_SPRITES,
   AvatarAccessory,
-  AvatarAngle,
   AvatarConfig,
   AvatarHairStyle,
   BGM_VIBE_OPTIONS,
@@ -45,29 +45,21 @@ interface IdeationDressingRoomTabProps {
   onApproveFinalScript: () => void;
 }
 
-const AVATAR_ANGLES: Array<{ id: AvatarAngle; label: string; degrees: string }> =
-  [
-    { id: 'front', label: 'Frente', degrees: '0°' },
-    { id: 'right', label: 'Direita', degrees: '90°' },
-    { id: 'back', label: 'Costa', degrees: '180°' },
-    { id: 'left', label: 'Esquerda', degrees: '270°' },
-  ];
-
 const HAIR_STYLE_OPTIONS: Array<{ value: AvatarHairStyle; label: string }> = [
-  { value: 'spiky', label: '⚡ Espetado (Viajante)' },
-  { value: 'bald', label: '🥚 Careca (Clássico)' },
-  { value: 'curly', label: '🌀 Cacheado (Cientista)' },
-  { value: 'mohawk', label: '🎸 Moicano (Rebelde)' },
-  { value: 'pompadour', label: '🕺 Topete (Retrô)' },
+  { value: 'spiky', label: 'Espetado' },
+  { value: 'bald', label: 'Careca' },
+  { value: 'curly', label: 'Cacheado' },
+  { value: 'mohawk', label: 'Moicano' },
+  { value: 'pompadour', label: 'Topete' },
 ];
 
 const ACCESSORY_OPTIONS: Array<{ value: AvatarAccessory; label: string }> = [
-  { value: 'round_glasses', label: '👓 Óculos Redondos' },
-  { value: 'none', label: '✨ Sem Acessório' },
-  { value: 'explorer_hat', label: '🤠 Chapéu Explorador' },
-  { value: 'knight_helmet', label: '⚔️ Elmo Medieval' },
-  { value: 'crown', label: '👑 Coroa Real' },
-  { value: 'bandana', label: '🥷 Bandana Aventureiro' },
+  { value: 'none', label: 'Sem Acessório' },
+  { value: 'round_glasses', label: 'Óculos Redondos' },
+  { value: 'explorer_hat', label: 'Chapéu Explorador' },
+  { value: 'knight_helmet', label: 'Elmo Medieval' },
+  { value: 'crown', label: 'Coroa Real' },
+  { value: 'bandana', label: 'Bandana Aventureiro' },
 ];
 
 const STROKE_SWATCHES = [
@@ -83,494 +75,6 @@ const SPEAKER_SHORT_LABELS: Record<SpeakerType, string> = {
   protagonist: '🧑 Protagonista',
   character: '🎭 Personagem',
   narrator: '🎙️ Narrador',
-};
-
-/**
- * Renderiza o Boneco Stickman 2D em SVG reativo aos 4 ângulos (360º),
- * Cabelo, Cor do Traço e Acessórios sobre o palco 3D.
- */
-const StickmanStagePreview: React.FC<{ config: AvatarConfig }> = ({
-  config,
-}) => {
-  const { hairStyle, strokeColor, accessory, angle } = config;
-  const stroke = strokeColor || '#111827';
-  // Para garantir contraste das linhas do corpo sobre o palco escuro #121214
-  // caso o traço escolhido seja muito escuro, adicionamos um leve halo claro ao redor dos membros
-  const isVeryDarkStroke =
-    stroke.toLowerCase() === '#111827' ||
-    stroke.toLowerCase() === '#000000' ||
-    stroke.toLowerCase() === '#0f172a';
-
-  const faceOffsetX =
-    angle === 'right' ? 9 : angle === 'left' ? -9 : 0;
-
-  return (
-    <svg
-      viewBox="0 0 180 210"
-      className="h-44 w-40 drop-shadow-[0_10px_18px_rgba(0,0,0,0.75)] transition-transform duration-300"
-    >
-      <defs>
-        <radialGradient id="stageSpotlight" cx="50%" cy="35%" r="60%">
-          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.22" />
-          <stop offset="65%" stopColor="#14b8a6" stopOpacity="0.06" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-        </radialGradient>
-        <filter id="stickGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow
-            dx="0"
-            dy="0"
-            stdDeviation="1.8"
-            floodColor={isVeryDarkStroke ? '#f8fafc' : stroke}
-            floodOpacity={isVeryDarkStroke ? '0.65' : '0.45'}
-          />
-        </filter>
-      </defs>
-
-      {/* Halo de Iluminação Volumétrica de Fundo */}
-      <circle cx="90" cy="88" r="68" fill="url(#stageSpotlight)" />
-
-      {/* Grupo Principal do Personagem Stickman */}
-      <g filter="url(#stickGlow)">
-        {/* Pernas de Palito */}
-        {angle === 'right' ? (
-          <>
-            <path
-              d="M 90 138 L 82 178 L 90 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M 90 138 L 100 178 L 109 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        ) : angle === 'left' ? (
-          <>
-            <path
-              d="M 90 138 L 80 178 L 71 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M 90 138 L 98 178 L 90 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        ) : (
-          <>
-            <path
-              d="M 90 138 L 73 178 L 65 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M 90 138 L 107 178 L 115 180"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </>
-        )}
-
-        {/* Tronco + Colete de Viajante */}
-        <line
-          x1="90"
-          y1="88"
-          x2="90"
-          y2="138"
-          stroke={stroke}
-          strokeWidth="4.5"
-          strokeLinecap="round"
-        />
-        <path
-          d={
-            angle === 'right'
-              ? 'M 83 94 L 99 94 L 101 132 L 82 132 Z'
-              : angle === 'left'
-                ? 'M 79 94 L 97 94 L 98 132 L 81 132 Z'
-                : 'M 77 94 L 103 94 L 105 133 L 75 133 Z'
-          }
-          fill="#3f4d36"
-          stroke={stroke}
-          strokeWidth="2.8"
-          strokeLinejoin="round"
-        />
-        {/* Detalhe frontal ou traseiro do colete */}
-        {angle === 'front' && (
-          <line
-            x1="90"
-            y1="94"
-            x2="90"
-            y2="133"
-            stroke={stroke}
-            strokeWidth="2.2"
-          />
-        )}
-        {angle === 'back' && (
-          <path
-            d="M 81 104 L 99 104 M 84 118 L 96 118"
-            stroke={stroke}
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        )}
-
-        {/* Braços de Palito */}
-        {angle === 'right' ? (
-          <path
-            d="M 91 98 Q 112 108 118 96"
-            fill="none"
-            stroke={stroke}
-            strokeWidth="4"
-            strokeLinecap="round"
-          />
-        ) : angle === 'left' ? (
-          <path
-            d="M 89 98 Q 68 108 62 96"
-            fill="none"
-            stroke={stroke}
-            strokeWidth="4"
-            strokeLinecap="round"
-          />
-        ) : (
-          <>
-            <path
-              d="M 78 98 Q 58 110 56 124"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-            <path
-              d="M 102 98 Q 122 106 126 90"
-              fill="none"
-              stroke={stroke}
-              strokeWidth="4"
-              strokeLinecap="round"
-            />
-          </>
-        )}
-
-        {/* Cabeça Redonda Branca 2D (Doodle Head) */}
-        <circle
-          cx="90"
-          cy="60"
-          r="27"
-          fill="#ffffff"
-          stroke={stroke}
-          strokeWidth="3.6"
-        />
-
-        {/* Sombreamento 3D subtil na borda da cabeça */}
-        <path
-          d="M 70 78 A 26 26 0 0 0 112 74"
-          fill="none"
-          stroke="#cbd5e1"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-        />
-
-        {/* Feições do Rosto (Apenas Frente, Direita e Esquerda; Costa mostra nuca limpa) */}
-        {angle !== 'back' && (
-          <g transform={`translate(${faceOffsetX}, 0)`}>
-            {/* Olhos */}
-            {angle === 'front' ? (
-              <>
-                <circle cx="81" cy="58" r="2.8" fill={stroke} />
-                <circle cx="99" cy="58" r="2.8" fill={stroke} />
-                {/* Sobrancelhas expressivas */}
-                <path
-                  d="M 76 50 Q 81 47 85 50"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 95 50 Q 99 47 104 50"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                {/* Boca */}
-                <path
-                  d="M 83 69 Q 90 74 97 69"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                />
-              </>
-            ) : angle === 'right' ? (
-              <>
-                <circle cx="88" cy="58" r="2.6" fill={stroke} />
-                <circle cx="101" cy="58" r="2.8" fill={stroke} />
-                <path
-                  d="M 85 50 Q 90 48 93 50 M 97 50 Q 102 48 105 51"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 90 69 Q 98 73 103 68"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2.3"
-                  strokeLinecap="round"
-                />
-              </>
-            ) : (
-              <>
-                <circle cx="79" cy="58" r="2.8" fill={stroke} />
-                <circle cx="92" cy="58" r="2.6" fill={stroke} />
-                <path
-                  d="M 75 51 Q 78 48 83 50 M 87 50 Q 90 48 95 50"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 77 68 Q 82 73 90 69"
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="2.3"
-                  strokeLinecap="round"
-                />
-              </>
-            )}
-          </g>
-        )}
-
-        {/* Se estiver de Costas, mostra linhas subtis de nuca / costura */}
-        {angle === 'back' && (
-          <path
-            d="M 84 74 Q 90 76 96 74"
-            fill="none"
-            stroke="#94a3b8"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        )}
-
-        {/* ============================================================
-            CABELO CUSTOMIZÁVEL (hairStyle)
-           ============================================================ */}
-        {hairStyle === 'spiky' && (
-          <path
-            d="M 65 48 L 60 34 L 73 39 L 78 24 L 88 35 L 96 22 L 103 36 L 114 27 L 113 42 L 121 40 L 115 51 Q 90 36 65 48 Z"
-            fill={stroke}
-            stroke={stroke}
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-        )}
-
-        {hairStyle === 'curly' && (
-          <g fill={stroke} stroke={stroke} strokeWidth="1.5">
-            <circle cx="68" cy="42" r="8" />
-            <circle cx="77" cy="34" r="9" />
-            <circle cx="90" cy="31" r="10" />
-            <circle cx="103" cy="34" r="9" />
-            <circle cx="112" cy="42" r="8" />
-            {angle === 'back' && (
-              <>
-                <circle cx="76" cy="50" r="9" />
-                <circle cx="90" cy="48" r="10" />
-                <circle cx="104" cy="50" r="9" />
-              </>
-            )}
-          </g>
-        )}
-
-        {hairStyle === 'mohawk' && (
-          <path
-            d={
-              angle === 'right' || angle === 'left'
-                ? 'M 78 36 L 74 16 L 86 24 L 92 12 L 100 24 L 108 16 L 105 38 Z'
-                : 'M 84 36 L 80 14 L 90 22 L 95 12 L 100 36 Z'
-            }
-            fill="#f59e0b"
-            stroke={stroke}
-            strokeWidth="2.2"
-            strokeLinejoin="round"
-          />
-        )}
-
-        {hairStyle === 'pompadour' && (
-          <path
-            d={`M 66 44 C 62 24, ${angle === 'left' ? '72 18' : '112 18'}, 116 36 C 118 43, 108 46, 90 42 Z`}
-            fill={stroke}
-            stroke={stroke}
-            strokeWidth="2"
-          />
-        )}
-
-        {/* ============================================================
-            ACESSÓRIOS CUSTOMIZÁVEIS (accessory)
-           ============================================================ */}
-        {accessory === 'round_glasses' && (
-          <g transform={`translate(${faceOffsetX}, 0)`}>
-            {angle === 'back' ? (
-              /* Elástico/Haste traseira quando visto de costas */
-              <line
-                x1="63"
-                y1="56"
-                x2="108"
-                y2="56"
-                stroke={stroke}
-                strokeWidth="2.5"
-              />
-            ) : (
-              <>
-                <circle
-                  cx="80"
-                  cy="58"
-                  r="7.5"
-                  fill="rgba(56, 189, 248, 0.14)"
-                  stroke={stroke}
-                  strokeWidth="2.4"
-                />
-                <circle
-                  cx="100"
-                  cy="58"
-                  r="7.5"
-                  fill="rgba(56, 189, 248, 0.14)"
-                  stroke={stroke}
-                  strokeWidth="2.4"
-                />
-                <line
-                  x1="87.5"
-                  y1="58"
-                  x2="92.5"
-                  y2="58"
-                  stroke={stroke}
-                  strokeWidth="2.4"
-                />
-              </>
-            )}
-          </g>
-        )}
-
-        {accessory === 'explorer_hat' && (
-          <g>
-            <ellipse
-              cx="90"
-              cy="37"
-              rx="36"
-              ry="7"
-              fill="#a16207"
-              stroke={stroke}
-              strokeWidth="2.4"
-            />
-            <path
-              d="M 68 36 C 70 17, 110 17, 112 36 Z"
-              fill="#ca8a04"
-              stroke={stroke}
-              strokeWidth="2.4"
-            />
-            <path
-              d="M 69 33 L 111 33"
-              stroke="#78350f"
-              strokeWidth="3.2"
-            />
-          </g>
-        )}
-
-        {accessory === 'knight_helmet' && (
-          <g>
-            <path
-              d="M 62 56 C 60 25, 120 25, 118 56 L 114 70 L 66 70 Z"
-              fill="#94a3b8"
-              stroke={stroke}
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-            />
-            {angle !== 'back' && (
-              <g transform={`translate(${faceOffsetX * 0.5}, 0)`}>
-                <rect
-                  x="73"
-                  y="49"
-                  width="34"
-                  height="11"
-                  rx="3"
-                  fill="#1e293b"
-                  stroke={stroke}
-                  strokeWidth="1.8"
-                />
-                <line
-                  x1="82"
-                  y1="54.5"
-                  x2="98"
-                  y2="54.5"
-                  stroke="#38bdf8"
-                  strokeWidth="2"
-                />
-              </g>
-            )}
-            {/* Pluma vermelha no topo do elmo */}
-            <path
-              d="M 90 28 C 96 14, 114 16, 108 29 Z"
-              fill="#ef4444"
-              stroke={stroke}
-              strokeWidth="1.8"
-            />
-          </g>
-        )}
-
-        {accessory === 'crown' && (
-          <polygon
-            points="67,39 71,20 82,31 90,16 98,31 109,20 113,39"
-            fill="#fbbf24"
-            stroke={stroke}
-            strokeWidth="2.3"
-            strokeLinejoin="round"
-          />
-        )}
-
-        {accessory === 'bandana' && (
-          <g>
-            <path
-              d="M 64 44 Q 90 38 116 44 L 117 51 Q 90 46 63 51 Z"
-              fill="#e11d48"
-              stroke={stroke}
-              strokeWidth="2"
-            />
-            {/* Nó da bandana visível na lateral ou nas costas */}
-            {(angle === 'back' || angle === 'left' || angle === 'front') && (
-              <path
-                d="M 115 47 L 127 42 M 115 49 L 125 56"
-                stroke="#e11d48"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-              />
-            )}
-          </g>
-        )}
-      </g>
-    </svg>
-  );
 };
 
 export const IdeationDressingRoomTab: React.FC<
@@ -595,6 +99,7 @@ export const IdeationDressingRoomTab: React.FC<
   onApproveFinalScript,
 }) => {
   // Controlo de abertura dos 4 Accordions de Ideação + 5º Accordion do Roteiro Final
+  const [isAvatarOpen, setIsAvatarOpen] = useState<boolean>(true);
   const [openOptionIds, setOpenOptionIds] = useState<Record<string, boolean>>({
     humor: true,
     action: false,
@@ -605,24 +110,6 @@ export const IdeationDressingRoomTab: React.FC<
   const [draggedFinalIndex, setDraggedFinalIndex] = useState<number | null>(
     null
   );
-
-  // Rotação 360º do Palco do Avatar
-  const currentAngleIndex = Math.max(
-    0,
-    AVATAR_ANGLES.findIndex((a) => a.id === avatarConfig.angle)
-  );
-
-  const handleRotateAvatar = (direction: 'prev' | 'next') => {
-    const total = AVATAR_ANGLES.length;
-    const nextIndex =
-      direction === 'next'
-        ? (currentAngleIndex + 1) % total
-        : (currentAngleIndex - 1 + total) % total;
-    setAvatarConfig((prev) => ({
-      ...prev,
-      angle: AVATAR_ANGLES[nextIndex].id,
-    }));
-  };
 
   const toggleOptionAccordion = (optionId: string) => {
     setOpenOptionIds((prev) => ({
@@ -786,11 +273,16 @@ export const IdeationDressingRoomTab: React.FC<
   return (
     <div className="space-y-5 pb-4">
       {/* ====================================================================
-          MÓDULO 1: O PALCO DO AVATAR (CAMARIM 360º)
+          MÓDULO 1: O PALCO DO AVATAR (CAMARIM 360º RECOLHÍVEL)
          ==================================================================== */}
-      <section className="rounded-2xl border border-[#2c2c32] bg-[#18181c] overflow-hidden shadow-xl">
-        {/* Cabeçalho do Camarim */}
-        <div className="flex items-center justify-between border-b border-[#2c2c32]/70 bg-[#141417] px-4 py-3">
+      <section className="rounded-2xl border border-[#2c2c32] bg-[#18181c] overflow-hidden shadow-xl transition-all">
+        {/* Cabeçalho do Camarim (Acordeão) */}
+        <div
+          onClick={() => setIsAvatarOpen((prev) => !prev)}
+          className={`flex cursor-pointer items-center justify-between bg-[#141417] px-4 py-3 transition-colors hover:bg-[#1a1a1f] select-none ${
+            isAvatarOpen ? 'border-b border-[#2c2c32]/70' : ''
+          }`}
+        >
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/15 text-xs text-amber-400 border border-amber-500/30">
               🎭
@@ -805,206 +297,210 @@ export const IdeationDressingRoomTab: React.FC<
             </div>
           </div>
 
-        </div>
-
-        {/* Palco 3D com Elipse Iluminada e Botões de Rotação (< e >) */}
-        <div className="relative flex flex-col items-center justify-center bg-[#121214] px-4 pt-4 pb-5 border-b border-[#2c2c32]/60 overflow-hidden">
-          {/* Luzes de Palco Superiores */}
-          <div className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 h-32 w-56 rounded-full bg-amber-500/10 blur-2xl" />
-
-          <div className="relative flex w-full items-center justify-between px-2 z-10">
-            {/* Botão Rotação Esquerda (<) */}
-            <button
-              type="button"
-              onClick={() => handleRotateAvatar('prev')}
-              title="Girar para o ângulo anterior"
-              aria-label="Girar para a esquerda"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#2c2c32] bg-[#1c1c22]/90 text-slate-200 shadow-lg transition-all hover:scale-105 hover:border-amber-500/60 hover:bg-amber-500/15 hover:text-amber-300 active:scale-95"
+          <div className="flex items-center gap-2">
+            <svg
+              className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
+                isAvatarOpen ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.2}
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </button>
-
-            {/* Centro: Boneco Stickman + Elipse 3D no Chão */}
-            <div className="relative flex flex-col items-center justify-center">
-              <div className="relative z-10 -mb-5">
-                <StickmanStagePreview config={avatarConfig} />
-              </div>
-
-              {/* Elipse 3D do Palco no Chão */}
-              <div className="relative h-9 w-48 rounded-[100%] border border-amber-500/35 bg-gradient-to-b from-amber-500/20 via-teal-500/10 to-[#0f0f11] shadow-[0_0_30px_rgba(245,158,11,0.2)]">
-                <div className="absolute inset-1.5 rounded-[100%] border border-dashed border-white/15" />
-              </div>
-            </div>
-
-            {/* Botão Rotação Direita (>) */}
-            <button
-              type="button"
-              onClick={() => handleRotateAvatar('next')}
-              title="Girar para o próximo ângulo"
-              aria-label="Girar para a direita"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#2c2c32] bg-[#1c1c22]/90 text-slate-200 shadow-lg transition-all hover:scale-105 hover:border-amber-500/60 hover:bg-amber-500/15 hover:text-amber-300 active:scale-95"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {/* Indicadores de Ângulo 360º */}
-          <div className="mt-3 flex items-center gap-1.5 z-10">
-            {AVATAR_ANGLES.map((ang) => {
-              const isActive = avatarConfig.angle === ang.id;
-              return (
-                <button
-                  key={ang.id}
-                  type="button"
-                  onClick={() =>
-                    setAvatarConfig((prev) => ({ ...prev, angle: ang.id }))
-                  }
-                  className={`rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                    isActive
-                      ? 'bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/30'
-                      : 'bg-[#1c1c22] text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {ang.label}
-                </button>
-              );
-            })}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </div>
         </div>
 
-        {/* Painel de Customização (Cabelo, Cor do Traço, Acessórios) */}
-        <div className="p-4 space-y-3.5 bg-[#18181c]">
-          <div className="grid grid-cols-2 gap-3">
-            {/* 1. Cabelo */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                1. Estilo de Cabelo
-              </label>
-              <select
-                value={avatarConfig.hairStyle}
-                onChange={(e) =>
-                  setAvatarConfig((prev) => ({
-                    ...prev,
-                    hairStyle: e.target.value as AvatarHairStyle,
-                  }))
-                }
-                className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
-              >
-                {HAIR_STYLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {isAvatarOpen && (
+          <>
+            {/* Palco do Avatar Refatorado (SVG Dinâmico, Holofote Suave, UI Limpa) */}
+            <AvatarStage
+              config={avatarConfig}
+              onChange={(newConfig) => setAvatarConfig(newConfig)}
+            />
 
-            {/* 3. Acessórios */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                2. Acessórios
-              </label>
-              <select
-                value={avatarConfig.accessory}
-                onChange={(e) =>
-                  setAvatarConfig((prev) => ({
-                    ...prev,
-                    accessory: e.target.value as AvatarAccessory,
-                  }))
-                }
-                className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
-              >
-                {ACCESSORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+            {/* Painel de Customização (Cabelo, Cor do Traço, Acessórios) */}
+            <div className="p-4 space-y-3.5 bg-[#18181c]">
+              {/* 1. Estilo de Cabelo (Estilo + Cor Padrão #EA580C + Custom) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    1. Estilo de Cabelo
+                  </label>
+                  <span className="font-mono text-[10px] text-slate-400 uppercase">
+                    {avatarConfig.hairStyle === 'bald'
+                      ? '(Careca)'
+                      : avatarConfig.hairColor || '#EA580C'}
+                  </span>
+                </div>
 
-          {/* 2. Cor do Traço (Color Picker + Swatches) */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-semibold text-slate-300">
-                3. Cor do Traço (Ink Line)
-              </label>
-              <span className="font-mono text-[10px] text-slate-400 uppercase">
-                {avatarConfig.strokeColor}
-              </span>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Dropdown do Estilo de Cabelo */}
+                  <select
+                    value={avatarConfig.hairStyle}
+                    onChange={(e) =>
+                      setAvatarConfig((prev) => ({
+                        ...prev,
+                        hairStyle: e.target.value as AvatarHairStyle,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition h-[38px]"
+                  >
+                    {HAIR_STYLE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
 
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-[#2c2c32] bg-[#121214] p-2">
-              <div className="flex items-center gap-1.5">
-                {STROKE_SWATCHES.map((swatch) => {
-                  const isSelected =
-                    avatarConfig.strokeColor.toLowerCase() ===
-                    swatch.color.toLowerCase();
-                  return (
+                  {/* Cor do Cabelo: Apenas 1 círculo de cor padrão (#EA580C) + Botão Custom lateral */}
+                  <div
+                    className={`flex items-center justify-between rounded-lg border border-[#2c2c32] bg-[#121214] px-3 h-[38px] transition ${
+                      avatarConfig.hairStyle === 'bald'
+                        ? 'opacity-40 pointer-events-none'
+                        : ''
+                    }`}
+                  >
+                    {/* Círculo de cor padrão #EA580C */}
                     <button
-                      key={swatch.color}
                       type="button"
-                      title={swatch.label}
+                      title="Padrão Ruivo (#EA580C)"
                       onClick={() =>
                         setAvatarConfig((prev) => ({
                           ...prev,
-                          strokeColor: swatch.color,
+                          hairColor: '#EA580C',
                         }))
                       }
-                      style={{ backgroundColor: swatch.color }}
-                      className={`h-6 w-6 rounded-full border transition-transform ${
-                        isSelected
+                      style={{ backgroundColor: '#EA580C' }}
+                      className={`h-5 w-5 shrink-0 rounded-full border transition-transform ${
+                        (avatarConfig.hairColor || '#EA580C').toLowerCase() ===
+                        '#ea580c'
                           ? 'scale-110 border-amber-400 ring-2 ring-amber-500/40'
                           : 'border-white/25 hover:scale-105'
                       }`}
                     />
-                  );
-                })}
+
+                    {/* Botão Custom lateral */}
+                    <label
+                      title="Escolher cor personalizada para o cabelo"
+                      className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#2c2c32] bg-[#1c1c22] px-2 py-1 text-[10px] font-medium text-slate-300 hover:border-amber-500/50 transition-colors"
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-sm border border-white/20 shrink-0"
+                        style={{
+                          backgroundColor: avatarConfig.hairColor || '#EA580C',
+                        }}
+                      />
+                      <input
+                        type="color"
+                        value={avatarConfig.hairColor || '#EA580C'}
+                        onChange={(e) =>
+                          setAvatarConfig((prev) => ({
+                            ...prev,
+                            hairColor: e.target.value,
+                          }))
+                        }
+                        className="sr-only"
+                      />
+                      <span>Custom</span>
+                    </label>
+                  </div>
+                </div>
               </div>
 
-              <label
-                title="Escolher cor personalizada"
-                className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#2c2c32] bg-[#1c1c22] px-2 py-1 text-[10px] font-medium text-slate-300 hover:border-amber-500/50"
-              >
-                <input
-                  type="color"
-                  value={avatarConfig.strokeColor}
+              {/* 2. Acessórios */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
+                  2. Acessórios
+                </label>
+                <select
+                  value={avatarConfig.accessory}
                   onChange={(e) =>
                     setAvatarConfig((prev) => ({
                       ...prev,
-                      strokeColor: e.target.value,
+                      accessory: e.target.value as AvatarAccessory,
                     }))
                   }
-                  className="h-4 w-4 cursor-pointer rounded border-0 bg-transparent p-0"
-                />
-                <span>Custom</span>
-              </label>
+                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition h-[38px]"
+                >
+                  {ACCESSORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Cor do Traço (Ink Line) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    3. Cor do Traço (Ink Line)
+                  </label>
+                  <span className="font-mono text-[10px] text-slate-400 uppercase">
+                    {avatarConfig.strokeColor}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#2c2c32] bg-[#121214] p-2">
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                    {STROKE_SWATCHES.map((swatch) => {
+                      const isSelected =
+                        avatarConfig.strokeColor.toLowerCase() ===
+                        swatch.color.toLowerCase();
+                      return (
+                        <button
+                          key={swatch.color}
+                          type="button"
+                          title={swatch.label}
+                          onClick={() =>
+                            setAvatarConfig((prev) => ({
+                              ...prev,
+                              strokeColor: swatch.color,
+                            }))
+                          }
+                          style={{ backgroundColor: swatch.color }}
+                          className={`h-6 w-6 shrink-0 rounded-full border transition-transform ${
+                            isSelected
+                              ? 'scale-110 border-amber-400 ring-2 ring-amber-500/40'
+                              : 'border-white/25 hover:scale-105'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  <label
+                    title="Escolher cor personalizada para o traço"
+                    className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#2c2c32] bg-[#1c1c22] px-2 py-1 text-[10px] font-medium text-slate-300 hover:border-amber-500/50 transition-colors"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-sm border border-white/20 shrink-0"
+                      style={{ backgroundColor: avatarConfig.strokeColor }}
+                    />
+                    <input
+                      type="color"
+                      value={avatarConfig.strokeColor}
+                      onChange={(e) =>
+                        setAvatarConfig((prev) => ({
+                          ...prev,
+                          strokeColor: e.target.value,
+                        }))
+                      }
+                      className="sr-only"
+                    />
+                    <span>Custom</span>
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </section>
 
       {/* ====================================================================

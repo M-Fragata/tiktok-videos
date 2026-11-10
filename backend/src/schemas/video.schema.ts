@@ -89,6 +89,7 @@ export const avatarAngleSchema = z.enum(['front', 'right', 'back', 'left']);
 
 export const avatarConfigSchema = z.object({
   hairStyle: avatarHairStyleSchema.optional().default('spiky'),
+  hairColor: z.string().optional().default('#EA580C'),
   strokeColor: z.string().optional().default('#111827'),
   accessory: avatarAccessorySchema.optional().default('round_glasses'),
   angle: avatarAngleSchema.optional().default('front'),

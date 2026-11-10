@@ -55,6 +55,7 @@ export type AvatarAngle = 'front' | 'right' | 'back' | 'left';
 
 export interface AvatarConfig {
   hairStyle: AvatarHairStyle;
+  hairColor?: string;
   strokeColor: string;
   accessory: AvatarAccessory;
   angle: AvatarAngle;
@@ -62,6 +63,7 @@ export interface AvatarConfig {
 
 export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
   hairStyle: 'spiky',
+  hairColor: '#EA580C',
   strokeColor: '#111827',
   accessory: 'round_glasses',
   angle: 'front',
@@ -88,10 +90,11 @@ export const buildClientAvatarPromptDescriptor = (
   config: AvatarConfig = DEFAULT_AVATAR_CONFIG
 ): string => {
   const hair = AVATAR_HAIR_PROMPT_MAP[config.hairStyle || 'spiky'];
+  const hairColor = config.hairColor || config.strokeColor || '#111827';
   const accessory =
     AVATAR_ACCESSORY_PROMPT_MAP[config.accessory || 'round_glasses'];
   const strokeColor = config.strokeColor || '#111827';
-  return `2D cartoon stickman protagonist with a smooth round white head, ${hair}, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
+  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in ${hairColor} color, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
 };
 
 export const injectAvatarConfigIntoPrompt = (
@@ -145,7 +148,7 @@ export interface SubtitleStyleConfig {
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   animationType: 'karaoke',
   fontFamily: 'montserrat',
-  fontSize: 56,
+  fontSize: 55,
   primaryColor: '#FFFFFF',
   highlightColor: '#FBBF24',
   hasShadow: true,

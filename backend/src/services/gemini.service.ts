@@ -38,6 +38,7 @@ export type AvatarAngle = 'front' | 'right' | 'back' | 'left';
 
 export interface AvatarConfigInput {
   hairStyle?: AvatarHairStyle;
+  hairColor?: string;
   strokeColor?: string;
   accessory?: AvatarAccessory;
   angle?: AvatarAngle;
@@ -90,11 +91,13 @@ export function buildAvatarPromptDescriptor(
   avatarConfig?: AvatarConfigInput
 ): string {
   const hair = HAIR_PROMPT_MAP[avatarConfig?.hairStyle || 'spiky'];
+  const hairColor =
+    avatarConfig?.hairColor || avatarConfig?.strokeColor || '#111827';
   const accessory =
     ACCESSORY_PROMPT_MAP[avatarConfig?.accessory || 'round_glasses'];
   const strokeColor = avatarConfig?.strokeColor || '#111827';
 
-  return `2D cartoon stickman protagonist with a smooth round white head, ${hair}, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
+  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in ${hairColor} color, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
 }
 
 const DURATION_RULES: Record<
