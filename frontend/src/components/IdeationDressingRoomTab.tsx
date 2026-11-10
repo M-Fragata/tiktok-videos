@@ -28,6 +28,7 @@ export interface SelectedFinalSceneItem {
 }
 
 interface IdeationDressingRoomTabProps {
+  videoId?: string;
   theme: string;
   setTheme: (value: string) => void;
   suggestedThemes: string[];
@@ -93,6 +94,7 @@ const SPEAKER_SHORT_LABELS: Record<SpeakerType, string> = {
 export const IdeationDressingRoomTab: React.FC<
   IdeationDressingRoomTabProps
 > = ({
+  videoId,
   theme,
   setTheme,
   suggestedThemes: _suggestedThemes,
@@ -124,6 +126,59 @@ export const IdeationDressingRoomTab: React.FC<
   const [draggedFinalIndex, setDraggedFinalIndex] = useState<number | null>(
     null
   );
+  const [generatingSfxIndex, setGeneratingSfxIndex] = useState<number | null>(
+    null
+  );
+
+  const playAudioPreview = (src: string) => {
+    try {
+      const audio = new Audio(src);
+      audio.volume = 0.85;
+      void audio.play();
+    } catch (e) {
+      console.warn('Erro ao reproduzir preview de áudio:', e);
+    }
+  };
+
+  const handleGenerateCustomSfx = async (index: number) => {
+    if (!videoId) return;
+    const sceneItem = finalMixScenes[index];
+    const prompt = sceneItem.scene.sfx_prompt?.trim();
+    if (!prompt) return;
+
+    setGeneratingSfxIndex(index);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/generate-scene-sfx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneIndex: index,
+          sfxPrompt: prompt,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error || 'Falha ao sintetizar efeito sonoro na ElevenLabs'
+        );
+      }
+
+      if (data.audioUrl) {
+        handleUpdateFinalSceneField(index, 'custom_sfx_url', data.audioUrl);
+        playAudioPreview(data.audioUrl);
+      }
+    } catch (err) {
+      console.error('[ElevenLabs SFX Error]', err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao gerar efeito sonoro com IA.'
+      );
+    } finally {
+      setGeneratingSfxIndex(null);
+    }
+  };
 
   const toggleOptionAccordion = (optionId: string) => {
     setOpenOptionIds((prev) => ({
@@ -824,6 +879,15 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                               <p className="text-xs text-slate-100 leading-relaxed">
                                 “{scene.text}”
                               </p>
+
+                              {scene.sfx_prompt && (
+                                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-[#262630] bg-[#121216] px-2 py-1 text-[10px] text-slate-400">
+                                  <span className="text-teal-400 shrink-0">🎧</span>
+                                  <span className="italic leading-snug">
+                                    <strong className="text-slate-300 not-italic">Prompt SFX:</strong> “{scene.sfx_prompt}”
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1046,7 +1110,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                             </option>
                           </select>
 
-                          {/* Seletor de SFX da Cena */}
+                          {/* Seletor de SFX da Biblioteca Local */}
                           <div className="flex items-center gap-1 text-[10px] text-slate-400">
                             <span>🔊 SFX:</span>
                             <select
@@ -1081,6 +1145,86 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                           }
                           className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
                         />
+
+                        {/* Linha de Prompt do Som (ElevenLabs Text-to-SFX) */}
+                        <div className="pt-1 space-y-1">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-semibold text-teal-400 flex items-center gap-1">
+                              <span>🎧 Prompt de Som (ElevenLabs IA)</span>
+                            </span>
+                            {item.scene.custom_sfx_url && (
+                              <div className="flex items-center gap-1.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                                <span>✨ Áudio IA Ativo</span>
+                                <button
+                                  type="button"
+                                  title="Ouvir áudio gerado pela ElevenLabs"
+                                  onClick={() =>
+                                    playAudioPreview(
+                                      item.scene.custom_sfx_url!
+                                    )
+                                  }
+                                  className="hover:scale-110 transition"
+                                >
+                                  ▶️
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Remover áudio customizado e voltar ao som da biblioteca"
+                                  onClick={() =>
+                                    handleUpdateFinalSceneField(
+                                      idx,
+                                      'custom_sfx_url',
+                                      null
+                                    )
+                                  }
+                                  className="text-slate-400 hover:text-rose-400 transition"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={item.scene.sfx_prompt || ''}
+                              onChange={(e) =>
+                                handleUpdateFinalSceneField(
+                                  idx,
+                                  'sfx_prompt',
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Prompt de som para ElevenLabs (ex: Loud cannon blast with sand explosion)"
+                              className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition"
+                            />
+
+                            <button
+                              type="button"
+                              disabled={
+                                !item.scene.sfx_prompt?.trim() ||
+                                generatingSfxIndex === idx ||
+                                !videoId
+                              }
+                              onClick={() => void handleGenerateCustomSfx(idx)}
+                              title="Gerar som exclusivo com ElevenLabs a partir deste prompt"
+                              className="flex shrink-0 items-center gap-1 rounded-lg border border-teal-500/40 bg-teal-500/15 px-2.5 py-1.5 text-[10px] font-bold text-teal-300 hover:bg-teal-500/25 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                            >
+                              {generatingSfxIndex === idx ? (
+                                <>
+                                  <span className="h-3 w-3 animate-spin rounded-full border border-teal-300 border-t-transparent" />
+                                  <span>Gerando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>✨</span>
+                                  <span>Gerar SFX</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}

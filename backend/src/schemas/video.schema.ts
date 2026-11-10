@@ -119,6 +119,8 @@ export const storyboardSceneSchema = z.object({
   avatarSprite: z.string().min(1, 'O sprite do avatar é obrigatório'),
   imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
   sfx_suggestion: z.string().optional().default(''),
+  sfx_prompt: z.string().optional().default(''),
+  custom_sfx_url: z.string().nullable().optional().default(null),
   candidateImages: z.array(z.string()).optional().default([]),
   selectedImage: z.string().nullable().optional().default(null),
 });
@@ -184,6 +186,17 @@ export const generateSceneImagesSchema = z.object({
     .string({ required_error: 'O imagePrompt é obrigatório' })
     .min(3, 'O prompt da cena deve ter pelo menos 3 caracteres'),
   scenes: z.array(storyboardSceneSchema).optional(),
+});
+
+/**
+ * Geração de SFX Customizado com IA ElevenLabs (POST /api/videos/:id/generate-scene-sfx)
+ */
+export const generateSceneSfxSchema = z.object({
+  sceneIndex: z.number().int().min(0),
+  sfxPrompt: z
+    .string({ required_error: 'O prompt do SFX é obrigatório' })
+    .min(2, 'O prompt do SFX deve ter pelo menos 2 caracteres'),
+  durationSeconds: z.number().min(0.5).max(22).optional(),
 });
 
 /**

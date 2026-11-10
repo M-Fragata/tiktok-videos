@@ -349,6 +349,8 @@ export interface StoryboardScene {
   avatarSprite: AvatarSpritePath;
   imagePrompt: string;
   sfx_suggestion?: string;
+  sfx_prompt?: string;
+  custom_sfx_url?: string | null;
   candidateImages: string[];
   selectedImage: string | null;
 }

@@ -52,14 +52,24 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
         />
       )}
 
-      {/* 3. Efeitos Sonoros por Cena (sfx_suggestion) ou Whoosh nos cortes */}
+      {/* 3. Efeitos Sonoros por Cena (custom_sfx_url gerado por IA, sfx_suggestion ou Whoosh) */}
       {sfxEnabled &&
         backgroundTimeline.map((seg, idx) => {
           const scene = scenes[idx];
           const sfxKey = scene?.sfx_suggestion?.trim();
 
-          // Cena 0 (abertura): toca SFX de gancho apenas se explicitamente definido e não for "none"
+          // Cena 0 (abertura): toca SFX se gerado por IA ou se explicitamente configurado na biblioteca
           if (idx === 0) {
+            if (scene?.custom_sfx_url) {
+              return (
+                <Sequence key={`custom_sfx_0`} from={0} durationInFrames={45}>
+                  <Audio
+                    src={resolveAssetSrc(scene.custom_sfx_url)}
+                    volume={0.4}
+                  />
+                </Sequence>
+              );
+            }
             if (!sfxKey || sfxKey === 'none' || sfxKey === 'whoosh') return null;
             const file = sfxMap.get(sfxKey);
             if (!file) return null;
@@ -75,10 +85,26 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
           }
 
           // Cenas subsequentes (cortes de cena):
-          // Se for "none", não toca nada
+          // 1. Áudio customizado gerado por IA (ElevenLabs) tem prioridade máxima
+          if (scene?.custom_sfx_url) {
+            return (
+              <Sequence
+                key={`custom_sfx_${idx}_${seg.frameStart}`}
+                from={Math.max(0, seg.frameStart - 2)}
+                durationInFrames={45}
+              >
+                <Audio
+                  src={resolveAssetSrc(scene.custom_sfx_url)}
+                  volume={0.4}
+                />
+              </Sequence>
+            );
+          }
+
+          // 2. Se for "none", não toca nada
           if (sfxKey === 'none') return null;
 
-          // Se tiver um SFX específico da biblioteca, toca-o; senão usa whoosh padrão
+          // 3. Efeito da biblioteca local (com fallback para whoosh)
           const sfxFile =
             (sfxKey && sfxMap.get(sfxKey)) || 'bgm/effects/whoosh.mp3';
 

@@ -17,6 +17,7 @@ import {
   injectAvatarConfigIntoPrompt,
   resolveAssetSrc,
   SceneFrameTiming,
+  SFX_OPTIONS,
   SpeakerType,
   splitSceneTextIntoSubtitleChunks,
   StoryboardScene,
@@ -2024,6 +2025,7 @@ export const Studio: React.FC = () => {
                ============================================================== */}
             {activeTab === 'briefing' && (
               <IdeationDressingRoomTab
+                videoId={id}
                 theme={theme}
                 setTheme={setTheme}
                 suggestedThemes={SUGGESTED_THEMES}
@@ -2212,6 +2214,64 @@ export const Studio: React.FC = () => {
                                   }
                                   className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-2.5 text-xs text-slate-300 leading-relaxed focus:border-amber-500 focus:outline-none transition"
                                 />
+                              </div>
+
+                              {/* Campo: Design de Som (SFX & Prompt de Som ElevenLabs) */}
+                              <div className="rounded-xl border border-[#2c2c32]/70 bg-[#121214] p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-semibold text-teal-400 flex items-center gap-1.5">
+                                    <span>🎧 Design de Som (SFX)</span>
+                                  </label>
+                                  {scene.custom_sfx_url && (
+                                    <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                                      ✨ ElevenLabs IA Ativo
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] text-slate-400 mb-1">
+                                      Efeito da Biblioteca
+                                    </label>
+                                    <select
+                                      value={scene.sfx_suggestion || 'whoosh'}
+                                      onChange={(e) =>
+                                        handleSceneFieldChange(
+                                          index,
+                                          'sfx_suggestion',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
+                                    >
+                                      {SFX_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] text-slate-400 mb-1">
+                                      Prompt Acústico (IA)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={scene.sfx_prompt || ''}
+                                      onChange={(e) =>
+                                        handleSceneFieldChange(
+                                          index,
+                                          'sfx_prompt',
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder="Prompt em inglês para ElevenLabs"
+                                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
                               </div>
 
                               {/* Secção B-Roll */}

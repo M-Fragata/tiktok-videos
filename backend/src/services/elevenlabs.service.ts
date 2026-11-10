@@ -537,3 +537,48 @@ export async function generateNarrationWithTimestamps(
     sceneTimings,
   };
 }
+
+/**
+ * Gera um efeito sonoro sintético personalizado com a ElevenLabs Sound Effects API
+ * Endpoint: POST https://api.elevenlabs.io/v1/sound-generation
+ */
+export async function generateSoundEffect({
+  prompt,
+  durationSeconds = 2.5,
+}: {
+  prompt: string;
+  durationSeconds?: number;
+}): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'ELEVENLABS_API_KEY não configurada no ficheiro backend/.env.'
+    );
+  }
+
+  const response = await fetch(
+    'https://api.elevenlabs.io/v1/sound-generation',
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: prompt,
+        duration_seconds: durationSeconds,
+        prompt_influence: 0.3,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Falha na API da ElevenLabs Sound Effects (${response.status}): ${errorText}`
+    );
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}

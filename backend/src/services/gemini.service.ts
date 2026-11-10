@@ -54,6 +54,7 @@ export interface ScriptScene {
   avatarSprite: AvatarSprite;
   imagePrompt: string;
   sfx_suggestion?: string;
+  sfx_prompt?: string;
 }
 
 export interface IdeationScriptOption {
@@ -405,6 +406,15 @@ DIRETRIZES DE TRILHA SONORA (BGM) E DESIGN DE SOM (SFX):
    - "whoosh" ou "swoosh": Transição rápida de cena ou movimento dinâmico.
    - "none": Se a cena não precisa de efeito sonoro no corte.
 
+3. PROMPT DE DESIGN DE SOM TEXT-TO-SFX ("sfx_prompt"):
+   Para CADA cena, deves escrever um prompt acústico descritivo e expressivo em INGLÊS no campo "sfx_prompt" (1 a 2 frases curtas) pronto para a API de Sound Effects da ElevenLabs. Descreva o timbre, reverberação, distância e ação física do som.
+   Exemplos:
+   - "Loud explosive blast of an 18th-century military cannon in a sandy desert, deep thunderous echoing rumble with falling sand debris."
+   - "Abrupt comedic vinyl record scratch sudden stop, followed by awkward silence and a tiny cartoon pop."
+   - "Playful cartoon eye blink sound effect with a gentle spring boing and cheeky comic chime."
+   - "Tense cinematic riser crescendo building into a deep dramatic impact hit with sub bass."
+   - "Eerie stone footsteps echoing in an ancient Egyptian tomb corridor with subtle whispering wind."
+
 Regras de Saída (JSON Estrito):
 O campo "avatarSprite" deve ser ESTRITAMENTE UMA destas strings:
 ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
@@ -446,8 +456,20 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
           'none',
         ],
       },
+      sfx_prompt: {
+        type: 'STRING',
+        description:
+          'Prompt acústico descritivo em inglês para o gerador de efeitos sonoros por IA (ElevenLabs Sound Effects).',
+      },
     },
-    required: ['speaker', 'text', 'avatarSprite', 'imagePrompt', 'sfx_suggestion'],
+    required: [
+      'speaker',
+      'text',
+      'avatarSprite',
+      'imagePrompt',
+      'sfx_suggestion',
+      'sfx_prompt',
+    ],
   };
 
   const responseSchema = {

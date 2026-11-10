@@ -6,6 +6,7 @@ import {
   createDraftVideoSchema,
   generateAudioSchema,
   generateSceneImagesSchema,
+  generateSceneSfxSchema,
   generateScriptSchema,
   generateVideoSchema,
   renderVideoSchema,
@@ -23,7 +24,10 @@ import {
   generateTimeMachineScript,
   type ScriptScene,
 } from '../services/gemini.service.ts';
-import { generateNarrationWithTimestamps } from '../services/elevenlabs.service.ts';
+import {
+  generateNarrationWithTimestamps,
+  generateSoundEffect,
+} from '../services/elevenlabs.service.ts';
 import {
   generateAllSceneBackgrounds,
   generateSceneBrollImages,
@@ -120,6 +124,8 @@ export async function generateScriptController(
         avatarSprite: scene.avatarSprite,
         imagePrompt: scene.imagePrompt,
         sfx_suggestion: scene.sfx_suggestion || '',
+        sfx_prompt: scene.sfx_prompt || '',
+        custom_sfx_url: null as string | null,
         candidateImages: [] as string[],
         selectedImage: null as string | null,
       })),
@@ -953,5 +959,107 @@ export async function deleteVideoController(
   } catch (error) {
     console.error('[Prisma] Erro ao excluir vídeo:', error);
     res.status(500).json({ error: 'Erro interno ao excluir o vídeo.' });
+  }
+}
+
+/**
+ * POST /api/videos/:id/generate-scene-sfx
+ * Gera um efeito sonoro sintético personalizado com a ElevenLabs Sound Effects API
+ * a partir do prompt descritivo da cena (ou customizado pelo usuário).
+ */
+export async function generateSceneSfxController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateSceneSfxSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Dados inválidos para geração de SFX.',
+      details: parsedBody.error.format(),
+    });
+    return;
+  }
+
+  const { sceneIndex, sfxPrompt, durationSeconds } = parsedBody.data;
+
+  try {
+    const video = await prisma.video.findUnique({ where: { id } });
+    if (!video) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    console.log(
+      `[ElevenLabs SFX] Gerando efeito sonoro para a cena #${sceneIndex + 1}: "${sfxPrompt}"...`
+    );
+
+    const sfxBuffer = await generateSoundEffect({
+      prompt: sfxPrompt,
+      durationSeconds: durationSeconds || 2.5,
+    });
+
+    const storageDir = path.resolve(process.cwd(), 'storage', id);
+    if (!fs.existsSync(storageDir)) {
+      fs.mkdirSync(storageDir, { recursive: true });
+    }
+
+    const sfxFileName = `sfx_scene_${sceneIndex}_${Date.now()}.mp3`;
+    const sfxFilePath = path.join(storageDir, sfxFileName);
+    fs.writeFileSync(sfxFilePath, sfxBuffer);
+
+    const publicSfxUrl = `/storage/${id}/${sfxFileName}`;
+
+    const currentProps = (video.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short',
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const baseScenes = currentStoryboard.scenes || [];
+    const updatedScenes = baseScenes.map((scene, idx) => {
+      if (idx !== sceneIndex) return scene;
+      return {
+        ...scene,
+        sfx_prompt: sfxPrompt,
+        custom_sfx_url: publicSfxUrl,
+      };
+    });
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      storyboard: {
+        ...currentStoryboard,
+        scenes: updatedScenes,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Efeito sonoro gerado com sucesso via ElevenLabs.',
+      sceneIndex,
+      sfxPrompt,
+      audioUrl: publicSfxUrl,
+      video: updatedVideo,
+    });
+  } catch (err) {
+    console.error('[ElevenLabs SFX] Erro ao sintetizar áudio:', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro interno ao gerar efeito sonoro.',
+    });
   }
 }
