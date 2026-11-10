@@ -37,13 +37,14 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
         theme={theme}
       />
 
-      {/* Camada 2: Design de Som (Narração + Música de Fundo em Loop 10% + SFX Whoosh a cada corte) */}
+      {/* Camada 2: Design de Som (Narração + Música de Fundo em Loop 10% + SFX por cena) */}
       <AudioTrack
         src={audioSrc}
         bgmVibe={effectiveBgmVibe}
         bgmVolume={bgmVolume}
         sfxEnabled={sfxEnabled}
         backgroundTimeline={backgroundTimeline}
+        scenes={storyboard?.scenes}
       />
 
       {/* Camada 3: Overlay opcional do Avatar 2D (desativado por padrão pois o personagem já está integrado na cena Mixed Media) */}

@@ -61,6 +61,16 @@ export interface IdeationScriptOption {
   title: string;
   badge: string;
   description: string;
+  bgmVibe?:
+    | 'epic'
+    | 'dark'
+    | 'fun'
+    | 'hiphop'
+    | 'action'
+    | 'piano'
+    | 'adventure'
+    | 'comedy'
+    | 'none';
   scenes: ScriptScene[];
 }
 
@@ -366,6 +376,35 @@ Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminol
    - O personagem 2D interage fisicamente com objetos e cenários 3D realistas.
    - Termine SEMPRE o prompt com: "integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
 
+DIRETRIZES DE TRILHA SONORA (BGM) E DESIGN DE SOM (SFX):
+1. TRILHA SONORA POR OPÇÃO ("bgmVibe"):
+   Como Diretor de Som do estúdio, deves escolher para CADA uma das 4 opções a trilha sonora ideal ("bgmVibe") que melhor amplifica o tom daquele ângulo:
+   - "comedy": Humor, ironia, vlog cómico ou desmistificação com quebra de mitos (bgm/music/funny-vlog.mp3)
+   - "fun": Curiosidade leve, descoberta divertida e tom descontraído (bgm/music/fun-light.mp3)
+   - "action": Corrida contra o tempo, perigo e adrenalina máxima (bgm/music/action-run.mp3)
+   - "hiphop": Batida épica moderna, ritmo veloz ou corte caótico (bgm/music/epic-hiphop.mp3)
+   - "dark": Conspirações, segredos proibidos, mistério denso e tensão (bgm/music/dark.mp3)
+   - "piano": Mistério refinado, investigação histórica e tensão clássica (bgm/music/fast-piano.mp3)
+   - "adventure": Expedições arqueológicas, descobrimentos e aventura (bgm/music/mountain-intro.mp3)
+   - "epic": Batalhas lendárias e monumentos grandiosos (bgm/music/epic.mp3)
+   - "none": Sem música de fundo (foco total na voz/efeitos)
+
+2. EFEITOS SONOROS POR CENA ("sfx_suggestion"):
+   A nossa biblioteca de áudio possui efeitos cirúrgicos. Para CADA cena, escolhe ESTRITAMENTE um dos seguintes identificadores (ou "none"):
+   - "cannon-artillery": Tiros de canhão, artilharia militar, bombas, explosões ou batalhas bélicas (ex: quando o roteiro cita as tropas de Napoleão atirando).
+   - "record-scratch": Parada brusca de som / quebra de 4ª parede, quando o viajante desmente um mito histórico ou confessa a sua culpa olhando para a câmara.
+   - "cartoon-blink": Momento cômico, piscada de olhos, confusão engraçada do viajante, cara de bobo.
+   - "riser-hit": Gancho tenso inicial (Cena 1), revelação chocante que prende o espectador.
+   - "heartbeat": Tensão máxima, batimentos cardíacos acelerados, suspense antes de um desastre.
+   - "metal-hits": Ferramentas quebrando pedra, marretadas, impacto mecânico ou armaduras.
+   - "sword-clash": Choque de espadas em duelo ou combate medieval.
+   - "sword-draw": Desembainhar lâmina ou preparação para confronto.
+   - "footsteps-stone": Passos cautelosos em tumbas egípcias, pirâmides ou corredores de pedra.
+   - "piano-flourish": Floreio de piano elegante, ironia sutil ou conclusão refinada.
+   - "trex-roar" ou "trex-roar-fight": Feras perigosas, dinossauros ou criaturas monstruosas.
+   - "whoosh" ou "swoosh": Transição rápida de cena ou movimento dinâmico.
+   - "none": Se a cena não precisa de efeito sonoro no corte.
+
 Regras de Saída (JSON Estrito):
 O campo "avatarSprite" deve ser ESTRITAMENTE UMA destas strings:
 ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
@@ -389,9 +428,26 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
       },
       sfx_suggestion: {
         type: 'STRING',
+        enum: [
+          'cannon-artillery',
+          'record-scratch',
+          'cartoon-blink',
+          'riser-hit',
+          'heartbeat',
+          'metal-hits',
+          'sword-clash',
+          'sword-draw',
+          'footsteps-stone',
+          'piano-flourish',
+          'trex-roar',
+          'trex-roar-fight',
+          'whoosh',
+          'swoosh',
+          'none',
+        ],
       },
     },
-    required: ['speaker', 'text', 'avatarSprite', 'imagePrompt'],
+    required: ['speaker', 'text', 'avatarSprite', 'imagePrompt', 'sfx_suggestion'],
   };
 
   const responseSchema = {
@@ -415,12 +471,26 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
             description: {
               type: 'STRING',
             },
+            bgmVibe: {
+              type: 'STRING',
+              enum: [
+                'epic',
+                'dark',
+                'fun',
+                'hiphop',
+                'action',
+                'piano',
+                'adventure',
+                'comedy',
+                'none',
+              ],
+            },
             scenes: {
               type: 'ARRAY',
               items: sceneItemSchema,
             },
           },
-          required: ['id', 'title', 'badge', 'description', 'scenes'],
+          required: ['id', 'title', 'badge', 'description', 'bgmVibe', 'scenes'],
         },
       },
     },

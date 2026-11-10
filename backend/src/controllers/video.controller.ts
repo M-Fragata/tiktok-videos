@@ -113,6 +113,7 @@ export async function generateScriptController(
       title: opt.title,
       badge: opt.badge,
       description: opt.description,
+      bgmVibe: opt.bgmVibe || 'epic',
       scenes: opt.scenes.map((scene) => ({
         speaker: scene.speaker,
         text: scene.text,
@@ -123,6 +124,11 @@ export async function generateScriptController(
         selectedImage: null as string | null,
       })),
     }));
+
+    const resolvedBgm =
+      bgmVibe && bgmVibe !== 'auto'
+        ? bgmVibe
+        : formattedOptions[0]?.bgmVibe || currentProps.bgmVibe || 'epic';
 
     const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
     const currentStoryboard = currentProps.storyboard || {
@@ -146,7 +152,7 @@ export async function generateScriptController(
       backgroundSrc: currentProps.backgroundSrc || 'background.jpg',
       backgroundTimeline: currentProps.backgroundTimeline || [],
       audioSrc: currentProps.audioSrc || 'audio.mp3',
-      bgmVibe: bgmVibe || currentProps.bgmVibe || 'epic',
+      bgmVibe: resolvedBgm,
       subtitles: currentProps.subtitles || [],
       avatarTimeline: currentProps.avatarTimeline || [],
       storyboard: {
@@ -154,7 +160,7 @@ export async function generateScriptController(
         durationPreset,
         avatarConfig,
         ideationOptions: formattedOptions,
-        bgmVibe: bgmVibe || currentStoryboard.bgmVibe || 'epic',
+        bgmVibe: resolvedBgm,
       },
     };
 

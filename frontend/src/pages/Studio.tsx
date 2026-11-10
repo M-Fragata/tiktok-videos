@@ -8,6 +8,7 @@ import {
   AvatarSegment,
   BackgroundSegment,
   BgmVibe,
+  BriefingBgmOption,
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
@@ -153,7 +154,8 @@ export const Studio: React.FC = () => {
   const [theme, setTheme] = useState<string>('');
   const [durationPreset, setDurationPreset] =
     useState<DurationPreset>('short');
-  const [bgmVibe, setBgmVibe] = useState<BgmVibe>('epic');
+  const [bgmVibe, setBgmVibe] = useState<BriefingBgmOption>('auto');
+  const effectiveBgmVibe: BgmVibe = bgmVibe === 'auto' ? 'epic' : bgmVibe;
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(
     DEFAULT_AVATAR_CONFIG
   );
@@ -547,7 +549,7 @@ export const Studio: React.FC = () => {
         backgroundSrc: backgroundSrc || 'background.jpg',
         backgroundTimeline: [],
         audioSrc: audioSrc || 'audio.mp3',
-        bgmVibe,
+        bgmVibe: effectiveBgmVibe,
         subtitles: [],
         subtitleStyle,
         avatarTimeline: [],
@@ -559,7 +561,7 @@ export const Studio: React.FC = () => {
           sceneTimings: [],
           avatarConfig,
           ideationOptions,
-          bgmVibe,
+          bgmVibe: effectiveBgmVibe,
         },
       };
 
@@ -756,7 +758,7 @@ export const Studio: React.FC = () => {
             effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
           backgroundTimeline: effectiveBackgroundTimeline,
           audioSrc,
-          bgmVibe,
+          bgmVibe: effectiveBgmVibe,
           subtitles: effectiveSubtitles,
           subtitleStyle,
           avatarTimeline: effectiveAvatarTimeline,
@@ -768,7 +770,7 @@ export const Studio: React.FC = () => {
             sceneTimings,
             avatarConfig,
             ideationOptions,
-            bgmVibe,
+            bgmVibe: effectiveBgmVibe,
           },
         };
 
@@ -1018,7 +1020,7 @@ export const Studio: React.FC = () => {
       backgroundSrc: primaryBg,
       backgroundTimeline: assembledBackgroundTimeline,
       audioSrc,
-      bgmVibe,
+      bgmVibe: effectiveBgmVibe,
       subtitles: subtitlesToPersist,
       subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
@@ -1030,7 +1032,7 @@ export const Studio: React.FC = () => {
         sceneTimings,
         avatarConfig,
         ideationOptions,
-        bgmVibe,
+        bgmVibe: effectiveBgmVibe,
       },
     };
 
@@ -1107,7 +1109,7 @@ export const Studio: React.FC = () => {
       backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
       backgroundTimeline: effectiveBackgroundTimeline,
       audioSrc,
-      bgmVibe,
+      bgmVibe: effectiveBgmVibe,
       subtitles: effectiveSubtitles,
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
@@ -1119,7 +1121,7 @@ export const Studio: React.FC = () => {
         sceneTimings,
         avatarConfig,
         ideationOptions,
-        bgmVibe,
+        bgmVibe: effectiveBgmVibe,
       },
     };
 
@@ -1291,7 +1293,7 @@ export const Studio: React.FC = () => {
       backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
       backgroundTimeline: effectiveBackgroundTimeline,
       audioSrc,
-      bgmVibe,
+      bgmVibe: effectiveBgmVibe,
       subtitles: effectiveSubtitles,
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
@@ -1302,7 +1304,7 @@ export const Studio: React.FC = () => {
     effectiveBackgroundTimeline,
     backgroundSrc,
     audioSrc,
-    bgmVibe,
+    effectiveBgmVibe,
     effectiveSubtitles,
     subtitleStyle,
     effectiveAvatarTimeline,
@@ -3021,12 +3023,22 @@ export const Studio: React.FC = () => {
                       effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
                     backgroundTimeline: effectiveBackgroundTimeline,
                     audioSrc,
-                    bgmVibe,
+                    bgmVibe: effectiveBgmVibe,
                     bgmVolume: 0.1,
                     sfxEnabled: true,
                     subtitles: effectiveSubtitles,
                     subtitleStyle,
                     avatarTimeline: effectiveAvatarTimeline,
+                    storyboard: {
+                      durationPreset,
+                      scenes,
+                      audioGenerated,
+                      isAssembled,
+                      sceneTimings,
+                      avatarConfig,
+                      ideationOptions,
+                      bgmVibe: effectiveBgmVibe,
+                    },
                   }}
                   durationInFrames={effectiveTotalFrames}
                   compositionWidth={1080}

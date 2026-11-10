@@ -8,10 +8,13 @@ import {
   AvatarNeckAccessory,
   BGM_VIBE_OPTIONS,
   BgmVibe,
+  BRIEFING_BGM_OPTIONS,
+  BriefingBgmOption,
   buildClientAvatarPromptDescriptor,
   DurationPreset,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
+  SFX_OPTIONS,
   SpeakerType,
   StoryboardScene,
 } from '../remotion/types';
@@ -31,8 +34,8 @@ interface IdeationDressingRoomTabProps {
   durationPreset: DurationPreset;
   setDurationPreset: (value: DurationPreset) => void;
   durationOptions: Array<{ value: DurationPreset; label: string }>;
-  bgmVibe: BgmVibe;
-  setBgmVibe: (value: BgmVibe) => void;
+  bgmVibe: BriefingBgmOption;
+  setBgmVibe: (value: BriefingBgmOption) => void;
   avatarConfig: AvatarConfig;
   setAvatarConfig: React.Dispatch<React.SetStateAction<AvatarConfig>>;
   ideationOptions: IdeationOption[];
@@ -148,6 +151,9 @@ export const IdeationDressingRoomTab: React.FC<
       if (!finalScriptTitle && option.title) {
         setFinalScriptTitle(option.title);
       }
+      if (option.bgmVibe && (finalMixScenes.length === 0 || bgmVibe === 'auto')) {
+        setBgmVibe(option.bgmVibe);
+      }
       const clonedScene: StoryboardScene = {
         ...scene,
         imagePrompt: injectAvatarConfigIntoPrompt(
@@ -176,6 +182,9 @@ export const IdeationDressingRoomTab: React.FC<
   const handleSelectEntireOption = (option: IdeationOption) => {
     if (option.title) {
       setFinalScriptTitle(option.title);
+    }
+    if (option.bgmVibe) {
+      setBgmVibe(option.bgmVibe);
     }
     const mapped: SelectedFinalSceneItem[] = option.scenes.map(
       (scene, idx) => ({
@@ -616,10 +625,13 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                 </label>
                 <select
                   value={bgmVibe}
-                  onChange={(e) => setBgmVibe(e.target.value as BgmVibe)}
+                  onChange={(e) =>
+                    setBgmVibe(e.target.value as BriefingBgmOption)
+                  }
+                  disabled={isGeneratingIdeas}
                   className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
                 >
-                  {BGM_VIBE_OPTIONS.map((opt) => (
+                  {BRIEFING_BGM_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
@@ -699,6 +711,17 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {option.bgmVibe && (
+                          <span
+                            title={`Trilha sonora sugerida pela IA para ${option.badge || option.title}`}
+                            className="hidden sm:inline-flex items-center gap-1 rounded-md bg-[#1d1d24] border border-[#353540] px-2 py-0.5 text-[10px] font-semibold text-teal-300"
+                          >
+                            <span>🎵</span>
+                            <span>
+                              {BGM_VIBE_OPTIONS.find((b) => b.value === option.bgmVibe)?.label.split('(')[0]?.trim() || option.bgmVibe}
+                            </span>
+                          </span>
+                        )}
                         {selectedFromThisOptionCount > 0 && (
                           <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
                             {selectedFromThisOptionCount} escolhida(s)
@@ -762,13 +785,23 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                               }`}
                             >
                               <div className="flex items-center justify-between gap-2 mb-1.5">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="rounded bg-[#121214] px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-300">
                                     Cena #{sIdx + 1}
                                   </span>
                                   <span className="text-[10px] font-medium text-slate-400">
                                     {SPEAKER_SHORT_LABELS[scene.speaker]}
                                   </span>
+                                  {scene.sfx_suggestion &&
+                                    scene.sfx_suggestion !== 'none' && (
+                                      <span
+                                        title={`Efeito sonoro sugerido pela IA: ${scene.sfx_suggestion}`}
+                                        className="rounded bg-teal-500/15 border border-teal-500/30 px-1.5 py-0.5 text-[9px] font-mono text-teal-300 flex items-center gap-1"
+                                      >
+                                        <span>🔊</span>
+                                        <span>{scene.sfx_suggestion}</span>
+                                      </span>
+                                    )}
                                 </div>
 
                                 <div
@@ -869,23 +902,47 @@ Cena 4: Conclusão instigante convidando a comentar.`}
               </div>
             ) : (
               <>
-                {/* Título Viral Definido para o Vídeo */}
-                <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                      🏷️ Título do Vídeo (Gerado por IA)
-                    </label>
-                    <span className="text-[10px] text-slate-500">
-                      Atualizará o título do projeto ao aprovar
-                    </span>
+                {/* Título Viral + Trilha Sonora Final */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                        🏷️ Título do Vídeo (Gerado por IA)
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        Editável
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={finalScriptTitle}
+                      onChange={(e) => setFinalScriptTitle(e.target.value)}
+                      placeholder="Ex: Napoleão NÃO Destruiu a Esfinge?! 😱"
+                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] px-3 py-1.5 text-xs font-bold text-amber-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none transition"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={finalScriptTitle}
-                    onChange={(e) => setFinalScriptTitle(e.target.value)}
-                    placeholder="Ex: Napoleão NÃO Destruiu a Esfinge?! 😱"
-                    className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] px-3 py-1.5 text-xs font-bold text-amber-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none transition"
-                  />
+
+                  <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1">
+                        <span>🎵 Trilha Sonora (BGM)</span>
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        Definida pela IA / Ajustável
+                      </span>
+                    </div>
+                    <select
+                      value={bgmVibe === 'auto' ? 'epic' : bgmVibe}
+                      onChange={(e) => setBgmVibe(e.target.value as BgmVibe)}
+                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] px-3 py-1.5 text-xs font-semibold text-slate-100 focus:border-teal-500 focus:outline-none transition"
+                    >
+                      {BGM_VIBE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
@@ -964,9 +1021,9 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                         </div>
                       </div>
 
-                      {/* Seletor rápido de Voz + Edição Rápida da Fala */}
+                      {/* Seletor rápido de Voz + Seletor de SFX da Cena + Edição Rápida da Fala */}
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <select
                             value={item.scene.speaker}
                             onChange={(e) =>
@@ -988,6 +1045,28 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                               🎙️ Narrador Épico
                             </option>
                           </select>
+
+                          {/* Seletor de SFX da Cena */}
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                            <span>🔊 SFX:</span>
+                            <select
+                              value={item.scene.sfx_suggestion || 'whoosh'}
+                              onChange={(e) =>
+                                handleUpdateFinalSceneField(
+                                  idx,
+                                  'sfx_suggestion',
+                                  e.target.value
+                                )
+                              }
+                              className="rounded-md border border-[#2c2c32] bg-[#121214] px-2 py-1 text-[10px] font-semibold text-teal-300 focus:border-teal-500 focus:outline-none max-w-[210px]"
+                            >
+                              {SFX_OPTIONS.map((sfx) => (
+                                <option key={sfx.value} value={sfx.value}>
+                                  {sfx.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
 
                         <textarea

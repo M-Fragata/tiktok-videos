@@ -67,6 +67,7 @@ export const speakerTypeSchema = z.enum([
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
 export const bgmVibeSchema = z.enum([
+  'auto',
   'epic',
   'dark',
   'fun',
@@ -127,6 +128,7 @@ export const ideationOptionSchema = z.object({
   title: z.string().min(1),
   badge: z.string().optional(),
   description: z.string().optional(),
+  bgmVibe: bgmVibeSchema.optional(),
   scenes: z.array(storyboardSceneSchema).default([]),
 });
 

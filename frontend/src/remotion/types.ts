@@ -34,6 +34,8 @@ export type BgmVibe =
   | 'comedy'
   | 'none';
 
+export type BriefingBgmOption = 'auto' | BgmVibe;
+
 export const BGM_VIBE_OPTIONS: Array<{
   value: BgmVibe;
   label: string;
@@ -80,6 +82,103 @@ export const BGM_VIBE_OPTIONS: Array<{
     file: 'bgm/music/funny-vlog.mp3',
   },
   { value: 'none', label: '🔇 Sem Música de Fundo', file: null },
+];
+
+export const BRIEFING_BGM_OPTIONS: Array<{
+  value: BriefingBgmOption;
+  label: string;
+}> = [
+  {
+    value: 'auto',
+    label: '🤖 Decisão da IA (Recomendado por Ângulo)',
+  },
+  ...BGM_VIBE_OPTIONS.map((opt) => ({
+    value: opt.value as BriefingBgmOption,
+    label: opt.label,
+  })),
+];
+
+export const SFX_OPTIONS: Array<{
+  value: string;
+  label: string;
+  file: string | null;
+}> = [
+  {
+    value: 'whoosh',
+    label: '💨 Whoosh (Transição Padrão)',
+    file: 'bgm/effects/whoosh.mp3',
+  },
+  {
+    value: 'swoosh',
+    label: '⚡ Swoosh (Corte Rápido)',
+    file: 'bgm/effects/swoosh.wav',
+  },
+  {
+    value: 'cannon-artillery',
+    label: '💥 Tiro de Canhão / Artilharia',
+    file: 'bgm/effects/cannon-artillery.wav',
+  },
+  {
+    value: 'record-scratch',
+    label: '🛑 Quebra de 4ª Parede (Scratch)',
+    file: 'bgm/effects/record-scratch.wav',
+  },
+  {
+    value: 'cartoon-blink',
+    label: '👀 Efeito Cômico (Blink)',
+    file: 'bgm/effects/cartoon-blink.mp3',
+  },
+  {
+    value: 'riser-hit',
+    label: '🔥 Gancho Tenso (Riser Hit)',
+    file: 'bgm/effects/riser-hit.wav',
+  },
+  {
+    value: 'heartbeat',
+    label: '💓 Tensão Máxima (Heartbeat)',
+    file: 'bgm/effects/heartbeat.wav',
+  },
+  {
+    value: 'metal-hits',
+    label: '🔨 Impacto de Metal / Bigorna',
+    file: 'bgm/effects/metal-hits.mp3',
+  },
+  {
+    value: 'sword-clash',
+    label: '⚔️ Choque de Espadas',
+    file: 'bgm/effects/sword-clash.wav',
+  },
+  {
+    value: 'sword-draw',
+    label: '🗡️ Desembainhar Lâmina',
+    file: 'bgm/effects/sword-draw.wav',
+  },
+  {
+    value: 'footsteps-stone',
+    label: '👣 Passos em Pedra / Tumba',
+    file: 'bgm/effects/footsteps-stone.wav',
+  },
+  {
+    value: 'piano-flourish',
+    label: '🎹 Floreio de Piano Dramático',
+    file: 'bgm/effects/piano-flourish.wav',
+  },
+  {
+    value: 'trex-roar',
+    label: '🦖 Rugido de Criatura / T-Rex',
+    file: 'bgm/effects/trex-roar.wav',
+  },
+  {
+    value: 'trex-roar-fight',
+    label: '🐲 Rugido Feroz de Batalha',
+    file: 'bgm/effects/trex-roar-fight.wav',
+  },
+  {
+    value: 'dog-bark',
+    label: '🐶 Latido de Alerta',
+    file: 'bgm/effects/dog-bark.wav',
+  },
+  { value: 'none', label: '🔇 Sem Efeito Sonoro', file: null },
 ];
 
 export type AvatarHairStyle =
@@ -259,6 +358,7 @@ export interface IdeationOption {
   title: string;
   badge?: string;
   description?: string;
+  bgmVibe?: BgmVibe;
   scenes: StoryboardScene[];
 }
 
