@@ -78,11 +78,17 @@ export const avatarHairStyleSchema = z.enum([
 
 export const avatarAccessorySchema = z.enum([
   'none',
+  'forehead_goggles',
   'round_glasses',
   'explorer_hat',
   'knight_helmet',
   'crown',
   'bandana',
+]);
+
+export const avatarNeckAccessorySchema = z.enum([
+  'none',
+  'red_bandana',
 ]);
 
 export const avatarAngleSchema = z.enum(['front', 'right', 'back', 'left']);
@@ -91,7 +97,8 @@ export const avatarConfigSchema = z.object({
   hairStyle: avatarHairStyleSchema.optional().default('spiky'),
   hairColor: z.string().optional().default('#EA580C'),
   strokeColor: z.string().optional().default('#111827'),
-  accessory: avatarAccessorySchema.optional().default('round_glasses'),
+  accessory: avatarAccessorySchema.optional().default('forehead_goggles'),
+  neckAccessory: avatarNeckAccessorySchema.optional().default('red_bandana'),
   angle: avatarAngleSchema.optional().default('front'),
 });
 

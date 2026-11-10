@@ -45,11 +45,14 @@ export type AvatarHairStyle =
 
 export type AvatarAccessory =
   | 'none'
+  | 'forehead_goggles'
   | 'round_glasses'
   | 'explorer_hat'
   | 'knight_helmet'
   | 'crown'
   | 'bandana';
+
+export type AvatarNeckAccessory = 'none' | 'red_bandana';
 
 export type AvatarAngle = 'front' | 'right' | 'back' | 'left';
 
@@ -58,6 +61,7 @@ export interface AvatarConfig {
   hairColor?: string;
   strokeColor: string;
   accessory: AvatarAccessory;
+  neckAccessory?: AvatarNeckAccessory;
   angle: AvatarAngle;
 }
 
@@ -65,20 +69,23 @@ export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
   hairStyle: 'spiky',
   hairColor: '#EA580C',
   strokeColor: '#111827',
-  accessory: 'round_glasses',
+  accessory: 'forehead_goggles',
+  neckAccessory: 'red_bandana',
   angle: 'front',
 };
 
 export const AVATAR_HAIR_PROMPT_MAP: Record<AvatarHairStyle, string> = {
   bald: 'smooth bald head with no hair',
-  spiky: 'messy spiky 2D drawn hair',
+  spiky: 'messy spiky 2D drawn hair with sharp distinct tufts',
   curly: 'voluminous curly 2D drawn hair',
   mohawk: 'bold punk mohawk 2D drawn hair',
   pompadour: 'stylish retro pompadour 2D drawn hair',
 };
 
 export const AVATAR_ACCESSORY_PROMPT_MAP: Record<AvatarAccessory, string> = {
-  none: 'no headwear or glasses',
+  none: 'no headwear or goggles',
+  forehead_goggles:
+    'wearing retro aviator goggles with light cyan reflective lenses and brown leather strap resting on his forehead',
   round_glasses: 'wearing iconic round wireframe glasses',
   explorer_hat: 'wearing a classic weathered safari explorer hat',
   knight_helmet: 'wearing a medieval knight visor helmet on his round 2D head',
@@ -86,15 +93,28 @@ export const AVATAR_ACCESSORY_PROMPT_MAP: Record<AvatarAccessory, string> = {
   bandana: 'wearing a rugged adventurer bandana tied around his forehead',
 };
 
+export const AVATAR_NECK_ACCESSORY_PROMPT_MAP: Record<
+  AvatarNeckAccessory,
+  string
+> = {
+  none: '',
+  red_bandana:
+    'a vibrant red adventurer scarf bandana knotted around his neck with folded fabric and fluttering ends',
+};
+
 export const buildClientAvatarPromptDescriptor = (
   config: AvatarConfig = DEFAULT_AVATAR_CONFIG
 ): string => {
   const hair = AVATAR_HAIR_PROMPT_MAP[config.hairStyle || 'spiky'];
-  const hairColor = config.hairColor || config.strokeColor || '#111827';
-  const accessory =
-    AVATAR_ACCESSORY_PROMPT_MAP[config.accessory || 'round_glasses'];
+  const hairColor = config.hairColor || config.strokeColor || '#EA580C';
+  const headAccessory =
+    AVATAR_ACCESSORY_PROMPT_MAP[config.accessory || 'forehead_goggles'];
+  const neckAccessory =
+    AVATAR_NECK_ACCESSORY_PROMPT_MAP[config.neckAccessory || 'red_bandana'];
   const strokeColor = config.strokeColor || '#111827';
-  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in ${hairColor} color, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
+  const neckPhrase = neckAccessory ? `, ${neckAccessory}` : '';
+
+  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}, expressive winking facial expression with a confident cocky smirk, and thin stick-figure limbs with hands on hips outlined in ${strokeColor} ink`;
 };
 
 export const injectAvatarConfigIntoPrompt = (

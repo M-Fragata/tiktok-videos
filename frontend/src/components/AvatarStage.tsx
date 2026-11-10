@@ -23,7 +23,8 @@ export const AvatarStage: React.FC<AvatarStageProps> = ({
   const stroke = config.strokeColor || '#111827';
   const hairStyle = config.hairStyle || 'spiky';
   const hairColor = config.hairColor || '#EA580C';
-  const accessory = config.accessory || 'round_glasses';
+  const accessory = config.accessory || 'forehead_goggles';
+  const neckAccessory = config.neckAccessory || 'red_bandana';
 
   const currentIndex = useMemo(() => {
     const idx = ANGLES_ORDER.indexOf(currentAngle);
@@ -245,71 +246,100 @@ export const AvatarStage: React.FC<AvatarStageProps> = ({
                 </>
               )}
 
-              {/* Tronco de Palito Puro (Sem colete ou roupa - 100% Stickman Base) */}
+              {/* Tronco Cartum Branco com Borda (Stickman com Corpo Preenchido) */}
+              {currentAngle === 'right' || currentAngle === 'left' ? (
+                <path
+                  d="M 86 88 L 84 138 L 96 138 L 94 88 Z"
+                  fill="#ffffff"
+                  stroke={stroke}
+                  strokeWidth="3.6"
+                  strokeLinejoin="round"
+                />
+              ) : (
+                <path
+                  d="M 82 88 L 79 138 L 101 138 L 98 88 Z"
+                  fill="#ffffff"
+                  stroke={stroke}
+                  strokeWidth="3.6"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* Linha do Pescoço */}
               <line
                 x1="90"
-                y1="82"
+                y1="80"
                 x2="90"
-                y2="136"
+                y2="89"
                 stroke={stroke}
-                strokeWidth="4.2"
+                strokeWidth="3.6"
                 strokeLinecap="round"
               />
 
-              {/* Braços de Palito */}
+              {/* Braços com Mãos na Cintura (Pose Confiante - Cotovelos para Fora) */}
               {currentAngle === 'right' ? (
                 <>
+                  {/* Braço de trás */}
                   <path
-                    d="M 90 92 Q 110 104 116 118"
+                    d="M 86 94 L 72 116 L 83 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.8"
+                    strokeWidth="3.2"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.75"
                   />
+                  {/* Braço da frente */}
                   <path
-                    d="M 90 92 Q 78 102 82 114"
+                    d="M 94 94 L 116 116 L 98 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.4"
+                    strokeWidth="3.6"
                     strokeLinecap="round"
-                    opacity="0.8"
+                    strokeLinejoin="round"
                   />
                 </>
               ) : currentAngle === 'left' ? (
                 <>
+                  {/* Braço de trás */}
                   <path
-                    d="M 90 92 Q 70 104 64 118"
+                    d="M 94 94 L 108 116 L 97 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.8"
+                    strokeWidth="3.2"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.75"
                   />
+                  {/* Braço da frente */}
                   <path
-                    d="M 90 92 Q 102 102 98 114"
+                    d="M 86 94 L 64 116 L 82 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.4"
+                    strokeWidth="3.6"
                     strokeLinecap="round"
-                    opacity="0.8"
+                    strokeLinejoin="round"
                   />
                 </>
               ) : (
                 <>
-                  {/* Braço Esquerdo */}
+                  {/* Braço Esquerdo (Mão na Cintura) */}
                   <path
-                    d="M 90 90 Q 68 104 64 122"
+                    d="M 82 94 L 58 118 L 77 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.8"
+                    strokeWidth="3.6"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
-                  {/* Braço Direito */}
+                  {/* Braço Direito (Mão na Cintura) */}
                   <path
-                    d="M 90 90 Q 112 104 116 122"
+                    d="M 98 94 L 122 118 L 103 134"
                     fill="none"
                     stroke={stroke}
-                    strokeWidth="3.8"
+                    strokeWidth="3.6"
                     strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 </>
               )}
@@ -333,68 +363,164 @@ export const AvatarStage: React.FC<AvatarStageProps> = ({
                 <g transform={`translate(${faceOffsetX}, 0)`}>
                   {currentAngle === 'front' ? (
                     <>
-                      {/* Olhos Redondos com Brilho */}
-                      <circle cx="81" cy="54" r="2.8" fill={stroke} />
-                      <circle cx="99" cy="54" r="2.8" fill={stroke} />
-                      {/* Sobrancelhas Expressivas */}
+                      {/* Sobrancelha Direita (do observador esquerda: curvada e determinada) */}
                       <path
-                        d="M 76 46 Q 81 43 86 46"
+                        d="M 73 49 Q 80 45 87 48"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2"
+                        strokeWidth="2.8"
+                        strokeLinecap="round"
+                      />
+                      {/* Olho Direito Aberto com Brilho Pupilar */}
+                      <ellipse cx="80" cy="57" rx="3.4" ry="4.5" fill={stroke} />
+                      <ellipse
+                        cx="81.2"
+                        cy="55.5"
+                        rx="1.2"
+                        ry="1.4"
+                        fill="#ffffff"
+                      />
+
+                      {/* Sobrancelha Esquerda (do observador direita: levantada e confiante) */}
+                      <path
+                        d="M 93 46 Q 100 41 107 45"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.8"
+                        strokeLinecap="round"
+                      />
+                      {/* Olho Esquerdo Piscando (Wink Estiloso) */}
+                      <path
+                        d="M 95 56 Q 101 52 107 56"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.8"
                         strokeLinecap="round"
                       />
                       <path
-                        d="M 94 46 Q 99 43 104 46"
+                        d="M 97 59 Q 101 60 105 59"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2"
+                        strokeWidth="1.4"
                         strokeLinecap="round"
                       />
-                      {/* Sorriso Curvo */}
+
+                      {/* Sorriso Confiante / Smirk de Lado com Dentes Brancos */}
                       <path
-                        d="M 83 65 Q 90 70 97 65"
+                        d="M 78 66 Q 91 72 104 61 Q 93 78 78 66 Z"
+                        fill="#ffffff"
+                        stroke={stroke}
+                        strokeWidth="2.4"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M 77 66 Q 91 72 105 61"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.4"
+                        strokeLinecap="round"
+                      />
+                      {/* Covinha do Smirk */}
+                      <path
+                        d="M 104 61 Q 107 58 106 56"
                         fill="none"
                         stroke={stroke}
                         strokeWidth="2.2"
                         strokeLinecap="round"
+                      />
+                      {/* Divisão suave dos dentes */}
+                      <path
+                        d="M 82 67.5 Q 92 72.5 101 63.5"
+                        stroke="#cbd5e1"
+                        strokeWidth="1"
+                        fill="none"
                       />
                     </>
                   ) : currentAngle === 'right' ? (
                     <>
-                      <circle cx="88" cy="54" r="2.6" fill={stroke} />
-                      <circle cx="101" cy="54" r="2.8" fill={stroke} />
+                      {/* Sobrancelha interna */}
                       <path
-                        d="M 85 46 Q 90 44 93 46 M 97 46 Q 102 44 105 47"
+                        d="M 84 48 Q 88 45 92 48"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      <ellipse cx="89" cy="57" rx="2.8" ry="4.2" fill={stroke} />
+                      <ellipse cx="90" cy="55.5" rx="1" ry="1.2" fill="#ffffff" />
+                      {/* Sobrancelha externa arqueada */}
+                      <path
+                        d="M 96 46 Q 102 42 107 46"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      {/* Piscadela */}
+                      <path
+                        d="M 97 56 Q 102 52 106 56"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      {/* Smirk lateral */}
+                      <path
+                        d="M 88 66 Q 97 71 106 63"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.4"
                         strokeLinecap="round"
                       />
                       <path
-                        d="M 90 65 Q 98 69 103 64"
+                        d="M 105 63 Q 108 60 107 58"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2.2"
+                        strokeWidth="2"
                         strokeLinecap="round"
                       />
                     </>
                   ) : (
                     <>
-                      <circle cx="79" cy="54" r="2.8" fill={stroke} />
-                      <circle cx="92" cy="54" r="2.6" fill={stroke} />
+                      {/* Sobrancelha externa */}
                       <path
-                        d="M 75 47 Q 78 44 83 46 M 87 46 Q 90 44 95 46"
+                        d="M 73 48 Q 78 44 83 48"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      <ellipse cx="78" cy="57" rx="2.8" ry="4.2" fill={stroke} />
+                      <ellipse cx="79" cy="55.5" rx="1" ry="1.2" fill="#ffffff" />
+                      {/* Sobrancelha interna arqueada */}
+                      <path
+                        d="M 88 46 Q 93 42 97 46"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      {/* Piscadela */}
+                      <path
+                        d="M 89 56 Q 93 52 97 56"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                      />
+                      {/* Smirk lateral */}
+                      <path
+                        d="M 75 64 Q 84 71 93 66"
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth="2.4"
                         strokeLinecap="round"
                       />
                       <path
-                        d="M 77 64 Q 82 69 90 65"
+                        d="M 92 66 Q 95 64 94 62"
                         fill="none"
                         stroke={stroke}
-                        strokeWidth="2.2"
+                        strokeWidth="2"
                         strokeLinecap="round"
                       />
                     </>
@@ -416,10 +542,18 @@ export const AvatarStage: React.FC<AvatarStageProps> = ({
                  ------------------------------------------------------------ */}
               {hairStyle === 'spiky' && (
                 <path
-                  d="M 66 45 L 61 31 L 74 36 L 79 21 L 89 32 L 97 19 L 104 33 L 115 24 L 113 39 L 121 37 L 114 48 Q 90 33 66 45 Z"
+                  d={
+                    currentAngle === 'right'
+                      ? 'M 64 48 L 54 30 L 69 33 L 78 14 L 88 23 L 98 9 L 104 23 L 118 14 L 121 32 L 136 29 L 126 49 Q 95 35 64 48 Z'
+                      : currentAngle === 'left'
+                      ? 'M 54 49 L 44 29 L 59 32 L 62 14 L 76 23 L 82 9 L 92 23 L 102 14 L 111 33 L 126 30 L 116 48 Q 85 35 54 49 Z'
+                      : currentAngle === 'back'
+                      ? 'M 58 48 L 48 28 L 63 31 L 69 12 L 82 22 L 90 7 L 98 22 L 111 12 L 117 31 L 132 28 L 122 48 Q 124 60 90 62 Q 56 60 58 48 Z'
+                      : 'M 58 48 L 48 28 L 63 31 L 69 12 L 82 22 L 90 7 L 98 22 L 111 12 L 117 31 L 132 28 L 122 48 Q 90 34 58 48 Z'
+                  }
                   fill={hairColor}
                   stroke={stroke}
-                  strokeWidth="1.8"
+                  strokeWidth="3"
                   strokeLinejoin="round"
                 />
               )}
@@ -608,6 +742,517 @@ export const AvatarStage: React.FC<AvatarStageProps> = ({
                       strokeWidth="2.5"
                       strokeLinecap="round"
                     />
+                  )}
+                </g>
+              )}
+
+              {accessory === 'forehead_goggles' && (
+                <g>
+                  {currentAngle === 'back' ? (
+                    /* Vista de costas: Tira de couro com costura e fivela metálica de ajuste */
+                    <g>
+                      <path
+                        d="M 64 45 Q 90 48 116 45"
+                        fill="none"
+                        stroke="#4a2e18"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M 65 43 Q 90 46 115 43"
+                        fill="none"
+                        stroke="#271406"
+                        strokeWidth="1"
+                        strokeDasharray="2,2"
+                      />
+                      <path
+                        d="M 65 47 Q 90 50 115 47"
+                        fill="none"
+                        stroke="#271406"
+                        strokeWidth="1"
+                        strokeDasharray="2,2"
+                      />
+                      {/* Fivela de Latão */}
+                      <rect
+                        x="86.5"
+                        y="42"
+                        width="7"
+                        height="8"
+                        rx="1.5"
+                        fill="#ca8a04"
+                        stroke="#78350f"
+                        strokeWidth="1.2"
+                      />
+                      <rect
+                        x="88.5"
+                        y="44"
+                        width="3"
+                        height="4"
+                        rx="0.5"
+                        fill="#4a2e18"
+                      />
+                      <line
+                        x1="90"
+                        y1="42"
+                        x2="90"
+                        y2="50"
+                        stroke="#78350f"
+                        strokeWidth="1"
+                      />
+                    </g>
+                  ) : currentAngle === 'right' ? (
+                    /* Vista Perfil Direito */
+                    <g>
+                      {/* Tira de couro */}
+                      <path
+                        d="M 64 48 Q 88 44 116 46"
+                        stroke="#4a2e18"
+                        strokeWidth="5.5"
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                      {/* Lente esquerda (perspectiva recuada) */}
+                      <rect
+                        x="71"
+                        y="35"
+                        width="16"
+                        height="16"
+                        rx="5"
+                        ry="5"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.2"
+                      />
+                      <rect
+                        x="73"
+                        y="37"
+                        width="12"
+                        height="12"
+                        rx="3.5"
+                        ry="3.5"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1"
+                      />
+                      <line
+                        x1="75"
+                        y1="45"
+                        x2="80"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      {/* Ponte */}
+                      <path
+                        d="M 86 43 Q 90 41 94 43"
+                        stroke="#4a2e18"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      {/* Lente direita (em destaque) */}
+                      <rect
+                        x="94"
+                        y="35"
+                        width="22"
+                        height="16"
+                        rx="6"
+                        ry="6"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.4"
+                      />
+                      <rect
+                        x="96"
+                        y="37"
+                        width="18"
+                        height="12"
+                        rx="4"
+                        ry="4"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1.2"
+                      />
+                      <line
+                        x1="99"
+                        y1="46"
+                        x2="106"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      <line
+                        x1="106"
+                        y1="46"
+                        x2="110"
+                        y2="41"
+                        stroke="#ffffff"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                    </g>
+                  ) : currentAngle === 'left' ? (
+                    /* Vista Perfil Esquerdo */
+                    <g>
+                      {/* Tira de couro */}
+                      <path
+                        d="M 64 46 Q 92 44 116 48"
+                        stroke="#4a2e18"
+                        strokeWidth="5.5"
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                      {/* Lente esquerda (em destaque) */}
+                      <rect
+                        x="64"
+                        y="35"
+                        width="22"
+                        height="16"
+                        rx="6"
+                        ry="6"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.4"
+                      />
+                      <rect
+                        x="66"
+                        y="37"
+                        width="18"
+                        height="12"
+                        rx="4"
+                        ry="4"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1.2"
+                      />
+                      <line
+                        x1="70"
+                        y1="46"
+                        x2="77"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      <line
+                        x1="77"
+                        y1="46"
+                        x2="81"
+                        y2="41"
+                        stroke="#ffffff"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      {/* Ponte */}
+                      <path
+                        d="M 86 43 Q 90 41 94 43"
+                        stroke="#4a2e18"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      {/* Lente direita (perspectiva recuada) */}
+                      <rect
+                        x="93"
+                        y="35"
+                        width="16"
+                        height="16"
+                        rx="5"
+                        ry="5"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.2"
+                      />
+                      <rect
+                        x="95"
+                        y="37"
+                        width="12"
+                        height="12"
+                        rx="3.5"
+                        ry="3.5"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1"
+                      />
+                      <line
+                        x1="98"
+                        y1="45"
+                        x2="103"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                    </g>
+                  ) : (
+                    /* Vista Frontal: Óculos Aviador Retro com Lentes Ciano Espelhadas na Testa */
+                    <g>
+                      {/* Tira de couro ajustável na testa */}
+                      <path
+                        d="M 64 46 Q 90 44 116 46"
+                        stroke="#4a2e18"
+                        strokeWidth="5.5"
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                      {/* Moldura Esquerda de Couro/Bronze */}
+                      <rect
+                        x="66"
+                        y="35"
+                        width="21"
+                        height="16"
+                        rx="6"
+                        ry="6"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.4"
+                      />
+                      {/* Vidro Ciano Espelhado Esquerdo */}
+                      <rect
+                        x="68"
+                        y="37"
+                        width="17"
+                        height="12"
+                        rx="4"
+                        ry="4"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1.2"
+                      />
+                      {/* Brilho Reflexivo Esquerdo */}
+                      <line
+                        x1="71"
+                        y1="46"
+                        x2="77"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      <line
+                        x1="77"
+                        y1="46"
+                        x2="81"
+                        y2="41.5"
+                        stroke="#ffffff"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+
+                      {/* Ponte Central de Conexão */}
+                      <path
+                        d="M 86 43 Q 90 41 94 43"
+                        stroke="#4a2e18"
+                        strokeWidth="4.5"
+                        strokeLinecap="round"
+                        fill="none"
+                      />
+                      <path
+                        d="M 87 41.5 Q 90 40 93 41.5"
+                        stroke="#271406"
+                        strokeWidth="1.2"
+                        fill="none"
+                      />
+
+                      {/* Moldura Direita de Couro/Bronze */}
+                      <rect
+                        x="93"
+                        y="35"
+                        width="21"
+                        height="16"
+                        rx="6"
+                        ry="6"
+                        fill="#4a2e18"
+                        stroke="#271406"
+                        strokeWidth="2.4"
+                      />
+                      {/* Vidro Ciano Espelhado Direito */}
+                      <rect
+                        x="95"
+                        y="37"
+                        width="17"
+                        height="12"
+                        rx="4"
+                        ry="4"
+                        fill="#38bdf8"
+                        stroke="#0284c7"
+                        strokeWidth="1.2"
+                      />
+                      {/* Brilho Reflexivo Direito */}
+                      <line
+                        x1="98"
+                        y1="46"
+                        x2="104"
+                        y2="39"
+                        stroke="#ffffff"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                      <line
+                        x1="104"
+                        y1="46"
+                        x2="108"
+                        y2="41.5"
+                        stroke="#ffffff"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                        opacity="0.9"
+                      />
+                    </g>
+                  )}
+                </g>
+              )}
+
+              {/* ------------------------------------------------------------
+                  6. ACESSÓRIO DE PESCOÇO (neckAccessory - Bandana Vermelha)
+                 ------------------------------------------------------------ */}
+              {neckAccessory === 'red_bandana' && (
+                <g>
+                  {currentAngle === 'back' ? (
+                    /* Vista de costas: Fita da bandana atrás do pescoço */
+                    <g>
+                      <path
+                        d="M 73 80 Q 90 78 107 80 Q 108 90 90 92 Q 72 90 73 80 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M 76 83 Q 90 81 104 83"
+                        fill="none"
+                        stroke="#991b1b"
+                        strokeWidth="1.2"
+                      />
+                      {/* Pontas escapando sutilmente na lateral esquerda */}
+                      <path
+                        d="M 73 84 C 62 86, 52 82, 48 83 C 54 88, 64 91, 72 91 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.4"
+                      />
+                    </g>
+                  ) : currentAngle === 'right' ? (
+                    /* Vista lateral direita */
+                    <g>
+                      <path
+                        d="M 78 81 Q 90 85 103 82 Q 104 92 90 94 Q 78 92 78 81 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      {/* Nó na lateral */}
+                      <circle
+                        cx="80"
+                        cy="88"
+                        r="4"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                      />
+                      {/* Pontas esvoaçantes */}
+                      <path
+                        d="M 80 88 Q 68 93 62 97 C 70 96, 78 93, 82 92 Z"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                      />
+                    </g>
+                  ) : currentAngle === 'left' ? (
+                    /* Vista lateral esquerda com nó proeminente */
+                    <g>
+                      <path
+                        d="M 77 82 Q 90 85 102 81 Q 102 92 90 94 Q 76 92 77 82 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      {/* Nó principal */}
+                      <circle
+                        cx="74"
+                        cy="87"
+                        r="4.2"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                      />
+                      {/* Pontas esvoaçantes para a esquerda */}
+                      <path
+                        d="M 73 87 C 60 88, 50 83, 46 82 C 52 89, 62 92, 71 93 Z"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M 73 89 C 61 97, 52 103, 48 107 C 60 105, 70 99, 74 94 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                  ) : (
+                    /* Vista Frontal: Bandana Vermelha Dobrada no Pescoço com Nó e Pontas Esvoaçantes */
+                    <g>
+                      {/* Envoltório da gola */}
+                      <path
+                        d="M 73 80 Q 90 85 107 80 Q 108 91 90 94 Q 72 91 73 80 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                      />
+                      {/* Caimento triangular do lenço */}
+                      <path
+                        d="M 80 87 Q 90 102 97 90 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                      />
+                      {/* Nó lateral */}
+                      <circle
+                        cx="75"
+                        cy="87"
+                        r="4.2"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.8"
+                      />
+                      <path
+                        d="M 73 85 Q 75 88 77 86"
+                        fill="none"
+                        stroke="#fca5a5"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+                      {/* Pontas esvoaçantes para o lado */}
+                      <path
+                        d="M 74 87 C 62 88, 52 84, 48 83 C 54 89, 64 92, 72 93 Z"
+                        fill="#ef4444"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M 74 89 C 62 96, 54 102, 50 106 C 62 104, 72 99, 75 94 Z"
+                        fill="#dc2626"
+                        stroke="#991b1b"
+                        strokeWidth="1.6"
+                        strokeLinejoin="round"
+                      />
+                    </g>
                   )}
                 </g>
               )}

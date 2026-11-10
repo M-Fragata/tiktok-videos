@@ -5,6 +5,7 @@ import {
   AvatarAccessory,
   AvatarConfig,
   AvatarHairStyle,
+  AvatarNeckAccessory,
   BGM_VIBE_OPTIONS,
   BgmVibe,
   buildClientAvatarPromptDescriptor,
@@ -54,12 +55,21 @@ const HAIR_STYLE_OPTIONS: Array<{ value: AvatarHairStyle; label: string }> = [
 ];
 
 const ACCESSORY_OPTIONS: Array<{ value: AvatarAccessory; label: string }> = [
+  { value: 'forehead_goggles', label: '🥽 Goggles na Testa' },
+  { value: 'round_glasses', label: '👓 Óculos Redondos' },
+  { value: 'explorer_hat', label: '🤠 Chapéu Explorador' },
+  { value: 'knight_helmet', label: '🛡️ Elmo Medieval' },
+  { value: 'crown', label: '👑 Coroa Real' },
+  { value: 'bandana', label: '🎗️ Bandana na Testa' },
   { value: 'none', label: 'Sem Acessório' },
-  { value: 'round_glasses', label: 'Óculos Redondos' },
-  { value: 'explorer_hat', label: 'Chapéu Explorador' },
-  { value: 'knight_helmet', label: 'Elmo Medieval' },
-  { value: 'crown', label: 'Coroa Real' },
-  { value: 'bandana', label: 'Bandana Aventureiro' },
+];
+
+const NECK_ACCESSORY_OPTIONS: Array<{
+  value: AvatarNeckAccessory;
+  label: string;
+}> = [
+  { value: 'red_bandana', label: '🧣 Bandana Vermelha' },
+  { value: 'none', label: 'Sem Bandana' },
 ];
 
 const STROKE_SWATCHES = [
@@ -413,27 +423,46 @@ export const IdeationDressingRoomTab: React.FC<
                 </div>
               </div>
 
-              {/* 2. Acessórios */}
+              {/* 2. Acessórios (Cabeça + Pescoço em Flex Row lado a lado) */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
                   2. Acessórios
                 </label>
-                <select
-                  value={avatarConfig.accessory}
-                  onChange={(e) =>
-                    setAvatarConfig((prev) => ({
-                      ...prev,
-                      accessory: e.target.value as AvatarAccessory,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition h-[38px]"
-                >
-                  {ACCESSORY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <select
+                    value={avatarConfig.accessory || 'forehead_goggles'}
+                    onChange={(e) =>
+                      setAvatarConfig((prev) => ({
+                        ...prev,
+                        accessory: e.target.value as AvatarAccessory,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition h-[38px]"
+                  >
+                    {ACCESSORY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={avatarConfig.neckAccessory || 'red_bandana'}
+                    onChange={(e) =>
+                      setAvatarConfig((prev) => ({
+                        ...prev,
+                        neckAccessory: e.target.value as AvatarNeckAccessory,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition h-[38px]"
+                  >
+                    {NECK_ACCESSORY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* 3. Cor do Traço (Ink Line) */}
