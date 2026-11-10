@@ -465,19 +465,19 @@ export const IdeationDressingRoomTab: React.FC<
                 </div>
               </div>
 
-              {/* 3. Cor do Traço (Ink Line) */}
+              {/* 3. Cor do Traço */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[11px] font-semibold text-slate-300">
-                    3. Cor do Traço (Ink Line)
+                    3. Cor do Traço
                   </label>
                   <span className="font-mono text-[10px] text-slate-400 uppercase">
                     {avatarConfig.strokeColor}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#2c2c32] bg-[#121214] p-2">
-                  <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#2c2c32] bg-[#121214] px-3 py-1.5 min-h-[38px]">
+                  <div className="flex items-center gap-2 py-0.5">
                     {STROKE_SWATCHES.map((swatch) => {
                       const isSelected =
                         avatarConfig.strokeColor.toLowerCase() ===
@@ -494,9 +494,9 @@ export const IdeationDressingRoomTab: React.FC<
                             }))
                           }
                           style={{ backgroundColor: swatch.color }}
-                          className={`h-6 w-6 shrink-0 rounded-full border transition-transform ${
+                          className={`h-5 w-5 shrink-0 rounded-full border transition-transform ${
                             isSelected
-                              ? 'scale-110 border-amber-400 ring-2 ring-amber-500/40'
+                              ? 'scale-110 border-amber-400 ring-2 ring-amber-500/50'
                               : 'border-white/25 hover:scale-105'
                           }`}
                         />
