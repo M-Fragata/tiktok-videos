@@ -19,6 +19,30 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
+export type AvatarHairStyle =
+  | 'bald'
+  | 'spiky'
+  | 'curly'
+  | 'mohawk'
+  | 'pompadour';
+
+export type AvatarAccessory =
+  | 'none'
+  | 'round_glasses'
+  | 'explorer_hat'
+  | 'knight_helmet'
+  | 'crown'
+  | 'bandana';
+
+export type AvatarAngle = 'front' | 'right' | 'back' | 'left';
+
+export interface AvatarConfigInput {
+  hairStyle?: AvatarHairStyle;
+  strokeColor?: string;
+  accessory?: AvatarAccessory;
+  angle?: AvatarAngle;
+}
+
 export interface ScriptScene {
   speaker: SpeakerType;
   text: string;
@@ -27,11 +51,51 @@ export interface ScriptScene {
   sfx_suggestion?: string;
 }
 
+export interface IdeationScriptOption {
+  id: 'humor' | 'action' | 'dark' | 'chaotic' | string;
+  title: string;
+  badge: string;
+  description: string;
+  scenes: ScriptScene[];
+}
+
+export interface GeneratedIdeation {
+  options: IdeationScriptOption[];
+}
+
 export interface GeneratedScript {
   scenes: ScriptScene[];
 }
 
 const VALID_SPEAKERS: SpeakerType[] = ['protagonist', 'character', 'narrator'];
+
+const HAIR_PROMPT_MAP: Record<AvatarHairStyle, string> = {
+  bald: 'smooth bald head with no hair',
+  spiky: 'messy spiky 2D drawn hair',
+  curly: 'voluminous curly 2D drawn hair',
+  mohawk: 'bold punk mohawk 2D drawn hair',
+  pompadour: 'stylish retro pompadour 2D drawn hair',
+};
+
+const ACCESSORY_PROMPT_MAP: Record<AvatarAccessory, string> = {
+  none: 'no headwear or glasses',
+  round_glasses: 'wearing iconic round wireframe glasses',
+  explorer_hat: 'wearing a classic weathered safari explorer hat',
+  knight_helmet: 'wearing a medieval knight visor helmet on his round 2D head',
+  crown: 'wearing a golden royal crown tilted on his 2D head',
+  bandana: 'wearing a rugged adventurer bandana tied around his forehead',
+};
+
+export function buildAvatarPromptDescriptor(
+  avatarConfig?: AvatarConfigInput
+): string {
+  const hair = HAIR_PROMPT_MAP[avatarConfig?.hairStyle || 'spiky'];
+  const accessory =
+    ACCESSORY_PROMPT_MAP[avatarConfig?.accessory || 'round_glasses'];
+  const strokeColor = avatarConfig?.strokeColor || '#111827';
+
+  return `2D cartoon stickman protagonist with a smooth round white head, ${hair}, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
+}
 
 const DURATION_RULES: Record<
   DurationPreset,
@@ -207,5 +271,173 @@ Retorne APENAS um objeto JSON válido neste formato exato:
 
   throw new Error(
     'Falha ao gerar roteiro no Google Gemini com os modelos disponíveis.'
+  );
+}
+
+/**
+ * Pilar 1B (Motor de Ideação Mix & Match):
+ * Gera 4 opções de roteiro completas com ângulos narrativos distintos
+ * (Humor, Ação, Sombrio, Caótico) já injetando a aparência customizada do Avatar
+ * nos prompts de imagem de cada cena.
+ */
+export async function generateTimeMachineIdeation(
+  theme: string,
+  durationPreset: DurationPreset = 'short',
+  avatarConfig?: AvatarConfigInput
+): Promise<GeneratedIdeation> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY não configurada no ficheiro backend/.env.');
+  }
+
+  const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
+  const avatarDescriptor = buildAvatarPromptDescriptor(avatarConfig);
+
+  const systemInstruction = `És um roteirista sénior e Diretor de Arte especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
+
+A tua missão é criar um BRAINSTORMING DE ROTEIROS com EXATAMENTE 4 OPÇÕES de ângulos narrativos distintos para o mesmo tema histórico:
+1. id: "humor" | title: "Humor & Ironia" | badge: "😂 Humor" -> Abordagem cómica, sarcástica, destacando o absurdo quotidiano da época.
+2. id: "action" | title: "Ação & Sobrevivência" | badge: "⚔️ Ação" -> Ritmo frenético, perigo iminente, adrenalina no olho do furacão histórico.
+3. id: "dark" | title: "Sombrio & Mistério" | badge: "🌑 Sombrio" -> Atmosfera densa, segredos ocultos, tensão psicológica e detalhes arrepiantes.
+4. id: "chaotic" | title: "Caótico & Paradoxo" | badge: "🔥 Caótico" -> Ritmo imprevisível, reviravoltas rápidas e choque cultural extremo do viajante do tempo.
+
+Duração Selecionada para CADA uma das 4 opções (${rule.label}):
+- Estrutura por opção: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala por opção).
+- LIMITE ESTRITO DE PALAVRAS POR OPÇÃO: A soma das falas ("text") dentro de cada opção NÃO DEVE ultrapassar ${rule.maxWords} palavras.
+
+APARÊNCIA CUSTOMIZADA DO AVATAR PROTAGONISTA (OBRIGATÓRIO EM TODOS OS "imagePrompt"):
+O utilizador configurou o protagonista no Camarim 360º com a seguinte aparência exata:
+"${avatarDescriptor}"
+
+DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
+Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminologia de modelos de difusão para forçar a estética "Mixed Media Illustration":
+1. GATILHO DE ESTILO + AVATAR CUSTOMIZADO: Comece SEMPRE o prompt com:
+   "Mixed media 2D/3D illustration, a ${avatarDescriptor}, integrated seamlessly into a realistic 3D cinematic environment."
+2. ANATOMIA E TRAJES DO PERSONAGEM:
+   - O protagonista mantém sempre as características do Camarim (${avatarDescriptor}), combinadas com roupas ou objetos que interajam com a época histórica.
+   - Figuras secundárias da época também têm cabeça redonda branca 2D plana em estilo doodle/comic e membros de palito finos com trajes históricos texturizados.
+   - NUNCA descreva pele humana realista ("stylized 2D white doodle head, no realistic human skin or photorealistic faces").
+3. INTERAÇÃO FÍSICA, ILUMINAÇÃO E SOMBRAS 3D:
+   - O personagem 2D interage fisicamente com objetos e cenários 3D realistas.
+   - Termine SEMPRE o prompt com: "integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+
+Regras de Saída (JSON Estrito):
+O campo "avatarSprite" deve ser ESTRITAMENTE UMA destas strings:
+${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
+
+  const sceneItemSchema = {
+    type: 'OBJECT',
+    properties: {
+      speaker: {
+        type: 'STRING',
+        enum: VALID_SPEAKERS,
+      },
+      text: {
+        type: 'STRING',
+      },
+      avatarSprite: {
+        type: 'STRING',
+        enum: [...VALID_AVATAR_SPRITES],
+      },
+      imagePrompt: {
+        type: 'STRING',
+      },
+      sfx_suggestion: {
+        type: 'STRING',
+      },
+    },
+    required: ['speaker', 'text', 'avatarSprite', 'imagePrompt'],
+  };
+
+  const responseSchema = {
+    type: 'OBJECT',
+    properties: {
+      options: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            id: {
+              type: 'STRING',
+              enum: ['humor', 'action', 'dark', 'chaotic'],
+            },
+            title: {
+              type: 'STRING',
+            },
+            badge: {
+              type: 'STRING',
+            },
+            description: {
+              type: 'STRING',
+            },
+            scenes: {
+              type: 'ARRAY',
+              items: sceneItemSchema,
+            },
+          },
+          required: ['id', 'title', 'badge', 'description', 'scenes'],
+        },
+      },
+    },
+    required: ['options'],
+  };
+
+  const candidateModels = [
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+  ];
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `${systemInstruction}\n\nTema Histórico da Viagem no Tempo: ${theme}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        console.warn(
+          `[Gemini Ideation] Modelo ${model} retornou erro (${data.error.code}): ${data.error.message}`
+        );
+        continue;
+      }
+
+      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawJson) {
+        continue;
+      }
+
+      const parsed = JSON.parse(rawJson) as GeneratedIdeation;
+      if (Array.isArray(parsed.options) && parsed.options.length > 0) {
+        console.log(
+          `[Gemini Ideation] ${parsed.options.length} opções de roteiro (${durationPreset}) geradas com sucesso usando ${model}.`
+        );
+        return parsed;
+      }
+    } catch (err) {
+      console.warn(`[Gemini Ideation] Falha ao tentar modelo ${model}:`, err);
+    }
+  }
+
+  throw new Error(
+    'Falha ao gerar opções de roteiro no Google Gemini com os modelos disponíveis.'
   );
 }

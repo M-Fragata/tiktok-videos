@@ -23,6 +23,78 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
+export type AvatarHairStyle =
+  | 'bald'
+  | 'spiky'
+  | 'curly'
+  | 'mohawk'
+  | 'pompadour';
+
+export type AvatarAccessory =
+  | 'none'
+  | 'round_glasses'
+  | 'explorer_hat'
+  | 'knight_helmet'
+  | 'crown'
+  | 'bandana';
+
+export type AvatarAngle = 'front' | 'right' | 'back' | 'left';
+
+export interface AvatarConfig {
+  hairStyle: AvatarHairStyle;
+  strokeColor: string;
+  accessory: AvatarAccessory;
+  angle: AvatarAngle;
+}
+
+export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
+  hairStyle: 'spiky',
+  strokeColor: '#111827',
+  accessory: 'round_glasses',
+  angle: 'front',
+};
+
+export const AVATAR_HAIR_PROMPT_MAP: Record<AvatarHairStyle, string> = {
+  bald: 'smooth bald head with no hair',
+  spiky: 'messy spiky 2D drawn hair',
+  curly: 'voluminous curly 2D drawn hair',
+  mohawk: 'bold punk mohawk 2D drawn hair',
+  pompadour: 'stylish retro pompadour 2D drawn hair',
+};
+
+export const AVATAR_ACCESSORY_PROMPT_MAP: Record<AvatarAccessory, string> = {
+  none: 'no headwear or glasses',
+  round_glasses: 'wearing iconic round wireframe glasses',
+  explorer_hat: 'wearing a classic weathered safari explorer hat',
+  knight_helmet: 'wearing a medieval knight visor helmet on his round 2D head',
+  crown: 'wearing a golden royal crown tilted on his 2D head',
+  bandana: 'wearing a rugged adventurer bandana tied around his forehead',
+};
+
+export const buildClientAvatarPromptDescriptor = (
+  config: AvatarConfig = DEFAULT_AVATAR_CONFIG
+): string => {
+  const hair = AVATAR_HAIR_PROMPT_MAP[config.hairStyle || 'spiky'];
+  const accessory =
+    AVATAR_ACCESSORY_PROMPT_MAP[config.accessory || 'round_glasses'];
+  const strokeColor = config.strokeColor || '#111827';
+  return `2D cartoon stickman protagonist with a smooth round white head, ${hair}, ${accessory}, expressive simple facial features, and thin stick-figure limbs outlined in ${strokeColor} ink`;
+};
+
+export const injectAvatarConfigIntoPrompt = (
+  rawPrompt: string,
+  config: AvatarConfig
+): string => {
+  const descriptor = buildClientAvatarPromptDescriptor(config);
+  const genericPattern =
+    /2D cartoon stickman (?:character|protagonist) with a smooth round white head,[^.]+?limbs(?: outlined in #[0-9a-fA-F]{3,6} ink)?/i;
+
+  if (genericPattern.test(rawPrompt)) {
+    return rawPrompt.replace(genericPattern, descriptor);
+  }
+  return `Mixed media 2D/3D illustration, a ${descriptor}. ${rawPrompt}`;
+};
+
 export interface SubtitleWordTiming {
   word: string;
   frameStart: number;
@@ -100,12 +172,22 @@ export interface StoryboardScene {
   selectedImage: string | null;
 }
 
+export interface IdeationOption {
+  id: string;
+  title: string;
+  badge?: string;
+  description?: string;
+  scenes: StoryboardScene[];
+}
+
 export interface StoryboardState {
   durationPreset: DurationPreset;
   scenes: StoryboardScene[];
   audioGenerated: boolean;
   isAssembled: boolean;
   sceneTimings?: SceneFrameTiming[];
+  avatarConfig?: AvatarConfig;
+  ideationOptions?: IdeationOption[];
 }
 
 export type TimeMachineVideoProps = {

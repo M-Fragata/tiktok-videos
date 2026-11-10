@@ -4,11 +4,15 @@ import { Player, PlayerRef } from '@remotion/player';
 import { TimeMachineVideo } from '../remotion/TimeMachineVideo';
 import {
   AVAILABLE_AVATAR_SPRITES,
+  AvatarConfig,
   AvatarSegment,
   BackgroundSegment,
+  DEFAULT_AVATAR_CONFIG,
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
   ensureSubtitleWordTimings,
+  IdeationOption,
+  injectAvatarConfigIntoPrompt,
   resolveAssetSrc,
   SceneFrameTiming,
   SpeakerType,
@@ -21,6 +25,10 @@ import {
   TimeMachineVideoProps,
   VideoRecord,
 } from '../remotion/types';
+import {
+  IdeationDressingRoomTab,
+  SelectedFinalSceneItem,
+} from '../components/IdeationDressingRoomTab';
 
 type InspectorTab = 'briefing' | 'storyboard' | 'subtitles';
 
@@ -82,11 +90,19 @@ export const Studio: React.FC = () => {
   const [isSubtitleBlocksCollapsed, setIsSubtitleBlocksCollapsed] =
     useState<boolean>(false);
 
-  // Etapa 1: Briefing
+  // Etapa 1: Sala de Ideação & Camarim 360º
   const [theme, setTheme] = useState<string>('');
   const [durationPreset, setDurationPreset] =
     useState<DurationPreset>('short');
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(
+    DEFAULT_AVATAR_CONFIG
+  );
+  const [ideationOptions, setIdeationOptions] = useState<IdeationOption[]>([]);
+  const [finalMixScenes, setFinalMixScenes] = useState<
+    SelectedFinalSceneItem[]
+  >([]);
   const [isGeneratingScript, setIsGeneratingScript] = useState<boolean>(false);
+  const [isApprovingScript, setIsApprovingScript] = useState<boolean>(false);
 
   // Etapa 2 & 3: Storyboard e Fábrica Granular
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
@@ -198,8 +214,32 @@ export const Studio: React.FC = () => {
 
     if (props.storyboard) {
       setDurationPreset(props.storyboard.durationPreset || 'short');
+      if (props.storyboard.avatarConfig) {
+        setAvatarConfig({
+          ...DEFAULT_AVATAR_CONFIG,
+          ...props.storyboard.avatarConfig,
+        });
+      }
+      if (
+        props.storyboard.ideationOptions &&
+        props.storyboard.ideationOptions.length > 0
+      ) {
+        setIdeationOptions(props.storyboard.ideationOptions);
+      }
+
       const loadedScenes = props.storyboard.scenes || [];
       setScenes(loadedScenes);
+      if (loadedScenes.length > 0 && finalMixScenes.length === 0) {
+        setFinalMixScenes(
+          loadedScenes.map((sc, idx) => ({
+            uid: `approved__scene_${idx}`,
+            sourceOptionId: 'approved',
+            sourceOptionBadge: '✓ Aprovada',
+            sourceSceneIndex: idx,
+            scene: sc,
+          }))
+        );
+      }
       setAudioGenerated(Boolean(props.storyboard.audioGenerated));
       setIsAssembled(Boolean(props.storyboard.isAssembled));
       setSceneTimings(props.storyboard.sceneTimings || []);
@@ -319,7 +359,7 @@ export const Studio: React.FC = () => {
   }, [id, videoRecord?.status]);
 
   // ========================================================
-  // ETAPA 1: Gerar Roteiro com IA (POST /api/videos/:id/generate-script)
+  // ETAPA 1A: Gerar 4 Opções de Ideias com IA (POST /api/videos/:id/generate-script)
   // ========================================================
   const handleGenerateScript = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,31 +381,131 @@ export const Studio: React.FC = () => {
         body: JSON.stringify({
           theme: cleanTheme,
           durationPreset,
+          avatarConfig,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Falha ao gerar roteiro no Gemini');
+        throw new Error(
+          data.error || 'Falha ao gerar ideias de roteiro no Gemini'
+        );
       }
 
-      setVideoRecord(data.video);
-      if (data.video?.remotionProps) {
-        hydrateFromProps(data.video.remotionProps, data.video.theme);
-      } else if (data.scenes) {
-        setScenes(data.scenes);
+      if (data.video) {
+        setVideoRecord(data.video);
+      }
+
+      if (Array.isArray(data.options) && data.options.length > 0) {
+        setIdeationOptions(data.options);
+        setSuccessMsg(
+          `4 opções de roteiro geradas! Abra os accordions, escolha as melhores cenas e aprove o Roteiro Final.`
+        );
+      } else if (Array.isArray(data.scenes) && data.scenes.length > 0) {
+        const fallbackOption: IdeationOption = {
+          id: 'humor',
+          title: 'Roteiro Sugerido',
+          badge: '💡 Opção 1',
+          description: 'Cenas geradas pelo Gemini',
+          scenes: data.scenes,
+        };
+        setIdeationOptions([fallbackOption]);
+      }
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Erro ao gerar ideias com IA'
+      );
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
+  // ========================================================
+  // ETAPA 1B: Consolidar e Aprovar o "Roteiro Final" (Mix & Match)
+  // ========================================================
+  const handleApproveFinalScript = async () => {
+    if (!id || finalMixScenes.length === 0) return;
+
+    setIsApprovingScript(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    try {
+      const consolidatedScenes: StoryboardScene[] = finalMixScenes.map(
+        (item) => ({
+          ...item.scene,
+          imagePrompt: injectAvatarConfigIntoPrompt(
+            item.scene.imagePrompt,
+            avatarConfig
+          ),
+          candidateImages: item.scene.candidateImages || [],
+          selectedImage: item.scene.selectedImage || null,
+        })
+      );
+
+      setScenes(consolidatedScenes);
+      setAudioGenerated(false);
+      setIsAssembled(false);
+      setSceneTimings([]);
+      setSubtitles([]);
+
+      const targetDurationFrames =
+        durationPreset === 'long'
+          ? 1800
+          : durationPreset === 'medium'
+            ? 900
+            : 450;
+      setDurationInFrames(targetDurationFrames);
+
+      const payload: TimeMachineVideoProps = {
+        theme: theme.trim() || 'Vlog de Viagem no Tempo',
+        durationInFrames: targetDurationFrames,
+        backgroundSrc: backgroundSrc || 'background.jpg',
+        backgroundTimeline: [],
+        audioSrc: audioSrc || 'audio.mp3',
+        subtitles: [],
+        subtitleStyle,
+        avatarTimeline: [],
+        storyboard: {
+          durationPreset,
+          scenes: consolidatedScenes,
+          audioGenerated: false,
+          isAssembled: false,
+          sceneTimings: [],
+          avatarConfig,
+          ideationOptions,
+        },
+      };
+
+      const res = await fetch(`/api/videos/${id}/storyboard`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error || 'Falha ao salvar o Roteiro Final aprovado'
+        );
+      }
+
+      if (data.video) {
+        setVideoRecord(data.video);
       }
 
       setActiveTab('storyboard');
       setSuccessMsg(
-        `Roteiro gerado com ${data.scenes?.length || 0} cenas! Gere as imagens B-Roll e a narração.`
+        `Roteiro Final aprovado com ${consolidatedScenes.length} cenas e avatar configurado! Gere agora as imagens B-Roll.`
       );
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : 'Erro ao gerar roteiro com IA'
+        err instanceof Error
+          ? err.message
+          : 'Erro ao aprovar e salvar o Roteiro Final'
       );
     } finally {
-      setIsGeneratingScript(false);
+      setIsApprovingScript(false);
     }
   };
 
@@ -719,6 +859,8 @@ export const Studio: React.FC = () => {
         audioGenerated,
         isAssembled: true,
         sceneTimings,
+        avatarConfig,
+        ideationOptions,
       },
     };
 
@@ -768,6 +910,8 @@ export const Studio: React.FC = () => {
         audioGenerated,
         isAssembled: true,
         sceneTimings,
+        avatarConfig,
+        ideationOptions,
       },
     };
 
@@ -1358,159 +1502,26 @@ export const Studio: React.FC = () => {
           {/* Conteúdo Scrollável da Sidebar */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
             {/* ==============================================================
-                ABA 1: BRIEFING (Tema, Chips de Sugestão, Duração)
+                ABA 1: SALA DE IDEAÇÃO & CAMARIM 360º (Módulos 1, 2 e 3)
                ============================================================== */}
             {activeTab === 'briefing' && (
-              <div className="space-y-4">
-                <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-5 space-y-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">
-                      Configuração do Roteiro
-                    </h2>
-                    <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-                      Escolha o tema histórico e o formato. O Gemini criará as cenas, falas e direção visual automaticamente.
-                    </p>
-                  </div>
-
-                  <form onSubmit={handleGenerateScript} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                        Tema Histórico
-                      </label>
-                      <input
-                        type="text"
-                        value={theme}
-                        onChange={(e) => setTheme(e.target.value)}
-                        required
-                        disabled={isGeneratingScript}
-                        placeholder="Ex: A Construção das Pirâmides de Gizé (2560 a.C.)"
-                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none transition"
-                      />
-                    </div>
-
-                    {/* Chips de Sugestões Rápidas */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-2">
-                        Sugestões Rápidas
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {SUGGESTED_THEMES.map((suggested) => {
-                          const isCurrent = theme === suggested;
-                          return (
-                            <button
-                              key={suggested}
-                              type="button"
-                              onClick={() => setTheme(suggested)}
-                              className={`rounded-lg border px-3 py-1.5 text-[11px] font-medium text-left transition-all ${
-                                isCurrent
-                                  ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
-                                  : 'border-[#2c2c32]/80 bg-[#121214] text-slate-300 hover:border-amber-500/40 hover:bg-amber-500/[0.06] hover:text-slate-100'
-                              }`}
-                            >
-                              {suggested}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                        Duração do Vídeo
-                      </label>
-                      <select
-                        value={durationPreset}
-                        onChange={(e) =>
-                          setDurationPreset(e.target.value as DurationPreset)
-                        }
-                        disabled={isGeneratingScript}
-                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-3 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
-                      >
-                        {DURATION_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isGeneratingScript || !theme.trim()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isGeneratingScript ? (
-                        <>
-                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-                          <span>Gerando Roteiro no Gemini...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>📝</span>
-                          <span>
-                            {hasScript
-                              ? 'Regerar Roteiro com IA'
-                              : 'Gerar Roteiro com IA'}
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </div>
-
-                {/* Resumo de Progresso */}
-                <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-300">
-                      Status do Projeto
-                    </span>
-                    <span className="font-mono text-[11px] text-amber-400">
-                      {scenes.length} cenas • {totalWordsCount} palavras
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
-                      <span className="text-slate-400">1. Roteiro Estruturado</span>
-                      <span
-                        className={
-                          hasScript
-                            ? 'font-semibold text-emerald-400'
-                            : 'text-slate-500'
-                        }
-                      >
-                        {hasScript ? `✓ ${scenes.length} cenas` : 'Pendente'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
-                      <span className="text-slate-400">2. B-Rolls Aprovados</span>
-                      <span
-                        className={
-                          allScenesHaveSelectedImage
-                            ? 'font-semibold text-emerald-400'
-                            : 'text-amber-400'
-                        }
-                      >
-                        {selectedImagesCount}/{scenes.length || 0} cenas
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-lg bg-[#121214] px-3 py-2 border border-white/[0.04]">
-                      <span className="text-slate-400">3. Narração ElevenLabs</span>
-                      <span
-                        className={
-                          audioGenerated
-                            ? 'font-semibold text-emerald-400'
-                            : 'text-amber-400'
-                        }
-                      >
-                        {audioGenerated ? '✓ Gravada' : 'Pendente'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <IdeationDressingRoomTab
+                theme={theme}
+                setTheme={setTheme}
+                suggestedThemes={SUGGESTED_THEMES}
+                durationPreset={durationPreset}
+                setDurationPreset={setDurationPreset}
+                durationOptions={DURATION_OPTIONS}
+                avatarConfig={avatarConfig}
+                setAvatarConfig={setAvatarConfig}
+                ideationOptions={ideationOptions}
+                isGeneratingIdeas={isGeneratingScript}
+                onGenerateIdeas={handleGenerateScript}
+                finalMixScenes={finalMixScenes}
+                setFinalMixScenes={setFinalMixScenes}
+                isApprovingScript={isApprovingScript}
+                onApproveFinalScript={() => void handleApproveFinalScript()}
+              />
             )}
 
             {/* ==============================================================

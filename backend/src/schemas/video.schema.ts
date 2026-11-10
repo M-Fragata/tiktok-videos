@@ -66,6 +66,32 @@ export const speakerTypeSchema = z.enum([
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
+export const avatarHairStyleSchema = z.enum([
+  'bald',
+  'spiky',
+  'curly',
+  'mohawk',
+  'pompadour',
+]);
+
+export const avatarAccessorySchema = z.enum([
+  'none',
+  'round_glasses',
+  'explorer_hat',
+  'knight_helmet',
+  'crown',
+  'bandana',
+]);
+
+export const avatarAngleSchema = z.enum(['front', 'right', 'back', 'left']);
+
+export const avatarConfigSchema = z.object({
+  hairStyle: avatarHairStyleSchema.optional().default('spiky'),
+  strokeColor: z.string().optional().default('#111827'),
+  accessory: avatarAccessorySchema.optional().default('round_glasses'),
+  angle: avatarAngleSchema.optional().default('front'),
+});
+
 export const storyboardSceneSchema = z.object({
   speaker: speakerTypeSchema,
   text: z.string().min(1, 'O texto da fala não pode estar vazio'),
@@ -74,6 +100,14 @@ export const storyboardSceneSchema = z.object({
   sfx_suggestion: z.string().optional().default(''),
   candidateImages: z.array(z.string()).optional().default([]),
   selectedImage: z.string().nullable().optional().default(null),
+});
+
+export const ideationOptionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  badge: z.string().optional(),
+  description: z.string().optional(),
+  scenes: z.array(storyboardSceneSchema).default([]),
 });
 
 export const sceneFrameTimingSchema = z.object({
@@ -90,6 +124,8 @@ export const storyboardStateSchema = z.object({
   audioGenerated: z.boolean().optional().default(false),
   isAssembled: z.boolean().optional().default(false),
   sceneTimings: z.array(sceneFrameTimingSchema).optional().default([]),
+  avatarConfig: avatarConfigSchema.optional(),
+  ideationOptions: z.array(ideationOptionSchema).optional(),
 });
 
 /**
@@ -104,7 +140,7 @@ export const createDraftVideoSchema = z.object({
 });
 
 /**
- * Etapa 1: Gerar Roteiro (POST /api/videos/:id/generate-script)
+ * Etapa 1: Gerar Roteiro / Ideias (POST /api/videos/:id/generate-script)
  */
 export const generateScriptSchema = z.object({
   theme: z
@@ -112,6 +148,7 @@ export const generateScriptSchema = z.object({
     .min(3, 'O tema deve ter pelo menos 3 caracteres')
     .max(180, 'O tema deve ter no máximo 180 caracteres'),
   durationPreset: durationPresetSchema.optional().default('short'),
+  avatarConfig: avatarConfigSchema.optional(),
 });
 
 /**

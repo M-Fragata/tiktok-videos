@@ -17,6 +17,7 @@ import {
   STORAGE_OUTPUT_DIR,
 } from '../services/remotion.service.ts';
 import {
+  generateTimeMachineIdeation,
   generateTimeMachineScript,
   type ScriptScene,
 } from '../services/gemini.service.ts';
@@ -68,10 +69,11 @@ export async function createDraftVideoController(
 }
 
 /**
- * Etapa 1 -> Etapa 2:
+ * Etapa 1 (Ideação Mix & Match):
  * POST /api/videos/:id/generate-script
- * Chama apenas o Google Gemini com o tema e a duração escolhida,
- * devolvendo a estrutura JSON das cenas para edição no Storyboard.
+ * Chama o Google Gemini com o tema, duração e avatarConfig,
+ * devolvendo 4 opções de roteiro com ângulos distintos (Humor, Ação, Sombrio, Caótico)
+ * para o utilizador misturar no "Roteiro Final" e aprovar.
  */
 export async function generateScriptController(
   req: Request<{ id: string }>,
@@ -88,7 +90,7 @@ export async function generateScriptController(
     return;
   }
 
-  const { theme, durationPreset } = parsedBody.data;
+  const { theme, durationPreset, avatarConfig } = parsedBody.data;
 
   try {
     const existingVideo = await prisma.video.findUnique({ where: { id } });
@@ -98,39 +100,59 @@ export async function generateScriptController(
     }
 
     console.log(
-      `[Storyboard - Etapa 1] Gerando roteiro no Gemini para "${theme}" (${durationPreset})...`
+      `[Ideação - Etapa 1] Gerando 4 opções de roteiro no Gemini para "${theme}" (${durationPreset})...`
     );
-    const { scenes } = await generateTimeMachineScript(theme, durationPreset);
+    const { options } = await generateTimeMachineIdeation(
+      theme,
+      durationPreset,
+      avatarConfig
+    );
 
-    const storyboardScenes = scenes.map((scene) => ({
-      speaker: scene.speaker,
-      text: scene.text,
-      avatarSprite: scene.avatarSprite,
-      imagePrompt: scene.imagePrompt,
-      sfx_suggestion: scene.sfx_suggestion || '',
-      candidateImages: [] as string[],
-      selectedImage: null as string | null,
+    const formattedOptions = options.map((opt) => ({
+      id: opt.id,
+      title: opt.title,
+      badge: opt.badge,
+      description: opt.description,
+      scenes: opt.scenes.map((scene) => ({
+        speaker: scene.speaker,
+        text: scene.text,
+        avatarSprite: scene.avatarSprite,
+        imagePrompt: scene.imagePrompt,
+        sfx_suggestion: scene.sfx_suggestion || '',
+        candidateImages: [] as string[],
+        selectedImage: null as string | null,
+      })),
     }));
 
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
     const remotionProps: RenderVideoInput = {
+      ...currentProps,
       theme,
       durationInFrames:
-        durationPreset === 'long'
+        currentProps.durationInFrames ||
+        (durationPreset === 'long'
           ? 1800
           : durationPreset === 'medium'
             ? 900
-            : 450,
-      backgroundSrc: 'background.jpg',
-      backgroundTimeline: [],
-      audioSrc: 'audio.mp3',
-      subtitles: [],
-      avatarTimeline: [],
+            : 450),
+      backgroundSrc: currentProps.backgroundSrc || 'background.jpg',
+      backgroundTimeline: currentProps.backgroundTimeline || [],
+      audioSrc: currentProps.audioSrc || 'audio.mp3',
+      subtitles: currentProps.subtitles || [],
+      avatarTimeline: currentProps.avatarTimeline || [],
       storyboard: {
+        ...currentStoryboard,
         durationPreset,
-        scenes: storyboardScenes,
-        audioGenerated: false,
-        isAssembled: false,
-        sceneTimings: [],
+        avatarConfig,
+        ideationOptions: formattedOptions,
       },
     };
 
@@ -138,23 +160,23 @@ export async function generateScriptController(
       where: { id },
       data: {
         theme,
-        status: 'DRAFT',
         remotionProps,
       },
     });
 
     res.status(200).json({
-      message: 'Roteiro gerado com sucesso.',
-      scenes: storyboardScenes,
+      message: '4 opções de roteiro geradas com sucesso.',
+      options: formattedOptions,
+      scenes: formattedOptions[0]?.scenes || [],
       video: updatedVideo,
     });
   } catch (error) {
-    console.error('[Storyboard] Erro ao gerar roteiro:', error);
+    console.error('[Storyboard] Erro ao gerar opções de roteiro:', error);
     res.status(500).json({
       error:
         error instanceof Error
           ? error.message
-          : 'Erro ao gerar roteiro com IA.',
+          : 'Erro ao gerar ideias de roteiro com IA.',
     });
   }
 }
