@@ -259,7 +259,7 @@ Retorne APENAS um objeto JSON válido neste formato exato:
             {
               parts: [
                 {
-                  text: `${systemInstruction}\n\nTema Histórico da Viagem no Tempo: ${theme}`,
+                  text: `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${theme}`,
                 },
               ],
             },
@@ -323,11 +323,26 @@ export async function generateTimeMachineIdeation(
 
   const systemInstruction = `És um roteirista sénior e Diretor de Arte especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
 
-A tua missão é criar um BRAINSTORMING DE ROTEIROS com EXATAMENTE 4 OPÇÕES de ângulos narrativos distintos para o mesmo tema histórico:
-1. id: "humor" | title: "Humor & Ironia" | badge: "😂 Humor" -> Abordagem cómica, sarcástica, destacando o absurdo quotidiano da época.
-2. id: "action" | title: "Ação & Sobrevivência" | badge: "⚔️ Ação" -> Ritmo frenético, perigo iminente, adrenalina no olho do furacão histórico.
-3. id: "dark" | title: "Sombrio & Mistério" | badge: "🌑 Sombrio" -> Atmosfera densa, segredos ocultos, tensão psicológica e detalhes arrepiantes.
-4. id: "chaotic" | title: "Caótico & Paradoxo" | badge: "🔥 Caótico" -> Ritmo imprevisível, reviravoltas rápidas e choque cultural extremo do viajante do tempo.
+A tua missão é criar um BRAINSTORMING DE ROTEIROS com EXATAMENTE 4 OPÇÕES de ângulos narrativos distintos a partir do BRIEFING HISTÓRICO fornecido pelo utilizador:
+1. id: "humor" | badge: "😂 Humor" -> Abordagem cómica, sarcástica, destacando o absurdo quotidiano ou quebrando mitos com ironia.
+2. id: "action" | badge: "⚔️ Ação" -> Ritmo frenético, perigo iminente, adrenalina no olho do furacão histórico.
+3. id: "dark" | badge: "🌑 Sombrio" -> Atmosfera densa, segredos ocultos, tensão psicológica, teorias e conspirações históricas.
+4. id: "chaotic" | badge: "🔥 Caótico" -> Ritmo imprevisível, reviravoltas rápidas e choque extremo do viajante do tempo.
+
+TÍTULO VIRAL POR OPÇÃO (CAMPO "title" DE CADA OPÇÃO):
+Para CADA uma das 4 opções, deves gerar um Título Viral ÚNICO, magnético e de alta retenção no estilo YouTube Shorts / TikTok (máximo 60 caracteres, com gancho instigante e emoji relevante).
+Exemplos de bons títulos virais:
+- "Napoleão NÃO Destruiu a Esfinge?! 😱" (Humor/Curiosidade)
+- "Sobrevivendo ao Tiro de Canhão em Gizé ⚔️" (Ação)
+- "O Segredo Sombrio do Nariz da Esfinge 🌑" (Sombrio)
+- "Como o Nariz da Esfinge Sumiu de Verdade?! 🔥" (Caótico)
+NUNCA uses títulos genéricos como "Humor & Ironia" ou "Ação & Sobrevivência". Cria sempre um título focado no tema e gancho do vídeo!
+
+INTERPRETAÇÃO INTELIGENTE DO BRIEFING DO UTILIZADOR:
+- SE O UTILIZADOR DETALHAR CENAS ESPECÍFICAS NO BRIEFING (ex: "Cena 1: ...", "Cena 2: ..." ou tópicos narrativos):
+  Segue rigorosamente essa ordem cronológica e progressão de acontecimentos em TODAS as 4 opções, adaptando o tom das falas ("text"), as emoções/sprites do avatar e as piadas/tensão ao estilo específico de cada ângulo.
+- SE O UTILIZADOR FORNECER APENAS O CONTEXTO OU FATOS GERAIS:
+  Estrutura livremente a história dividindo-a em Gancho, Desenvolvimento e Clímax com base nos fatos fornecidos.
 
 Duração Selecionada para CADA uma das 4 opções (${rule.label}):
 - Estrutura por opção: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala por opção).
@@ -429,7 +444,7 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
             {
               parts: [
                 {
-                  text: `${systemInstruction}\n\nTema Histórico da Viagem no Tempo: ${theme}`,
+                  text: `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${theme}`,
                 },
               ],
             },

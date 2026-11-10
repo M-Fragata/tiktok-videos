@@ -157,7 +157,7 @@ export const generateScriptSchema = z.object({
   theme: z
     .string({ required_error: 'O campo theme é obrigatório' })
     .min(3, 'O tema deve ter pelo menos 3 caracteres')
-    .max(180, 'O tema deve ter no máximo 180 caracteres'),
+    .max(4000, 'O briefing deve ter no máximo 4000 caracteres'),
   durationPreset: durationPresetSchema.optional().default('short'),
   avatarConfig: avatarConfigSchema.optional(),
   bgmVibe: bgmVibeSchema.optional().default('epic'),

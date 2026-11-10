@@ -498,7 +498,7 @@ export const Studio: React.FC = () => {
   // ========================================================
   // ETAPA 1B: Consolidar e Aprovar o "Roteiro Final" (Mix & Match)
   // ========================================================
-  const handleApproveFinalScript = async () => {
+  const handleApproveFinalScript = async (approvedTitle?: string) => {
     if (!id || finalMixScenes.length === 0) return;
 
     setIsApprovingScript(true);
@@ -532,8 +532,17 @@ export const Studio: React.FC = () => {
             : 450;
       setDurationInFrames(targetDurationFrames);
 
+      const finalTitle =
+        approvedTitle?.trim() ||
+        (theme.trim().length <= 60
+          ? theme.trim()
+          : 'Viagem no Tempo — Fragata Shorts');
+      if (approvedTitle?.trim()) {
+        setTheme(approvedTitle.trim());
+      }
+
       const payload: TimeMachineVideoProps = {
-        theme: theme.trim() || 'Vlog de Viagem no Tempo',
+        theme: finalTitle,
         durationInFrames: targetDurationFrames,
         backgroundSrc: backgroundSrc || 'background.jpg',
         backgroundTimeline: [],
@@ -2029,7 +2038,9 @@ export const Studio: React.FC = () => {
                 finalMixScenes={finalMixScenes}
                 setFinalMixScenes={setFinalMixScenes}
                 isApprovingScript={isApprovingScript}
-                onApproveFinalScript={() => void handleApproveFinalScript()}
+                onApproveFinalScript={(approvedTitle) =>
+                  void handleApproveFinalScript(approvedTitle)
+                }
               />
             )}
 
