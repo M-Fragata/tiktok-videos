@@ -90,7 +90,7 @@ export async function generateScriptController(
     return;
   }
 
-  const { theme, durationPreset, avatarConfig } = parsedBody.data;
+  const { theme, durationPreset, avatarConfig, bgmVibe } = parsedBody.data;
 
   try {
     const existingVideo = await prisma.video.findUnique({ where: { id } });
@@ -146,6 +146,7 @@ export async function generateScriptController(
       backgroundSrc: currentProps.backgroundSrc || 'background.jpg',
       backgroundTimeline: currentProps.backgroundTimeline || [],
       audioSrc: currentProps.audioSrc || 'audio.mp3',
+      bgmVibe: bgmVibe || currentProps.bgmVibe || 'epic',
       subtitles: currentProps.subtitles || [],
       avatarTimeline: currentProps.avatarTimeline || [],
       storyboard: {
@@ -153,6 +154,7 @@ export async function generateScriptController(
         durationPreset,
         avatarConfig,
         ideationOptions: formattedOptions,
+        bgmVibe: bgmVibe || currentStoryboard.bgmVibe || 'epic',
       },
     };
 

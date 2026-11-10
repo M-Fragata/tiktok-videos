@@ -66,6 +66,8 @@ export const speakerTypeSchema = z.enum([
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
+export const bgmVibeSchema = z.enum(['epic', 'dark', 'fun', 'none']);
+
 export const avatarHairStyleSchema = z.enum([
   'bald',
   'spiky',
@@ -126,6 +128,7 @@ export const storyboardStateSchema = z.object({
   sceneTimings: z.array(sceneFrameTimingSchema).optional().default([]),
   avatarConfig: avatarConfigSchema.optional(),
   ideationOptions: z.array(ideationOptionSchema).optional(),
+  bgmVibe: bgmVibeSchema.optional().default('epic'),
 });
 
 /**
@@ -149,6 +152,7 @@ export const generateScriptSchema = z.object({
     .max(180, 'O tema deve ter no máximo 180 caracteres'),
   durationPreset: durationPresetSchema.optional().default('short'),
   avatarConfig: avatarConfigSchema.optional(),
+  bgmVibe: bgmVibeSchema.optional().default('epic'),
 });
 
 /**
@@ -193,6 +197,9 @@ export const renderVideoSchema = z.object({
   backgroundSrc: z.string().optional().default('background.jpg'),
   backgroundTimeline: z.array(backgroundSegmentSchema).optional(),
   audioSrc: z.string().optional().default('audio.mp3'),
+  bgmVibe: bgmVibeSchema.optional().default('epic'),
+  bgmVolume: z.number().min(0).max(1).optional().default(0.1),
+  sfxEnabled: z.boolean().optional().default(true),
   subtitles: z.array(subtitleItemSchema).optional(),
   subtitleStyle: subtitleStyleSchema.optional(),
   avatarTimeline: z.array(avatarSegmentSchema).optional(),

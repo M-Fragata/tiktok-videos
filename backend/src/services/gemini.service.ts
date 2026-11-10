@@ -103,23 +103,31 @@ const DURATION_RULES: Record<
 > = {
   short: {
     label: 'Curto (15s - máx 40 palavras)',
-    sceneRange: '3 a 4 cenas curtas',
+    sceneRange: '4 a 6 cenas dinâmicas (alternando cortes rápidos e médios)',
     maxWords: 40,
     targetSeconds: 15,
   },
   medium: {
     label: 'Médio (30s - máx 70 palavras)',
-    sceneRange: '4 a 6 cenas dinâmicas',
+    sceneRange: '6 a 9 cenas dinâmicas (alternando cortes rápidos e médios)',
     maxWords: 70,
     targetSeconds: 30,
   },
   long: {
     label: 'Longo (60s - máx 140 palavras)',
-    sceneRange: '6 a 8 cenas completas',
+    sceneRange: '9 a 14 cenas dinâmicas (alternando cortes rápidos e médios)',
     maxWords: 140,
     targetSeconds: 60,
   },
 };
+
+const VIRAL_PACING_INSTRUCTION = `DIRETRIZES DE MONTAGEM CINEMATOGRÁFICA E RITMO VIRAL (RETENÇÃO ALTA):
+Na nossa arquitetura, cada cena gera um corte visual de câmara (B-Roll) + efeito sonoro de transição (Whoosh). Portanto, o COMPRIMENTO de cada fala ("text") dita diretamente a velocidade dos cortes do vídeo!
+Para manter a retenção máxima no TikTok/Shorts, varie deliberadamente o comprimento das falas entre as cenas seguindo esta estrutura de ritmo viral:
+- Cena 1 (O Gancho / Hook): Frase ULTRA-CURTA e chocante (3 a 6 palavras). Ex: "Isto não devia estar aqui!" ou "Olha para o céu de Pompeia!". Isso força um corte visual rápido logo nos primeiros 1.5 segundos.
+- Cenas de Desenvolvimento (Storytelling): Intercale frases médias (10 a 15 palavras) — que dão tempo para o espectador absorver o cenário histórico e a explicação — com cenas curtas de reação ou diálogo rápido (4 a 7 palavras).
+- Cena de Clímax / Punchline Final: Volte para uma frase curta, urgente e expressiva (4 a 8 palavras) para acelerar o ritmo novamente no fecho.
+És livre para decidir a quantidade ideal de cenas para preencher o tempo total, desde que alternes entre cenas rápidas (poucas palavras) e cenas médias, criando uma montagem dinâmica, orgânica e humana, NUNCA ultrapassando o limite global de palavras.`;
 
 /**
  * Pilar 1 (O Roteirista):
@@ -143,6 +151,8 @@ O formato é uma narrativa histórica dinâmica e imersiva onde personagens em e
 Duração Selecionada (${rule.label}):
 - Estrutura: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala).
 - LIMITE ESTRITO DE PALAVRAS: A soma de todas as falas ("text") de todas as cenas NÃO DEVE ultrapassar ${rule.maxWords} palavras no total.
+
+${VIRAL_PACING_INSTRUCTION}
 
 DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
 Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminologia de modelos de difusão (FLUX / Imagen) para forçar a estética "Mixed Media Illustration" (evitando que a IA gere humanos de carne e osso):
@@ -304,6 +314,8 @@ A tua missão é criar um BRAINSTORMING DE ROTEIROS com EXATAMENTE 4 OPÇÕES de
 Duração Selecionada para CADA uma das 4 opções (${rule.label}):
 - Estrutura por opção: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala por opção).
 - LIMITE ESTRITO DE PALAVRAS POR OPÇÃO: A soma das falas ("text") dentro de cada opção NÃO DEVE ultrapassar ${rule.maxWords} palavras.
+
+${VIRAL_PACING_INSTRUCTION}
 
 APARÊNCIA CUSTOMIZADA DO AVATAR PROTAGONISTA (OBRIGATÓRIO EM TODOS OS "imagePrompt"):
 O utilizador configurou o protagonista no Camarim 360º com a seguinte aparência exata:

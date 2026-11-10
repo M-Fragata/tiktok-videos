@@ -5,6 +5,8 @@ import {
   AvatarAngle,
   AvatarConfig,
   AvatarHairStyle,
+  BGM_VIBE_OPTIONS,
+  BgmVibe,
   buildClientAvatarPromptDescriptor,
   DurationPreset,
   IdeationOption,
@@ -28,6 +30,8 @@ interface IdeationDressingRoomTabProps {
   durationPreset: DurationPreset;
   setDurationPreset: (value: DurationPreset) => void;
   durationOptions: Array<{ value: DurationPreset; label: string }>;
+  bgmVibe: BgmVibe;
+  setBgmVibe: (value: BgmVibe) => void;
   avatarConfig: AvatarConfig;
   setAvatarConfig: React.Dispatch<React.SetStateAction<AvatarConfig>>;
   ideationOptions: IdeationOption[];
@@ -578,6 +582,8 @@ export const IdeationDressingRoomTab: React.FC<
   durationPreset,
   setDurationPreset,
   durationOptions,
+  bgmVibe,
+  setBgmVibe,
   avatarConfig,
   setAvatarConfig,
   ideationOptions,
@@ -1069,26 +1075,41 @@ export const IdeationDressingRoomTab: React.FC<
                 </select>
               </div>
 
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={isGeneratingIdeas || !theme.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Trilha de Fundo (BGM)
+                </label>
+                <select
+                  value={bgmVibe}
+                  onChange={(e) => setBgmVibe(e.target.value as BgmVibe)}
+                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
                 >
-                  {isGeneratingIdeas ? (
-                    <>
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-                      <span>Gerando 4 Ângulos...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>💡</span>
-                      <span>Gerar Ideias</span>
-                    </>
-                  )}
-                </button>
+                  {BGM_VIBE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
+
+            <button
+              type="submit"
+              disabled={isGeneratingIdeas || !theme.trim()}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isGeneratingIdeas ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                  <span>Gerando 4 Ângulos...</span>
+                </>
+              ) : (
+                <>
+                  <span>💡</span>
+                  <span>Gerar Ideias</span>
+                </>
+              )}
+            </button>
           </form>
 
           {/* Lista dos 4 Accordions de Ideação */}

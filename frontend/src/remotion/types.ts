@@ -23,6 +23,19 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
+export type BgmVibe = 'epic' | 'dark' | 'fun' | 'none';
+
+export const BGM_VIBE_OPTIONS: Array<{
+  value: BgmVibe;
+  label: string;
+  file: string | null;
+}> = [
+  { value: 'epic', label: '🎻 Épico & Cinematográfico (10%)', file: 'bgm/epic.mp3' },
+  { value: 'dark', label: '🌑 Sombrio & Mistério (10%)', file: 'bgm/dark.mp3' },
+  { value: 'fun', label: '🎪 Divertido & Curioso (10%)', file: 'bgm/fun.mp3' },
+  { value: 'none', label: '🔇 Sem Música de Fundo', file: null },
+];
+
 export type AvatarHairStyle =
   | 'bald'
   | 'spiky'
@@ -188,6 +201,7 @@ export interface StoryboardState {
   sceneTimings?: SceneFrameTiming[];
   avatarConfig?: AvatarConfig;
   ideationOptions?: IdeationOption[];
+  bgmVibe?: BgmVibe;
 }
 
 export type TimeMachineVideoProps = {
@@ -196,6 +210,9 @@ export type TimeMachineVideoProps = {
   backgroundSrc?: string;
   backgroundTimeline?: BackgroundSegment[];
   audioSrc?: string;
+  bgmVibe?: BgmVibe;
+  bgmVolume?: number;
+  sfxEnabled?: boolean;
   subtitles?: SubtitleItem[];
   subtitleStyle?: SubtitleStyleConfig;
   avatarTimeline?: AvatarSegment[];

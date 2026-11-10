@@ -7,6 +7,7 @@ import {
   AvatarConfig,
   AvatarSegment,
   BackgroundSegment,
+  BgmVibe,
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
@@ -94,6 +95,7 @@ export const Studio: React.FC = () => {
   const [theme, setTheme] = useState<string>('');
   const [durationPreset, setDurationPreset] =
     useState<DurationPreset>('short');
+  const [bgmVibe, setBgmVibe] = useState<BgmVibe>('epic');
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(
     DEFAULT_AVATAR_CONFIG
   );
@@ -145,12 +147,15 @@ export const Studio: React.FC = () => {
     imageUrl: string;
   } | null>(null);
 
-  // Estados gerais de UI
+  // Estados gerais de UI & Redimensionamento de Colunas (Split Pane)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(420);
+  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRerendering, setIsRerendering] = useState<boolean>(false);
   const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const videoCanvasRef = useRef<HTMLDivElement>(null);
@@ -212,8 +217,15 @@ export const Studio: React.FC = () => {
     }
     if (props.avatarTimeline) setAvatarTimeline(props.avatarTimeline);
 
+    if (props.bgmVibe) {
+      setBgmVibe(props.bgmVibe);
+    }
+
     if (props.storyboard) {
       setDurationPreset(props.storyboard.durationPreset || 'short');
+      if (props.storyboard.bgmVibe) {
+        setBgmVibe(props.storyboard.bgmVibe);
+      }
       if (props.storyboard.avatarConfig) {
         setAvatarConfig({
           ...DEFAULT_AVATAR_CONFIG,
@@ -382,6 +394,7 @@ export const Studio: React.FC = () => {
           theme: cleanTheme,
           durationPreset,
           avatarConfig,
+          bgmVibe,
         }),
       });
 
@@ -463,6 +476,7 @@ export const Studio: React.FC = () => {
         backgroundSrc: backgroundSrc || 'background.jpg',
         backgroundTimeline: [],
         audioSrc: audioSrc || 'audio.mp3',
+        bgmVibe,
         subtitles: [],
         subtitleStyle,
         avatarTimeline: [],
@@ -474,6 +488,7 @@ export const Studio: React.FC = () => {
           sceneTimings: [],
           avatarConfig,
           ideationOptions,
+          bgmVibe,
         },
       };
 
@@ -850,6 +865,7 @@ export const Studio: React.FC = () => {
       backgroundSrc: primaryBg,
       backgroundTimeline: assembledBackgroundTimeline,
       audioSrc,
+      bgmVibe,
       subtitles: subtitlesToPersist,
       subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
@@ -861,6 +877,7 @@ export const Studio: React.FC = () => {
         sceneTimings,
         avatarConfig,
         ideationOptions,
+        bgmVibe,
       },
     };
 
@@ -901,6 +918,7 @@ export const Studio: React.FC = () => {
       backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
       backgroundTimeline: effectiveBackgroundTimeline,
       audioSrc,
+      bgmVibe,
       subtitles: effectiveSubtitles,
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
@@ -912,6 +930,7 @@ export const Studio: React.FC = () => {
         sceneTimings,
         avatarConfig,
         ideationOptions,
+        bgmVibe,
       },
     };
 
@@ -1133,6 +1152,72 @@ export const Studio: React.FC = () => {
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
   }, [isDraggingSubtitle]);
+
+  // Redimensionamento interativo entre a Sidebar Esquerda e a Coluna Direita (Player/Timeline)
+  // Garante largura mínima e máxima tanto para a coluna direita quanto para a coluna esquerda
+  const handleSidebarResizeMouseDown = (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    setIsResizingSidebar(true);
+  };
+
+  useEffect(() => {
+    if (!isResizingSidebar) return;
+
+    const MIN_LEFT_WIDTH = 340;
+    const MAX_LEFT_WIDTH = 760;
+    const MIN_RIGHT_WIDTH = 480;
+    const MAX_RIGHT_WIDTH = 1480;
+    const SPLITTER_AND_PADDING_SPACE = 36; // p-3 (24px) + divisor (12px)
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      const container = workspaceContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const totalAvailableWidth = rect.width - SPLITTER_AND_PADDING_SPACE;
+
+      // Posição X do rato relativa ao início da área útil do workspace
+      const rawLeftWidth = e.clientX - rect.left - 12;
+
+      // Calcula os limites da esquerda respeitando também o MÍNIMO e MÁXIMO da coluna direita
+      const minLeftByRightMax = Math.max(
+        MIN_LEFT_WIDTH,
+        totalAvailableWidth - MAX_RIGHT_WIDTH
+      );
+      const maxLeftByRightMin = Math.min(
+        MAX_LEFT_WIDTH,
+        totalAvailableWidth - MIN_RIGHT_WIDTH
+      );
+
+      const safeMinLeft = Math.min(minLeftByRightMax, maxLeftByRightMin);
+      const safeMaxLeft = Math.max(minLeftByRightMax, maxLeftByRightMin);
+
+      const clampedLeftWidth = Math.round(
+        Math.max(safeMinLeft, Math.min(safeMaxLeft, rawLeftWidth))
+      );
+
+      setSidebarWidth(clampedLeftWidth);
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [isResizingSidebar]);
 
   // Controlos de transporte do Player
   const togglePlayPause = () => {
@@ -1420,13 +1505,19 @@ export const Studio: React.FC = () => {
       </header>
 
       {/* ====================================================================
-          2. WORKSPACE PRINCIPAL (Sidebar Esquerda + Coluna Direita Player/Timeline)
+          2. WORKSPACE PRINCIPAL (Sidebar Esquerda + Divisor + Coluna Direita)
          ==================================================================== */}
-      <div className="flex flex-1 min-h-0 flex-row gap-3 p-3 overflow-hidden">
+      <div
+        ref={workspaceContainerRef}
+        className="flex flex-1 min-h-0 flex-row p-3 overflow-hidden"
+      >
         {/* ------------------------------------------------------------------
             SIDEBAR ESQUERDA (Inspetor com Abas Horizontais + Footer de Ação)
            ------------------------------------------------------------------ */}
-        <aside className="flex w-[390px] xl:w-[420px] shrink-0 flex-col rounded-2xl border border-[#2c2c32]/50 bg-[#18181c] overflow-hidden shadow-2xl">
+        <aside
+          style={{ width: `${sidebarWidth}px` }}
+          className="flex shrink-0 flex-col rounded-2xl border border-[#2c2c32]/50 bg-[#18181c] overflow-hidden shadow-2xl"
+        >
           {/* Abas Horizontais no Topo da Sidebar */}
           <div className="grid grid-cols-3 border-b border-[#2c2c32]/60 bg-[#151519] px-2 shrink-0">
             <button
@@ -1512,6 +1603,8 @@ export const Studio: React.FC = () => {
                 durationPreset={durationPreset}
                 setDurationPreset={setDurationPreset}
                 durationOptions={DURATION_OPTIONS}
+                bgmVibe={bgmVibe}
+                setBgmVibe={setBgmVibe}
                 avatarConfig={avatarConfig}
                 setAvatarConfig={setAvatarConfig}
                 ideationOptions={ideationOptions}
@@ -2434,9 +2527,39 @@ export const Studio: React.FC = () => {
         </aside>
 
         {/* ------------------------------------------------------------------
+            DIVISOR REDIMENSIONÁVEL ENTRE AS COLUNAS (Cursor <-> col-resize)
+           ------------------------------------------------------------------ */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Arraste para ajustar a largura das colunas (duplo clique para restaurar)"
+          title="Arraste para ajustar a largura das colunas (duplo clique para restaurar)"
+          onMouseDown={handleSidebarResizeMouseDown}
+          onDoubleClick={() => setSidebarWidth(420)}
+          className="group relative flex w-3 shrink-0 cursor-col-resize items-center justify-center select-none z-20"
+        >
+          {/* Linha de guia vertical que acende no hover ou durante o arraste */}
+          <div
+            className={`h-[95%] w-[2px] rounded-full transition-colors duration-150 ${
+              isResizingSidebar
+                ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.75)]'
+                : 'bg-transparent group-hover:bg-amber-500/60'
+            }`}
+          />
+          {/* Pílula central de pega */}
+          <div
+            className={`absolute flex h-10 w-1.5 items-center justify-center rounded-full transition-all duration-150 ${
+              isResizingSidebar
+                ? 'bg-amber-400 scale-y-110 shadow-[0_0_12px_rgba(245,158,11,0.8)]'
+                : 'bg-[#2c2c32]/90 group-hover:bg-amber-400'
+            }`}
+          />
+        </div>
+
+        {/* ------------------------------------------------------------------
             COLUNA DIREITA (Monitor Player 9:16 em cima + Timeline em baixo)
            ------------------------------------------------------------------ */}
-        <div className="flex flex-1 min-w-0 flex-col gap-3 overflow-hidden">
+        <div className="flex flex-1 min-w-[480px] max-w-[1480px] flex-col gap-3 overflow-hidden">
           {/* ================================================================
               PAINEL DO PLAYER CENTRAL (Vertical 9:16 + Barra Compacta)
              ================================================================ */}
@@ -2469,6 +2592,9 @@ export const Studio: React.FC = () => {
                       effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
                     backgroundTimeline: effectiveBackgroundTimeline,
                     audioSrc,
+                    bgmVibe,
+                    bgmVolume: 0.1,
+                    sfxEnabled: true,
                     subtitles: effectiveSubtitles,
                     subtitleStyle,
                     avatarTimeline: effectiveAvatarTimeline,

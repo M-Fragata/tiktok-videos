@@ -68,16 +68,10 @@ export const Home: React.FC = () => {
       <header className="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-2xl border border-amber-500/20 shadow-inner">
-              ⏳
-            </span>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white">
+              <h1 className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-bold tracking-tight text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50">
                 Fragata Shorts
               </h1>
-              <p className="text-xs text-slate-400">
-                Fábrica de Vídeos com IA • Storyboard 3 Etapas • 9:16
-              </p>
             </div>
           </div>
 
@@ -87,7 +81,7 @@ export const Home: React.FC = () => {
             className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50"
           >
             <span className="text-base leading-none font-black">+</span>
-            <span>{isCreating ? 'A abrir Studio...' : 'Criar Novo Vídeo'}</span>
+            <span>{isCreating ? 'Criando...' : 'Nova História'}</span>
           </button>
         </div>
       </header>
@@ -100,7 +94,7 @@ export const Home: React.FC = () => {
               Histórico de Produções
             </h2>
             <p className="text-xs text-slate-400">
-              Rascunhos de Storyboard e vídeos renderizados prontos para edição no Studio
+              Rascunhos e vídeos renderizados prontos para edição.
             </p>
           </div>
 
@@ -130,7 +124,7 @@ export const Home: React.FC = () => {
               <span className="text-3xl font-light leading-none">+</span>
             </div>
             <h3 className="mt-5 text-base font-bold text-white group-hover:text-amber-400 transition">
-              {isCreating ? 'A abrir Studio...' : 'Criar Novo Vídeo'}
+              {isCreating ? 'Abrindo Studio...' : 'Criar Nova História'}
             </h3>
             <p className="mt-1.5 max-w-[210px] text-xs text-slate-400">
               Inicie no Modo Storyboard: aprove o roteiro antes de gerar imagens B-Roll e locução
