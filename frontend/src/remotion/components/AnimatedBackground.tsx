@@ -69,9 +69,9 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
   // Escala alternada: pares fazem Zoom In (1.0 -> 1.15), ímpares fazem Zoom Out (1.15 -> 1.0)
   // Nota: em Zoom Out ou Pan lateral garantimos escala mínima >= 1.04 quando há translação
   // para nunca revelar bordas pretas fora do frame 9:16.
-  let scale = 1;
-  let translateXPercent = 0;
-  let translateYPercent = 0;
+  let scale: number;
+  let translateXPercent: number;
+  let translateYPercent: number;
 
   if (cameraMode === 0) {
     // Modo 0: Zoom In Clássico (1.0 -> 1.15) + Pan suave para a Direita

@@ -7,6 +7,9 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:studio": "npm --prefix frontend run studio",
     "dev:backend": "npm --prefix backend run dev",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "lint:backend": "npm --prefix backend run lint",
+    "lint": "npm run lint:frontend && npm run lint:backend",
     "db:up": "docker compose up -d",
     "db:push": "npm --prefix backend run db:push",
     "db:generate": "npm --prefix backend run db:generate"

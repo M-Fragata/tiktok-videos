@@ -578,7 +578,7 @@ export const IdeationDressingRoomTab: React.FC<
 > = ({
   theme,
   setTheme,
-  suggestedThemes,
+  suggestedThemes: _suggestedThemes,
   durationPreset,
   setDurationPreset,
   durationOptions,
@@ -611,7 +611,6 @@ export const IdeationDressingRoomTab: React.FC<
     0,
     AVATAR_ANGLES.findIndex((a) => a.id === avatarConfig.angle)
   );
-  const currentAngleMeta = AVATAR_ANGLES[currentAngleIndex] || AVATAR_ANGLES[0];
 
   const handleRotateAvatar = (direction: 'prev' | 'next') => {
     const total = AVATAR_ANGLES.length;
@@ -783,14 +782,6 @@ export const IdeationDressingRoomTab: React.FC<
     ]);
     setIsFinalScriptOpen(true);
   };
-
-  const totalFinalWords = finalMixScenes.reduce((acc, item) => {
-    const words = item.scene.text
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean).length;
-    return acc + words;
-  }, 0);
 
   return (
     <div className="space-y-5 pb-4">

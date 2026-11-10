@@ -40,12 +40,6 @@ const SUGGESTED_THEMES = [
   'A Chegada do Homem à Lua com a Apollo 11 (1969)',
 ];
 
-const SPEAKER_LABELS: Record<SpeakerType, string> = {
-  protagonist: 'Protagonista (Viajante POV)',
-  character: 'Personagem Histórico (Stick Figure)',
-  narrator: 'Narrador (Documentário Épico)',
-};
-
 const DURATION_OPTIONS: Array<{ value: DurationPreset; label: string }> = [
   { value: 'short', label: 'Curto (15s • máx 40 palavras)' },
   { value: 'medium', label: 'Médio (30s • máx 70 palavras)' },
@@ -1183,14 +1177,6 @@ export const Studio: React.FC = () => {
   // ========================================================
   const hasScript = scenes.length > 0;
   const isPending = videoRecord?.status === 'PENDING';
-  const selectedImagesCount = scenes.filter((s) =>
-    Boolean(s.selectedImage)
-  ).length;
-  const totalWordsCount = scenes.reduce(
-    (acc, s) =>
-      acc + (s.text.trim() ? s.text.trim().split(/\s+/).length : 0),
-    0
-  );
 
   const effectiveTotalFrames = useMemo(() => {
     if (durationInFrames && durationInFrames > 0) return durationInFrames;
@@ -2327,12 +2313,12 @@ export const Studio: React.FC = () => {
                                   <label
                                     htmlFor={`upload-scene-file-${index}`}
                                     className={`flex items-center justify-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-200 transition hover:border-white/20 hover:bg-[#2c2c34] active:scale-[0.99] cursor-pointer ${
-                                      Boolean(isUploadingManualImage[index])
+                                      isUploadingManualImage[index]
                                         ? 'cursor-not-allowed opacity-60'
                                         : ''
                                     }`}
                                   >
-                                    {Boolean(isUploadingManualImage[index]) ? (
+                                    {isUploadingManualImage[index] ? (
                                       <>
                                         <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
                                         <span>Enviando...</span>

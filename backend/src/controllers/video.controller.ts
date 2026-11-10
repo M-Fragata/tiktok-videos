@@ -29,8 +29,6 @@ import {
   generateSceneBrollImages,
 } from '../services/imagen.service.ts';
 
-const USE_AI_MOCK = false;
-
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
   return (process.env.PUBLIC_BASE_URL || `http://localhost:${port}`).replace(

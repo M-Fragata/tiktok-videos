@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch --dns-result-order=ipv4first --env-file-if-exists=.env src/server.ts",
     "start": "node --dns-result-order=ipv4first --env-file-if-exists=.env src/server.ts",
+    "lint": "oxlint src",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev"
@@ -26,6 +27,7 @@
     "@types/express": "^5.0.0",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^22.10.5",
+    "oxlint": "^1.93.0",
     "prisma": "^6.2.1"
   },
   "overrides": {
