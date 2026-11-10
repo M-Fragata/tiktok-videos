@@ -56,7 +56,10 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
             from={Math.max(0, cutFrame - 2)}
             durationInFrames={15}
           >
-            <Audio src={resolveAssetSrc('sfx/whoosh.mp3')} volume={0.32} />
+            <Audio
+              src={resolveAssetSrc('bgm/effects/whoosh.mp3')}
+              volume={0.32}
+            />
           </Sequence>
         ))}
     </>

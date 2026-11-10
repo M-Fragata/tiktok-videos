@@ -23,16 +23,62 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
-export type BgmVibe = 'epic' | 'dark' | 'fun' | 'none';
+export type BgmVibe =
+  | 'epic'
+  | 'dark'
+  | 'fun'
+  | 'hiphop'
+  | 'action'
+  | 'piano'
+  | 'adventure'
+  | 'comedy'
+  | 'none';
 
 export const BGM_VIBE_OPTIONS: Array<{
   value: BgmVibe;
   label: string;
   file: string | null;
 }> = [
-  { value: 'epic', label: '🎻 Épico & Cinematográfico (10%)', file: 'bgm/epic.mp3' },
-  { value: 'dark', label: '🌑 Sombrio & Mistério (10%)', file: 'bgm/dark.mp3' },
-  { value: 'fun', label: '🎪 Divertido & Curioso (10%)', file: 'bgm/fun.mp3' },
+  {
+    value: 'epic',
+    label: '🎻 Épico & Cinematográfico (10%)',
+    file: 'bgm/music/epic.mp3',
+  },
+  {
+    value: 'dark',
+    label: '🌑 Sombrio & Mistério (10%)',
+    file: 'bgm/music/dark.mp3',
+  },
+  {
+    value: 'fun',
+    label: '🎪 Divertido & Curioso (10%)',
+    file: 'bgm/music/fun-light.mp3',
+  },
+  {
+    value: 'hiphop',
+    label: '⚡ Épico & Hip-Hop Beat (10%)',
+    file: 'bgm/music/epic-hiphop.mp3',
+  },
+  {
+    value: 'action',
+    label: '⚔️ Ação & Corrida (10%)',
+    file: 'bgm/music/action-run.mp3',
+  },
+  {
+    value: 'piano',
+    label: '🎹 Piano Rápido & Mistério (10%)',
+    file: 'bgm/music/fast-piano.mp3',
+  },
+  {
+    value: 'adventure',
+    label: '🏔️ Aventura & Expedição (10%)',
+    file: 'bgm/music/mountain-intro.mp3',
+  },
+  {
+    value: 'comedy',
+    label: '🎭 Comédia & Ironia (10%)',
+    file: 'bgm/music/funny-vlog.mp3',
+  },
   { value: 'none', label: '🔇 Sem Música de Fundo', file: null },
 ];
 

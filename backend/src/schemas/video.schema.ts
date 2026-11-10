@@ -66,7 +66,17 @@ export const speakerTypeSchema = z.enum([
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
-export const bgmVibeSchema = z.enum(['epic', 'dark', 'fun', 'none']);
+export const bgmVibeSchema = z.enum([
+  'epic',
+  'dark',
+  'fun',
+  'hiphop',
+  'action',
+  'piano',
+  'adventure',
+  'comedy',
+  'none',
+]);
 
 export const avatarHairStyleSchema = z.enum([
   'bald',
