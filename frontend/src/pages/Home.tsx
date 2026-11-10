@@ -68,11 +68,11 @@ export const Home: React.FC = () => {
       <header className="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div>
-              <h1 className="cursor-pointer rounded-xl px-4 py-2.5 text-xs font-bold tracking-tight text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50">
-                Fragata Shorts
-              </h1>
-            </div>
+            <img
+              src="/logo/fragata_shorts_logo.png"
+              alt="Fragata Shorts"
+              className="h-11 w-auto cursor-pointer object-contain transition-transform hover:scale-105 active:scale-95"
+            />
           </div>
 
           <button
@@ -118,11 +118,9 @@ export const Home: React.FC = () => {
           {/* Cartão 1: Criar Novo Vídeo */}
           <div
             onClick={handleCreateDraftVideo}
-            className="group relative flex min-h-[380px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30 p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/60 hover:bg-amber-500/5 hover:shadow-xl hover:shadow-amber-500/5"
+            className="group relative flex min-h-[380px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-900/30 p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/60 hover:bg-amber-500/5 hover:shadow-xl hover:shadow-amber-500/5"
           >
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 border border-slate-800 text-amber-400 shadow-lg group-hover:scale-110 group-hover:border-amber-500/50 group-hover:bg-amber-500/20 transition-all duration-200">
-              <span className="text-3xl font-light leading-none">+</span>
-            </div>
+            <span className="text-7xl font-light leading-none group-hover:text-amber-400 transition">+</span>
             <h3 className="mt-5 text-base font-bold text-white group-hover:text-amber-400 transition">
               {isCreating ? 'Abrindo Studio...' : 'Criar Nova História'}
             </h3>
@@ -170,34 +168,6 @@ export const Home: React.FC = () => {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-black/40" />
 
-                  {/* Badge de Status */}
-                  <div className="absolute top-3 right-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase border shadow-md ${
-                        video.status === 'RENDERED'
-                          ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300'
-                          : video.status === 'FAILED'
-                            ? 'border-rose-500/40 bg-rose-500/20 text-rose-300'
-                            : video.status === 'DRAFT'
-                              ? 'border-sky-500/40 bg-sky-500/20 text-sky-300'
-                              : 'animate-pulse border-amber-500/40 bg-amber-500/20 text-amber-300'
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          video.status === 'RENDERED'
-                            ? 'bg-emerald-400'
-                            : video.status === 'FAILED'
-                              ? 'bg-rose-400'
-                              : video.status === 'DRAFT'
-                                ? 'bg-sky-400'
-                                : 'bg-amber-400'
-                        }`}
-                      />
-                      {video.status}
-                    </span>
-                  </div>
-
                   {/* Play Overlay no Hover */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/40">
@@ -222,16 +192,6 @@ export const Home: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between border-t border-slate-800/80 pt-3 text-xs text-slate-400">
-                    <span className="font-semibold text-amber-400/90 group-hover:text-amber-300 transition">
-                      Abrir no Studio →
-                    </span>
-                    {video.status === 'RENDERED' && video.videoUrl && (
-                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-slate-300">
-                        MP4
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
             );
