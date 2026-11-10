@@ -71,6 +71,70 @@ const WAVEFORM_BARS = Array.from({ length: 76 }, (_, i) => {
   return Math.max(16, Math.min(92, Math.round(v * 100)));
 });
 
+/**
+ * Gera uma assinatura (fingerprint) determinística de todo o estado visual e sonoro do vídeo.
+ * Usada para saber se o arquivo .mp4 já renderizado corresponde exatamente ao estado atual do Studio
+ * ou se o utilizador fez alguma alteração que exige nova renderização antes do download.
+ */
+function computeRenderSignature(params: {
+  durationInFrames: number;
+  backgroundSrc: string;
+  backgroundTimeline: BackgroundSegment[];
+  audioSrc: string;
+  bgmVibe: BgmVibe;
+  subtitles: SubtitleItem[];
+  subtitleStyle: SubtitleStyleConfig;
+  avatarTimeline: AvatarSegment[];
+  scenes: Array<{
+    speaker: string;
+    text: string;
+    avatarSprite: string;
+    selectedImage?: string | null;
+  }>;
+}): string {
+  return JSON.stringify({
+    durationInFrames: params.durationInFrames,
+    backgroundSrc: params.backgroundSrc,
+    backgroundTimeline: params.backgroundTimeline.map((b) => ({
+      imageSrc: b.imageSrc,
+      frameStart: b.frameStart,
+      frameEnd: b.frameEnd,
+    })),
+    audioSrc: params.audioSrc,
+    bgmVibe: params.bgmVibe,
+    subtitles: params.subtitles.map((s) => ({
+      text: s.text,
+      frameStart: s.frameStart,
+      frameEnd: s.frameEnd,
+      words: s.words,
+    })),
+    subtitleStyle: params.subtitleStyle,
+    avatarTimeline: params.avatarTimeline.map((a) => ({
+      startSecond: a.startSecond,
+      endSecond: a.endSecond,
+      image: a.image,
+    })),
+    scenes: params.scenes.map((sc) => ({
+      speaker: sc.speaker,
+      text: sc.text,
+      avatarSprite: sc.avatarSprite,
+      selectedImage: sc.selectedImage || null,
+    })),
+  });
+}
+
+function buildMp4DownloadFileName(themeTitle: string): string {
+  const slug =
+    (themeTitle || 'video')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+      .slice(0, 50) || 'video';
+  return `fragata-shorts-${slug}.mp4`;
+}
+
 export const Studio: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -152,9 +216,24 @@ export const Studio: React.FC = () => {
   const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRerendering, setIsRerendering] = useState<boolean>(false);
+  const [isDownloadingMp4, setIsDownloadingMp4] = useState<boolean>(false);
+  const [lastRenderedSignature, setLastRenderedSignature] = useState<
+    string | null
+  >(null);
   const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState<boolean>(false);
+  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
+  const [titleDraft, setTitleDraft] = useState<string>('');
+  const [isSavingTitle, setIsSavingTitle] = useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>('');
+  const [isDeletingVideo, setIsDeletingVideo] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const pendingAutoDownloadRef = useRef<boolean>(false);
+  const renderingSignatureRef = useRef<string | null>(null);
+  const shouldSyncInitialRenderedSignatureRef = useRef<boolean>(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleFormRef = useRef<HTMLFormElement>(null);
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -165,6 +244,8 @@ export const Studio: React.FC = () => {
       if (event.key === 'Escape') {
         setPreviewBrollModal(null);
         setIsOptionsMenuOpen(false);
+        setIsEditingTitle(false);
+        setIsDeleteModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -173,16 +254,24 @@ export const Studio: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         optionsMenuRef.current &&
-        !optionsMenuRef.current.contains(event.target as Node)
+        !optionsMenuRef.current.contains(target)
       ) {
         setIsOptionsMenuOpen(false);
+      }
+      if (
+        isEditingTitle &&
+        titleFormRef.current &&
+        !titleFormRef.current.contains(target)
+      ) {
+        setIsEditingTitle(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isEditingTitle]);
 
   const hydrateFromProps = (
     props: TimeMachineVideoProps,
@@ -300,6 +389,10 @@ export const Studio: React.FC = () => {
       const data: VideoRecord = await res.json();
       setVideoRecord(data);
 
+      if (data.status === 'RENDERED' && data.videoUrl) {
+        shouldSyncInitialRenderedSignatureRef.current = true;
+      }
+
       if (data.remotionProps) {
         hydrateFromProps(data.remotionProps, data.theme);
       } else if (
@@ -344,31 +437,6 @@ export const Studio: React.FC = () => {
       player.removeEventListener('ended', onEnded);
     };
   }, [isLoading]);
-
-  // Polling automático enquanto estiver a renderizar o MP4 no servidor (status === 'PENDING')
-  useEffect(() => {
-    if (!id || !videoRecord || videoRecord.status !== 'PENDING') {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/videos/${id}`);
-        if (!res.ok) return;
-        const data: VideoRecord = await res.json();
-        setVideoRecord(data);
-        if (data.status === 'RENDERED') {
-          setSuccessMsg(
-            'MP4 renderizado com sucesso! Clique em "Baixar MP4" na barra superior.'
-          );
-        }
-      } catch (err) {
-        console.error('Erro no polling do vídeo:', err);
-      }
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [id, videoRecord?.status]);
 
   // ========================================================
   // ETAPA 1A: Gerar 4 Opções de Ideias com IA (POST /api/videos/:id/generate-script)
@@ -637,6 +705,88 @@ export const Studio: React.FC = () => {
     }
   };
 
+  const handleDeleteBrollImage = async (
+    sceneIndex: number,
+    imageUrlToDelete: string
+  ) => {
+    const targetScene = scenes[sceneIndex];
+    if (!targetScene) return;
+
+    // Não permite excluir a imagem se ela estiver selecionada no momento
+    if (targetScene.selectedImage === imageUrlToDelete) {
+      setErrorMsg(
+        'Não é possível excluir a imagem que está atualmente selecionada nesta cena.'
+      );
+      return;
+    }
+
+    const updatedCandidates = (targetScene.candidateImages || []).filter(
+      (img) => img !== imageUrlToDelete
+    );
+
+    const updatedScenes = scenes.map((scene, idx) =>
+      idx === sceneIndex
+        ? {
+            ...scene,
+            candidateImages: updatedCandidates,
+          }
+        : scene
+    );
+
+    setScenes(updatedScenes);
+
+    if (
+      previewBrollModal &&
+      previewBrollModal.sceneIndex === sceneIndex &&
+      previewBrollModal.imageUrl === imageUrlToDelete
+    ) {
+      setPreviewBrollModal(null);
+    }
+
+    // Persiste imediatamente a lista atualizada de imagens no banco
+    if (id) {
+      try {
+        const payload: TimeMachineVideoProps = {
+          theme: theme || 'Vlog de Viagem no Tempo',
+          durationInFrames: effectiveTotalFrames,
+          backgroundSrc:
+            effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
+          backgroundTimeline: effectiveBackgroundTimeline,
+          audioSrc,
+          bgmVibe,
+          subtitles: effectiveSubtitles,
+          subtitleStyle,
+          avatarTimeline: effectiveAvatarTimeline,
+          storyboard: {
+            durationPreset,
+            scenes: updatedScenes,
+            audioGenerated,
+            isAssembled,
+            sceneTimings,
+            avatarConfig,
+            ideationOptions,
+            bgmVibe,
+          },
+        };
+
+        const res = await fetch(`/api/videos/${id}/storyboard`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.video) {
+            setVideoRecord(data.video);
+          }
+        }
+      } catch (err) {
+        console.warn('Aviso ao sincronizar remoção de imagem com o banco:', err);
+      }
+    }
+  };
+
   const handleManualImageUpload = async (sceneIndex: number, file: File) => {
     if (!id || !file) return;
 
@@ -899,6 +1049,42 @@ export const Studio: React.FC = () => {
     }
   };
 
+  // Função para disparar o download real do arquivo .mp4 diretamente na pasta Downloads do navegador
+  const triggerDirectMp4Download = async (
+    videoUrl: string,
+    currentTheme: string
+  ) => {
+    const fileName = buildMp4DownloadFileName(currentTheme);
+    setIsDownloadingMp4(true);
+    try {
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error('Falha ao obter o arquivo MP4 renderizado.');
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+      console.warn('Fallback para download direto via link:', err);
+      const fallbackLink = document.createElement('a');
+      fallbackLink.href = videoUrl;
+      fallbackLink.download = fileName;
+      fallbackLink.target = '_blank';
+      fallbackLink.rel = 'noreferrer';
+      document.body.appendChild(fallbackLink);
+      fallbackLink.click();
+      document.body.removeChild(fallbackLink);
+    } finally {
+      setIsDownloadingMp4(false);
+    }
+  };
+
   // ========================================================
   // Renderização Final do MP4 no Servidor (POST /api/videos/:id/rerender)
   // ========================================================
@@ -943,15 +1129,17 @@ export const Studio: React.FC = () => {
 
       const data = await res.json();
       if (!res.ok) {
+        pendingAutoDownloadRef.current = false;
         throw new Error(data.error || 'Falha ao acionar renderização do MP4');
       }
 
       setVideoRecord(data.video);
       setIsAssembled(true);
       setSuccessMsg(
-        'Exportação MP4 iniciada no servidor! Acompanhe o status no topo.'
+        'Renderizando MP4 atualizado no servidor! O download iniciará automaticamente ao concluir.'
       );
     } catch (err) {
+      pendingAutoDownloadRef.current = false;
       setErrorMsg(
         err instanceof Error ? err.message : 'Erro ao renderizar vídeo MP4'
       );
@@ -1100,6 +1288,205 @@ export const Studio: React.FC = () => {
     }
     return [];
   }, [subtitles, scenes, effectiveBackgroundTimeline]);
+
+  // Assinatura reativa do estado atual do vídeo no Studio (para detectar se o MP4 existente está atualizado)
+  const currentRenderSignature = useMemo(() => {
+    return computeRenderSignature({
+      durationInFrames: effectiveTotalFrames,
+      backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
+      backgroundTimeline: effectiveBackgroundTimeline,
+      audioSrc,
+      bgmVibe,
+      subtitles: effectiveSubtitles,
+      subtitleStyle,
+      avatarTimeline: effectiveAvatarTimeline,
+      scenes,
+    });
+  }, [
+    effectiveTotalFrames,
+    effectiveBackgroundTimeline,
+    backgroundSrc,
+    audioSrc,
+    bgmVibe,
+    effectiveSubtitles,
+    subtitleStyle,
+    effectiveAvatarTimeline,
+    scenes,
+  ]);
+
+  // Sincroniza a assinatura inicial caso o projeto já venha do banco com status === 'RENDERED'
+  useEffect(() => {
+    if (
+      !isLoading &&
+      shouldSyncInitialRenderedSignatureRef.current &&
+      videoRecord?.status === 'RENDERED' &&
+      videoRecord?.videoUrl
+    ) {
+      shouldSyncInitialRenderedSignatureRef.current = false;
+      setLastRenderedSignature(currentRenderSignature);
+    }
+  }, [
+    isLoading,
+    videoRecord?.status,
+    videoRecord?.videoUrl,
+    currentRenderSignature,
+  ]);
+
+  const isMp4UpToDate =
+    videoRecord?.status === 'RENDERED' &&
+    Boolean(videoRecord?.videoUrl) &&
+    lastRenderedSignature !== null &&
+    currentRenderSignature === lastRenderedSignature;
+
+  // Ação unificada do botão "Exportar MP4":
+  // - Se já existe MP4 e nada mudou no vídeo (hash idêntico), baixa imediatamente.
+  // - Se nunca foi renderizado ou houve qualquer edição, renderiza e baixa automaticamente ao concluir.
+  const handleExportMp4Click = async () => {
+    if (!id) return;
+
+    if (isMp4UpToDate && videoRecord?.videoUrl) {
+      setErrorMsg(null);
+      setSuccessMsg(
+        'Vídeo sem alterações pendentes! Baixando MP4 diretamente...'
+      );
+      await triggerDirectMp4Download(videoRecord.videoUrl, theme);
+      return;
+    }
+
+    pendingAutoDownloadRef.current = true;
+    renderingSignatureRef.current = currentRenderSignature;
+    await handleRenderMp4OnServer();
+  };
+
+  // ========================================================
+  // Edição Rápida do Título na Barra Superior (Duplo Clique)
+  // ========================================================
+  const handleStartEditTitle = () => {
+    setTitleDraft(theme || 'Sem Título');
+    setIsEditingTitle(true);
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 20);
+  };
+
+  const handleSaveTitle = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!id) return;
+
+    const cleanTitle = titleDraft.trim();
+    if (!cleanTitle) {
+      setErrorMsg('O título do vídeo não pode ficar vazio.');
+      return;
+    }
+
+    if (cleanTitle === theme) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    setIsSavingTitle(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch(`/api/videos/${id}/title`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: cleanTitle }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao salvar o novo título.');
+      }
+
+      setTheme(cleanTitle);
+      if (data.video) {
+        setVideoRecord(data.video);
+      }
+      setIsEditingTitle(false);
+      setSuccessMsg('Título atualizado com sucesso!');
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Erro ao atualizar título.'
+      );
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
+  // ========================================================
+  // Exclusão Permanente do Vídeo (Confirmação "fragata shorts")
+  // ========================================================
+  const isDeleteConfirmationValid =
+    deleteConfirmInput.trim().toLowerCase() === 'fragata shorts';
+
+  const handleConfirmDeleteVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !isDeleteConfirmationValid) return;
+
+    setIsDeletingVideo(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch(`/api/videos/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Falha ao excluir o vídeo.');
+      }
+
+      navigate('/');
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Erro ao excluir o vídeo.'
+      );
+      setIsDeletingVideo(false);
+      setIsDeleteModalOpen(false);
+    }
+  };
+
+  // Polling automático enquanto estiver a renderizar o MP4 no servidor (status === 'PENDING')
+  useEffect(() => {
+    if (!id || !videoRecord || videoRecord.status !== 'PENDING') {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/videos/${id}`);
+        if (!res.ok) return;
+        const data: VideoRecord = await res.json();
+        setVideoRecord(data);
+        if (data.status === 'RENDERED' && data.videoUrl) {
+          setLastRenderedSignature(
+            renderingSignatureRef.current ?? currentRenderSignature
+          );
+          if (pendingAutoDownloadRef.current) {
+            pendingAutoDownloadRef.current = false;
+            setSuccessMsg(
+              'MP4 renderizado com sucesso! Iniciando download automático...'
+            );
+            void triggerDirectMp4Download(
+              data.videoUrl,
+              data.theme || theme
+            );
+          } else {
+            setSuccessMsg('MP4 renderizado com sucesso!');
+          }
+        } else if (data.status === 'FAILED') {
+          pendingAutoDownloadRef.current = false;
+          setErrorMsg('Falha ao renderizar o MP4 no servidor.');
+        }
+      } catch (err) {
+        console.error('Erro no polling do vídeo:', err);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [id, videoRecord?.status, currentRenderSignature, theme]);
 
   // Arraste direto da caixa de legenda sobre o Player 9:16 (sem disparar Play/Pause)
   const updateSubtitlePositionFromClientXY = (
@@ -1353,7 +1740,7 @@ export const Studio: React.FC = () => {
           1. BARRA SUPERIOR (Top Bar - 60px)
          ==================================================================== */}
       <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#2c2c32]/50 bg-[#141418] px-5 z-30">
-        {/* Esquerda: Apenas Ícone de Seta para Voltar ao Dashboard */}
+        {/* Esquerda: Botão de Voltar + Logo Fragata Shorts */}
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1377,35 +1764,48 @@ export const Studio: React.FC = () => {
             </svg>
           </button>
 
-          {videoRecord?.status && videoRecord.status !== 'DRAFT' && (
-            <span
-              className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                videoRecord.status === 'RENDERED'
-                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-                  : videoRecord.status === 'FAILED'
-                    ? 'border-rose-500/40 bg-rose-500/15 text-rose-300'
-                    : 'animate-pulse border-amber-500/40 bg-amber-500/15 text-amber-300'
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  videoRecord.status === 'RENDERED'
-                    ? 'bg-emerald-400'
-                    : videoRecord.status === 'FAILED'
-                      ? 'bg-rose-400'
-                      : 'bg-amber-400'
-                }`}
-              />
-              {videoRecord.status}
-            </span>
-          )}
+          <img
+            src="/logo/fragata_shorts_logo.png"
+            alt="Fragata Shorts"
+            onClick={() => navigate('/')}
+            className="h-9 w-auto cursor-pointer object-contain transition-transform hover:scale-105 active:scale-95"
+          />
         </div>
 
-        {/* Centro: Título do Vídeo em Destaque */}
+        {/* Centro: Título do Vídeo em Destaque (Duplo Clique para Editar) */}
         <div className="flex items-center gap-3 min-w-0 px-4">
-          <h1 className="truncate max-w-[260px] sm:max-w-[460px] md:max-w-[600px] text-[15px] font-semibold tracking-tight text-slate-100">
-            {theme || 'Sem Título'}
-          </h1>
+          {isEditingTitle ? (
+            <form
+              ref={titleFormRef}
+              onSubmit={(e) => void handleSaveTitle(e)}
+              className="flex items-center gap-2"
+            >
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                disabled={isSavingTitle}
+                placeholder="Digite o título do vídeo..."
+                className="w-[240px] sm:w-[360px] md:w-[440px] rounded-xl border border-amber-500/60 bg-[#1c1c22] px-3 py-1.5 text-sm font-semibold text-white outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+              />
+              <button
+                type="submit"
+                disabled={isSavingTitle || !titleDraft.trim()}
+                className="rounded-xl bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 shadow-md transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSavingTitle ? 'Salvando...' : 'Salvar'}
+              </button>
+            </form>
+          ) : (
+            <h1
+              onDoubleClick={handleStartEditTitle}
+              title="Clique duas vezes para alterar o título"
+              className="cursor-pointer truncate max-w-[260px] sm:max-w-[460px] md:max-w-[600px] rounded-lg px-2 py-1 text-[15px] font-semibold tracking-tight text-slate-100 transition hover:bg-white/5 hover:text-amber-300"
+            >
+              {theme || 'Sem Título'}
+            </h1>
+          )}
 
           {/* Notificação Compacta Flutuante */}
           {errorMsg && (
@@ -1434,17 +1834,15 @@ export const Studio: React.FC = () => {
           )}
         </div>
 
-        {/* Direita: Menu de 3 Pontos Verticais com Opção Exportar MP4 */}
+        {/* Direita: Pílula temporária de progresso + Menu de 3 Pontos Verticais */}
         <div className="relative flex items-center gap-2.5" ref={optionsMenuRef}>
-          {videoRecord?.status === 'RENDERED' && videoRecord.videoUrl && (
-            <a
-              href={videoRecord.videoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/30"
-            >
-              <span>⬇ Baixar MP4</span>
-            </a>
+          {(isRerendering || isPending || isDownloadingMp4) && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 shadow-sm">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+              <span>
+                {isDownloadingMp4 ? 'Baixando MP4...' : 'Renderizando MP4...'}
+              </span>
+            </div>
           )}
 
           <button
@@ -1454,7 +1852,7 @@ export const Studio: React.FC = () => {
             aria-label="Mais opções"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#2c2c32]/80 bg-[#1c1c22] text-slate-200 transition hover:border-white/20 hover:bg-[#24242c] hover:text-white"
           >
-            {isRerendering || isPending ? (
+            {isRerendering || isPending || isDownloadingMp4 ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
             ) : (
               <svg
@@ -1473,10 +1871,12 @@ export const Studio: React.FC = () => {
             <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-1.5 shadow-2xl shadow-black/90 z-50">
               <button
                 type="button"
-                disabled={isRerendering || isPending || !hasScript}
+                disabled={
+                  isRerendering || isPending || isDownloadingMp4 || !hasScript
+                }
                 onClick={() => {
                   setIsOptionsMenuOpen(false);
-                  void handleRenderMp4OnServer();
+                  void handleExportMp4Click();
                 }}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-slate-100 transition hover:bg-amber-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -1495,9 +1895,39 @@ export const Studio: React.FC = () => {
                 </svg>
                 <span>
                   {isRerendering || isPending
-                    ? 'Exportando MP4...'
-                    : 'Exportar MP4'}
+                    ? 'Renderizando MP4...'
+                    : isDownloadingMp4
+                      ? 'Baixando MP4...'
+                      : 'Exportar MP4'}
                 </span>
+              </button>
+
+              <div className="my-1 border-t border-[#2c2c32]/80" />
+
+              <button
+                type="button"
+                disabled={isDeletingVideo}
+                onClick={() => {
+                  setIsOptionsMenuOpen(false);
+                  setDeleteConfirmInput('');
+                  setIsDeleteModalOpen(true);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-rose-400 transition hover:bg-rose-500/15 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg
+                  className="h-4 w-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+                <span>Excluir Vídeo</span>
               </button>
             </div>
           )}
@@ -1789,13 +2219,8 @@ export const Studio: React.FC = () => {
                               <div>
                                 <div className="flex items-center justify-between mb-2">
                                   <label className="block text-xs text-slate-400">
-                                    B-Roll
+                                    Imagens
                                   </label>
-                                  {scene.selectedImage && (
-                                    <span className="text-[11px] font-medium text-emerald-400">
-                                      ✓ Imagem Aprovada
-                                    </span>
-                                  )}
                                 </div>
 
                                 {/* Cards B-Roll Verticais 9:16 com Overlay e Badge */}
@@ -1829,14 +2254,6 @@ export const Studio: React.FC = () => {
                                                 />
                                               </div>
 
-                                              {/* Overlay Gradiente Subtil */}
-                                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/40" />
-
-                                              {/* Badge Superior Esquerdo: Opção 1 / Opção 2 */}
-                                              <span className="absolute top-2 left-2 rounded-md bg-black/65 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-slate-200 border border-white/10">
-                                                Opção {optIdx + 1}
-                                              </span>
-
                                               {/* Botão Superior Direito (Hover): Ampliar / Visualizar Cenário */}
                                               <button
                                                 type="button"
@@ -1867,19 +2284,36 @@ export const Studio: React.FC = () => {
                                                 </svg>
                                               </button>
 
-                                              {/* Indicador de Aprovação (Check Verde Brilhante) */}
-                                              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                                                {isSelected ? (
-                                                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-slate-950 shadow-sm">
-                                                    <span>✓</span>
-                                                    <span>Aprovada</span>
-                                                  </span>
-                                                ) : (
-                                                  <span className="rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-medium text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    Selecionar
-                                                  </span>
-                                                )}
-                                              </div>
+                                              {/* Botão Inferior Esquerdo (Hover): Excluir Imagem B-Roll (apenas imagens não selecionadas) */}
+                                              {!isSelected && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void handleDeleteBrollImage(
+                                                      index,
+                                                      imgUrl
+                                                    );
+                                                  }}
+                                                  title="Excluir esta imagem"
+                                                  aria-label={`Excluir imagem da Cena ${index + 1}`}
+                                                  className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/75 text-slate-300 opacity-0 shadow-md backdrop-blur-xs transition-all duration-150 group-hover:opacity-100 hover:scale-105 hover:border-rose-500/60 hover:bg-black/90 hover:text-rose-400"
+                                                >
+                                                  <svg
+                                                    className="h-3.5 w-3.5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                    strokeWidth={2}
+                                                  >
+                                                    <path
+                                                      strokeLinecap="round"
+                                                      strokeLinejoin="round"
+                                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                    />
+                                                  </svg>
+                                                </button>
+                                              )}
                                             </div>
                                           );
                                         }
@@ -2079,8 +2513,8 @@ export const Studio: React.FC = () => {
                         <div className="grid grid-cols-4 gap-1.5">
                           {(
                             [
-                              { id: 'impact', label: 'Impacto' },
                               { id: 'montserrat', label: 'Montserrat' },
+                              { id: 'impact', label: 'Impacto' },
                               { id: 'grotesque', label: 'Grotesque' },
                               { id: 'script', label: 'Script' },
                             ] as Array<{
@@ -3046,6 +3480,100 @@ export const Studio: React.FC = () => {
                   : 'Selecionar este Cenário'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          4. MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DO VÍDEO ("fragata shorts")
+         ==================================================================== */}
+      {isDeleteModalOpen && (
+        <div
+          onClick={() => !isDeletingVideo && setIsDeleteModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-[#18181c] p-6 shadow-2xl shadow-black"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-400">
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Excluir Vídeo Permanentemente
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Esta ação apagará o projeto, imagens, áudios e o MP4 renderizado.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isDeletingVideo}
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => void handleConfirmDeleteVideo(e)}
+              className="mt-5 space-y-4"
+            >
+              <div>
+                <label className="block text-xs text-slate-300">
+                  Para confirmar a exclusão, digite{' '}
+                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-mono font-bold text-rose-300 select-all">
+                    fragata shorts
+                  </span>{' '}
+                  abaixo:
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={deleteConfirmInput}
+                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                  disabled={isDeletingVideo}
+                  placeholder="fragata shorts"
+                  className="mt-2 w-full rounded-xl border border-[#2c2c32] bg-[#121215] px-3.5 py-2.5 text-xs font-medium text-white placeholder-slate-600 outline-none transition focus:border-rose-500/60 focus:ring-2 focus:ring-rose-500/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-1">
+                <button
+                  type="button"
+                  disabled={isDeletingVideo}
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="rounded-xl border border-[#2c2c32] bg-[#202026] px-4 py-2 text-xs font-semibold text-slate-300 transition hover:bg-[#2a2a32] hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!isDeleteConfirmationValid || isDeletingVideo}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-rose-600/25 transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isDeletingVideo ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

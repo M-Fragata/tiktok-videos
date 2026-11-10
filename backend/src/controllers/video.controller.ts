@@ -9,11 +9,13 @@ import {
   generateScriptSchema,
   generateVideoSchema,
   renderVideoSchema,
+  updateVideoTitleSchema,
   uploadSceneImageSchema,
   type RenderVideoInput,
 } from '../schemas/video.schema.ts';
 import {
   renderTimeMachineVideoOnDisk,
+  RENDERS_OUTPUT_DIR,
   STORAGE_OUTPUT_DIR,
 } from '../services/remotion.service.ts';
 import {
@@ -162,6 +164,7 @@ export async function generateScriptController(
       where: { id },
       data: {
         theme,
+        status: 'DRAFT',
         remotionProps,
       },
     });
@@ -260,6 +263,7 @@ export async function generateSceneImagesController(
     const updatedVideo = await prisma.video.update({
       where: { id },
       data: {
+        status: 'DRAFT',
         remotionProps: updatedProps,
       },
     });
@@ -357,6 +361,7 @@ export async function generateAudioController(
     const updatedVideo = await prisma.video.update({
       where: { id },
       data: {
+        status: 'DRAFT',
         remotionProps: updatedProps,
       },
     });
@@ -411,6 +416,7 @@ export async function saveStoryboardController(
       where: { id },
       data: {
         theme: parsedBody.data.theme,
+        status: 'DRAFT',
         remotionProps: parsedBody.data,
       },
     });
@@ -582,11 +588,13 @@ export async function rerenderVideoController(
         const { outputFilePath, publicVideoUrl } =
           await renderTimeMachineVideoOnDisk(id, updatedProps);
 
+        const versionedVideoUrl = `${publicVideoUrl}?v=${Date.now()}`;
+
         await prisma.video.update({
           where: { id },
           data: {
             status: 'RENDERED',
-            videoUrl: publicVideoUrl,
+            videoUrl: versionedVideoUrl,
           },
         });
 
@@ -828,6 +836,7 @@ export async function uploadSceneImageController(
     const updatedVideo = await prisma.video.update({
       where: { id },
       data: {
+        status: 'DRAFT',
         remotionProps: updatedProps,
       },
     });
@@ -846,5 +855,99 @@ export async function uploadSceneImageController(
           ? error.message
           : 'Erro ao salvar a imagem enviada manualmente.',
     });
+  }
+}
+
+/**
+ * PATCH /api/videos/:id/title
+ * Atualiza apenas o título (theme) do vídeo sem invalidar o status RENDERED ou o MP4 existente.
+ */
+export async function updateVideoTitleController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = updateVideoTitleSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Título inválido',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { theme } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const currentProps = existingVideo.remotionProps as RenderVideoInput | null;
+    const updatedProps = currentProps
+      ? {
+          ...currentProps,
+          theme,
+        }
+      : undefined;
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        theme,
+        ...(updatedProps ? { remotionProps: updatedProps } : {}),
+      },
+    });
+
+    res.status(200).json({
+      message: 'Título atualizado com sucesso.',
+      video: updatedVideo,
+    });
+  } catch (error) {
+    console.error('[Prisma] Erro ao atualizar título do vídeo:', error);
+    res.status(500).json({ error: 'Erro interno ao atualizar o título.' });
+  }
+}
+
+/**
+ * DELETE /api/videos/:id
+ * Exclui o registo do vídeo na base de dados e apaga os arquivos correspondentes em storage/ e renders/.
+ */
+export async function deleteVideoController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    await prisma.video.delete({ where: { id } });
+
+    // Remove pasta de assets do vídeo em storage/:id
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+    if (fs.existsSync(storageVideoDir)) {
+      fs.rmSync(storageVideoDir, { recursive: true, force: true });
+    }
+
+    // Remove arquivo MP4 renderizado em renders/:id.mp4
+    const renderedMp4Path = path.join(RENDERS_OUTPUT_DIR, `${id}.mp4`);
+    if (fs.existsSync(renderedMp4Path)) {
+      fs.rmSync(renderedMp4Path, { force: true });
+    }
+
+    res.status(200).json({
+      message: 'Vídeo e arquivos excluídos com sucesso.',
+    });
+  } catch (error) {
+    console.error('[Prisma] Erro ao excluir vídeo:', error);
+    res.status(500).json({ error: 'Erro interno ao excluir o vídeo.' });
   }
 }

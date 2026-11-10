@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createDraftVideoController,
+  deleteVideoController,
   generateAudioController,
   generateSceneImagesController,
   generateScriptController,
@@ -10,6 +11,7 @@ import {
   renderVideoController,
   rerenderVideoController,
   saveStoryboardController,
+  updateVideoTitleController,
   uploadSceneImageController,
 } from '../controllers/video.controller.ts';
 
@@ -30,6 +32,8 @@ videoRoutes.post(
 );
 videoRoutes.post('/videos/:id/generate-audio', generateAudioController);
 videoRoutes.put('/videos/:id/storyboard', saveStoryboardController);
+videoRoutes.patch('/videos/:id/title', updateVideoTitleController);
+videoRoutes.delete('/videos/:id', deleteVideoController);
 
 // Renderização MP4 e consulta
 videoRoutes.post('/videos/:id/rerender', rerenderVideoController);

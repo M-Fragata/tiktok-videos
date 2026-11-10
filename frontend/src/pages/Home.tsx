@@ -125,7 +125,7 @@ export const Home: React.FC = () => {
               {isCreating ? 'Abrindo Studio...' : 'Criar Nova História'}
             </h3>
             <p className="mt-1.5 max-w-[210px] text-xs text-slate-400">
-              Inicie no Modo Storyboard: aprove o roteiro antes de gerar imagens B-Roll e locução
+              Crie o roteiro da sua história, gere imagens, legendas e vozes.
             </p>
           </div>
 

@@ -213,6 +213,14 @@ export const uploadSceneImageSchema = z.object({
   fileName: z.string().optional(),
 });
 
+export const updateVideoTitleSchema = z.object({
+  theme: z
+    .string({ required_error: 'O título é obrigatório' })
+    .trim()
+    .min(1, 'O título não pode estar vazio')
+    .max(240, 'O título é demasiado longo'),
+});
+
 export type GenerateVideoInput = z.infer<typeof generateVideoSchema>;
 export type RenderVideoInput = z.infer<typeof renderVideoSchema>;
 export type StoryboardSceneInput = z.infer<typeof storyboardSceneSchema>;

@@ -144,15 +144,15 @@ export interface SubtitleStyleConfig {
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   animationType: 'karaoke',
-  fontFamily: 'impact',
-  fontSize: 64,
+  fontFamily: 'montserrat',
+  fontSize: 56,
   primaryColor: '#FFFFFF',
   highlightColor: '#FBBF24',
   hasShadow: true,
   hasStroke: true,
   hasBackground: false,
   positionX: 50,
-  positionY: 88,
+  positionY: 92,
 };
 
 export interface AvatarSegment {
