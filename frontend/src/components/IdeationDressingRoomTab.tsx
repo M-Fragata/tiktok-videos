@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AvatarStage } from './AvatarStage.tsx';
 import {
   AVAILABLE_AVATAR_SPRITES,
@@ -129,6 +129,16 @@ export const IdeationDressingRoomTab: React.FC<
   const [generatingSfxIndex, setGeneratingSfxIndex] = useState<number | null>(
     null
   );
+
+  // Estatísticas de ritmo e duração estimada do Roteiro Final (ElevenLabs ~2.4 palavras/segundo)
+  const finalTotalWords = useMemo(() => {
+    return finalMixScenes.reduce((acc, item) => {
+      const words = item.scene.text.trim().split(/\s+/).filter(Boolean).length;
+      return acc + words;
+    }, 0);
+  }, [finalMixScenes]);
+
+  const finalEstDuration = Math.round(finalTotalWords / 2.4);
 
   const playAudioPreview = (src: string) => {
     try {
@@ -332,8 +342,10 @@ export const IdeationDressingRoomTab: React.FC<
       speaker: 'protagonist',
       text: 'Nova fala personalizada na linha do tempo...',
       avatarSprite: AVAILABLE_AVATAR_SPRITES[0],
+      visual_description: 'Descrição visual do cenário...',
       imagePrompt: `Mixed media 2D/3D illustration, a ${descriptor}, integrated seamlessly into a realistic 3D cinematic historical environment, illuminated by warm volumetric rim lighting, casting realistic 3D shadows, 9:16 vertical composition.`,
-      sfx_suggestion: 'ambient historical soundscape',
+      sfx_suggestion: 'whoosh',
+      sfx_prompt: 'Dynamic cinematic transition whoosh sound effect',
       candidateImages: [],
       selectedImage: null,
     };
@@ -839,25 +851,11 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                                   : 'border-[#2c2c32] bg-[#1b1b20] hover:border-amber-500/40 hover:bg-[#202026]'
                               }`}
                             >
-                              <div className="flex items-center justify-between gap-2 mb-1.5">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="rounded bg-[#121214] px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-300">
-                                    Cena #{sIdx + 1}
-                                  </span>
-                                  <span className="text-[10px] font-medium text-slate-400">
-                                    {SPEAKER_SHORT_LABELS[scene.speaker]}
-                                  </span>
-                                  {scene.sfx_suggestion &&
-                                    scene.sfx_suggestion !== 'none' && (
-                                      <span
-                                        title={`Efeito sonoro sugerido pela IA: ${scene.sfx_suggestion}`}
-                                        className="rounded bg-teal-500/15 border border-teal-500/30 px-1.5 py-0.5 text-[9px] font-mono text-teal-300 flex items-center gap-1"
-                                      >
-                                        <span>🔊</span>
-                                        <span>{scene.sfx_suggestion}</span>
-                                      </span>
-                                    )}
-                                </div>
+                              {/* Topo do Card: Número da Cena e Ação de Selecionar */}
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <span className="rounded bg-[#121214] px-2 py-0.5 font-mono text-[10px] font-bold text-slate-300 border border-[#2c2c32]">
+                                  Cena #{sIdx + 1}
+                                </span>
 
                                 <div
                                   className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold transition-all ${
@@ -876,18 +874,57 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                                 </div>
                               </div>
 
-                              <p className="text-xs text-slate-100 leading-relaxed">
-                                “{scene.text}”
-                              </p>
-
-                              {scene.sfx_prompt && (
-                                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-[#262630] bg-[#121216] px-2 py-1 text-[10px] text-slate-400">
-                                  <span className="text-teal-400 shrink-0">🎧</span>
-                                  <span className="italic leading-snug">
-                                    <strong className="text-slate-300 not-italic">Prompt SFX:</strong> “{scene.sfx_prompt}”
+                              {/* 1. Descrição do Cenário (Visual) */}
+                              {scene.visual_description && (
+                                <div className="mb-2 text-[11px] text-slate-300 leading-snug">
+                                  <span className="font-semibold text-amber-400 mr-1.5">
+                                    🖼️ Cenário:
+                                  </span>
+                                  <span className="italic">
+                                    {scene.visual_description}
                                   </span>
                                 </div>
                               )}
+
+                              {/* 2. Locutor à esquerda + Fala / Legenda */}
+                              <div className="rounded-lg bg-[#141418] border border-[#272730] p-2.5 flex items-start gap-2 mb-2">
+                                <span className="shrink-0 rounded bg-[#202028] px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-[#30303c]">
+                                  {SPEAKER_SHORT_LABELS[scene.speaker]}
+                                </span>
+                                <p className="text-xs text-slate-100 font-medium leading-relaxed">
+                                  “{scene.text}”
+                                </p>
+                              </div>
+
+                              {/* 3. Design de Som: Som Escolhido + Prompt ElevenLabs */}
+                              <div className="pt-0.5 space-y-1.5">
+                                {scene.sfx_suggestion &&
+                                  scene.sfx_suggestion !== 'none' && (
+                                    <div className="flex items-center gap-1.5 text-[10px]">
+                                      <span className="font-semibold text-teal-400 flex items-center gap-1">
+                                        <span>🔊 Som Escolhido:</span>
+                                      </span>
+                                      <span
+                                        title={`Efeito da biblioteca: ${scene.sfx_suggestion}`}
+                                        className="rounded bg-teal-500/15 border border-teal-500/30 px-2 py-0.5 font-mono text-teal-300"
+                                      >
+                                        {scene.sfx_suggestion}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                {scene.sfx_prompt && (
+                                  <div className="flex items-start gap-1.5 rounded-lg border border-[#262630] bg-[#121216] px-2.5 py-1.5 text-[10px] text-slate-400">
+                                    <span className="text-teal-400 shrink-0">🎧</span>
+                                    <span className="italic leading-snug">
+                                      <strong className="text-slate-300 not-italic mr-1">
+                                        Prompt IA:
+                                      </strong>
+                                      “{scene.sfx_prompt}”
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -925,7 +962,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                 Roteiro Final
               </h2>
               <p className="text-[10px] text-slate-300">
-                {finalMixScenes.length} cenas selecionadas
+                {finalMixScenes.length} cenas selecionadas • {finalTotalWords} palavras (~{finalEstDuration}s de fala)
               </p>
             </div>
           </div>
@@ -1085,9 +1122,29 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                         </div>
                       </div>
 
-                      {/* Seletor rápido de Voz + Seletor de SFX da Cena + Edição Rápida da Fala */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      {/* 1. Descrição do Cenário (Visual) */}
+                      <div className="mb-2 text-[11px] text-slate-300">
+                        <div className="flex items-center gap-1.5 mb-1 font-semibold text-amber-400">
+                          <span>🖼️ Cenário:</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={item.scene.visual_description || ''}
+                          onChange={(e) =>
+                            handleUpdateFinalSceneField(
+                              idx,
+                              'visual_description',
+                              e.target.value
+                            )
+                          }
+                          placeholder="Descrição visual do cenário histórico..."
+                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition italic"
+                        />
+                      </div>
+
+                      {/* 2. Locutor à esquerda + Fala / Legenda */}
+                      <div className="rounded-lg bg-[#141418] border border-[#272730] p-2 flex items-start gap-2 mb-2">
+                        <div className="shrink-0 w-36">
                           <select
                             value={item.scene.speaker}
                             onChange={(e) =>
@@ -1097,42 +1154,13 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                                 e.target.value as SpeakerType
                               )
                             }
-                            className="rounded-md border border-[#2c2c32] bg-[#121214] px-2 py-1 text-[10px] font-semibold text-slate-200 focus:border-amber-500 focus:outline-none"
+                            className="w-full rounded-md border border-[#30303c] bg-[#202028] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
                           >
-                            <option value="protagonist">
-                              🧑 Protagonista (Viajante)
-                            </option>
-                            <option value="character">
-                              🎭 Personagem Histórico
-                            </option>
-                            <option value="narrator">
-                              🎙️ Narrador Épico
-                            </option>
+                            <option value="protagonist">🧑 Protagonista</option>
+                            <option value="character">🎭 Personagem</option>
+                            <option value="narrator">🎙️ Narrador</option>
                           </select>
-
-                          {/* Seletor de SFX da Biblioteca Local */}
-                          <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                            <span>🔊 SFX:</span>
-                            <select
-                              value={item.scene.sfx_suggestion || 'whoosh'}
-                              onChange={(e) =>
-                                handleUpdateFinalSceneField(
-                                  idx,
-                                  'sfx_suggestion',
-                                  e.target.value
-                                )
-                              }
-                              className="rounded-md border border-[#2c2c32] bg-[#121214] px-2 py-1 text-[10px] font-semibold text-teal-300 focus:border-teal-500 focus:outline-none max-w-[210px]"
-                            >
-                              {SFX_OPTIONS.map((sfx) => (
-                                <option key={sfx.value} value={sfx.value}>
-                                  {sfx.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
                         </div>
-
                         <textarea
                           rows={2}
                           value={item.scene.text}
@@ -1143,87 +1171,111 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                               e.target.value
                             )
                           }
-                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
+                          placeholder="Fala / Legenda da cena..."
+                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 font-medium leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
                         />
+                      </div>
 
-                        {/* Linha de Prompt do Som (ElevenLabs Text-to-SFX) */}
-                        <div className="pt-1 space-y-1">
-                          <div className="flex items-center justify-between text-[10px]">
+                      {/* 3. Design de Som Integrado (Som Escolhido + Prompt ElevenLabs) */}
+                      <div className="rounded-lg border border-[#262630] bg-[#121216] p-2.5 space-y-2">
+                        {/* Linha do Som Escolhido (Biblioteca Local) */}
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 text-[11px]">
                             <span className="font-semibold text-teal-400 flex items-center gap-1">
-                              <span>🎧 Prompt de Som (ElevenLabs IA)</span>
+                              <span>🔊 Som Escolhido:</span>
                             </span>
-                            {item.scene.custom_sfx_url && (
-                              <div className="flex items-center gap-1.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                                <span>✨ Áudio IA Ativo</span>
-                                <button
-                                  type="button"
-                                  title="Ouvir áudio gerado pela ElevenLabs"
-                                  onClick={() =>
-                                    playAudioPreview(
-                                      item.scene.custom_sfx_url!
-                                    )
-                                  }
-                                  className="hover:scale-110 transition"
-                                >
-                                  ▶️
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Remover áudio customizado e voltar ao som da biblioteca"
-                                  onClick={() =>
-                                    handleUpdateFinalSceneField(
-                                      idx,
-                                      'custom_sfx_url',
-                                      null
-                                    )
-                                  }
-                                  className="text-slate-400 hover:text-rose-400 transition"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={item.scene.sfx_prompt || ''}
+                            <select
+                              value={item.scene.sfx_suggestion || 'whoosh'}
                               onChange={(e) =>
                                 handleUpdateFinalSceneField(
                                   idx,
-                                  'sfx_prompt',
+                                  'sfx_suggestion',
                                   e.target.value
                                 )
                               }
-                              placeholder="Prompt de som para ElevenLabs (ex: Loud cannon blast with sand explosion)"
-                              className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition"
-                            />
-
-                            <button
-                              type="button"
-                              disabled={
-                                !item.scene.sfx_prompt?.trim() ||
-                                generatingSfxIndex === idx ||
-                                !videoId
-                              }
-                              onClick={() => void handleGenerateCustomSfx(idx)}
-                              title="Gerar som exclusivo com ElevenLabs a partir deste prompt"
-                              className="flex shrink-0 items-center gap-1 rounded-lg border border-teal-500/40 bg-teal-500/15 px-2.5 py-1.5 text-[10px] font-bold text-teal-300 hover:bg-teal-500/25 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                              className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none max-w-[220px]"
                             >
-                              {generatingSfxIndex === idx ? (
-                                <>
-                                  <span className="h-3 w-3 animate-spin rounded-full border border-teal-300 border-t-transparent" />
-                                  <span>Gerando...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span>✨</span>
-                                  <span>Gerar SFX</span>
-                                </>
-                              )}
-                            </button>
+                              {SFX_OPTIONS.map((sfx) => (
+                                <option key={sfx.value} value={sfx.value}>
+                                  {sfx.label}
+                                </option>
+                              ))}
+                            </select>
                           </div>
+
+                          {item.scene.custom_sfx_url && (
+                            <div className="flex items-center gap-1.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                              <span>✨ Áudio IA Ativo</span>
+                              <button
+                                type="button"
+                                title="Ouvir áudio gerado pela ElevenLabs"
+                                onClick={() =>
+                                  playAudioPreview(item.scene.custom_sfx_url!)
+                                }
+                                className="hover:scale-110 transition"
+                              >
+                                ▶️
+                              </button>
+                              <button
+                                type="button"
+                                title="Remover áudio customizado e voltar ao som da biblioteca"
+                                onClick={() =>
+                                  handleUpdateFinalSceneField(
+                                    idx,
+                                    'custom_sfx_url',
+                                    null
+                                  )
+                                }
+                                className="text-slate-400 hover:text-rose-400 transition"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Linha do Prompt IA (ElevenLabs Text-to-SFX) */}
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1 shrink-0 text-[11px] font-semibold text-slate-400">
+                            <span>🎧 Prompt IA:</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={item.scene.sfx_prompt || ''}
+                            onChange={(e) =>
+                              handleUpdateFinalSceneField(
+                                idx,
+                                'sfx_prompt',
+                                e.target.value
+                              )
+                            }
+                            placeholder="Prompt de som para ElevenLabs (ex: Loud stone cracking sound with desert echo)"
+                            className="w-full rounded-md border border-[#2c2c32] bg-[#18181f] px-2.5 py-1 text-[11px] text-slate-200 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition italic"
+                          />
+
+                          <button
+                            type="button"
+                            disabled={
+                              !item.scene.sfx_prompt?.trim() ||
+                              generatingSfxIndex === idx ||
+                              !videoId
+                            }
+                            onClick={() => void handleGenerateCustomSfx(idx)}
+                            title="Gerar som exclusivo com ElevenLabs a partir deste prompt"
+                            className="flex shrink-0 items-center gap-1 rounded-md border border-teal-500/40 bg-teal-500/15 px-2.5 py-1 text-[10px] font-bold text-teal-300 hover:bg-teal-500/25 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            {generatingSfxIndex === idx ? (
+                              <>
+                                <span className="h-3 w-3 animate-spin rounded-full border border-teal-300 border-t-transparent" />
+                                <span>Gerando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>✨</span>
+                                <span>Gerar SFX</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                       </div>
                     </div>

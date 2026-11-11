@@ -117,6 +117,7 @@ export const storyboardSceneSchema = z.object({
   speaker: speakerTypeSchema,
   text: z.string().min(1, 'O texto da fala não pode estar vazio'),
   avatarSprite: z.string().min(1, 'O sprite do avatar é obrigatório'),
+  visual_description: z.string().optional().default(''),
   imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),

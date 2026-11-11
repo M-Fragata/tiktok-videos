@@ -347,6 +347,7 @@ export interface StoryboardScene {
   speaker: SpeakerType;
   text: string;
   avatarSprite: AvatarSpritePath;
+  visual_description?: string;
   imagePrompt: string;
   sfx_suggestion?: string;
   sfx_prompt?: string;

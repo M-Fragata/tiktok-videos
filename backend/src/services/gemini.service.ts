@@ -52,9 +52,11 @@ export interface ScriptScene {
   speaker: SpeakerType;
   text: string;
   avatarSprite: AvatarSprite;
+  visual_description?: string;
   imagePrompt: string;
   sfx_suggestion?: string;
   sfx_prompt?: string;
+  custom_sfx_url?: string | null;
 }
 
 export interface IdeationScriptOption {
@@ -128,35 +130,47 @@ export function buildAvatarPromptDescriptor(
 
 const DURATION_RULES: Record<
   DurationPreset,
-  { label: string; sceneRange: string; maxWords: number; targetSeconds: number }
+  {
+    label: string;
+    sceneRange: string;
+    minWords: number;
+    maxWords: number;
+    targetSeconds: number;
+    avgWordsPerScene: string;
+  }
 > = {
   short: {
-    label: 'Curto (15s - máx 40 palavras)',
-    sceneRange: '4 a 6 cenas dinâmicas (alternando cortes rápidos e médios)',
-    maxWords: 40,
+    label: 'Curto (15s • 32 a 42 palavras)',
+    sceneRange: '3 a 5 cenas dinâmicas (~3 a 5s por cena)',
+    minWords: 32,
+    maxWords: 42,
     targetSeconds: 15,
+    avgWordsPerScene: '7 a 10 palavras por cena',
   },
   medium: {
-    label: 'Médio (30s - máx 70 palavras)',
-    sceneRange: '6 a 9 cenas dinâmicas (alternando cortes rápidos e médios)',
-    maxWords: 70,
+    label: 'Médio (30s • 65 a 78 palavras)',
+    sceneRange: '5 a 7 cenas dinâmicas (~4 a 6s por cena)',
+    minWords: 65,
+    maxWords: 78,
     targetSeconds: 30,
+    avgWordsPerScene: '10 a 14 palavras por cena',
   },
   long: {
-    label: 'Longo (60s - máx 140 palavras)',
-    sceneRange: '9 a 14 cenas dinâmicas (alternando cortes rápidos e médios)',
-    maxWords: 140,
+    label: 'Longo (60s • 130 a 150 palavras)',
+    sceneRange: '8 a 12 cenas dinâmicas (~4 a 6s por cena)',
+    minWords: 130,
+    maxWords: 150,
     targetSeconds: 60,
+    avgWordsPerScene: '11 a 15 palavras por cena',
   },
 };
 
 const VIRAL_PACING_INSTRUCTION = `DIRETRIZES DE MONTAGEM CINEMATOGRÁFICA E RITMO VIRAL (RETENÇÃO ALTA):
-Na nossa arquitetura, cada cena gera um corte visual de câmara (B-Roll) + efeito sonoro de transição (Whoosh). Portanto, o COMPRIMENTO de cada fala ("text") dita diretamente a velocidade dos cortes do vídeo!
-Para manter a retenção máxima no TikTok/Shorts, varie deliberadamente o comprimento das falas entre as cenas seguindo esta estrutura de ritmo viral:
-- Cena 1 (O Gancho / Hook): Frase ULTRA-CURTA e chocante (3 a 6 palavras). Ex: "Isto não devia estar aqui!" ou "Olha para o céu de Pompeia!". Isso força um corte visual rápido logo nos primeiros 1.5 segundos.
-- Cenas de Desenvolvimento (Storytelling): Intercale frases médias (10 a 15 palavras) — que dão tempo para o espectador absorver o cenário histórico e a explicação — com cenas curtas de reação ou diálogo rápido (4 a 7 palavras).
-- Cena de Clímax / Punchline Final: Volte para uma frase curta, urgente e expressiva (4 a 8 palavras) para acelerar o ritmo novamente no fecho.
-És livre para decidir a quantidade ideal de cenas para preencher o tempo total, desde que alternes entre cenas rápidas (poucas palavras) e cenas médias, criando uma montagem dinâmica, orgânica e humana, NUNCA ultrapassando o limite global de palavras.`;
+Na nossa arquitetura, cada cena gera um corte visual de câmara (B-Roll) + efeito sonoro de transição. Portanto, a DURAÇÃO e o COMPRIMENTO de cada fala ("text") determinam o tempo de tela daquela cena!
+Para preencher adequadamente o tempo total do vídeo SEM silêncios mortos:
+- Cena 1 (O Gancho / Hook): Frase impactante de 5 a 8 palavras (corte rápido e enérgico).
+- Cenas de Desenvolvimento (Storytelling): Frases completas e ricas de 10 a 16 palavras, recheadas de fatos históricos, diálogos vívidos e contexto detalhado (NÃO crie falas secas de 4 palavras no desenvolvimento!).
+- Cena de Clímax / Punchline Final: Frase expressiva de 6 a 10 palavras com fechamento surpreendente ou cômico.`;
 
 /**
  * Pilar 1 (O Roteirista):
@@ -357,7 +371,12 @@ INTERPRETAÇÃO INTELIGENTE DO BRIEFING DO UTILIZADOR:
 
 Duração Selecionada para CADA uma das 4 opções (${rule.label}):
 - Estrutura por opção: ${rule.sceneRange} (total de ~${rule.targetSeconds} segundos de fala por opção).
-- LIMITE ESTRITO DE PALAVRAS POR OPÇÃO: A soma das falas ("text") dentro de cada opção NÃO DEVE ultrapassar ${rule.maxWords} palavras.
+- CONTAGEM OBRIGATÓRIA DE PALAVRAS POR OPÇÃO: A soma de todas as falas ("text") de cada opção DEVE CONTER OBRIGATORIAMENTE ENTRE ${rule.minWords} E ${rule.maxWords} PALAVRAS! É expressamente proibido gerar menos de ${rule.minWords} palavras no total de uma opção, pois o áudio ficaria incompleto.
+- Em média, cada cena de desenvolvimento deve conter ${rule.avgWordsPerScene}.
+
+DESCRIÇÃO VISUAL DO CENÁRIO EM PORTUGUÊS ("visual_description"):
+Para CADA cena, gera uma descrição em PORTUGUÊS (1 frase concisa e cinematográfica) no campo "visual_description" resumindo o que aparece no cenário e o que o personagem está fazendo (ex: "Gizé em 1798 sob o sol escaldante: o viajante sobe no topo da cabeça da Esfinge enquanto soldados e mercadores se aglomeram furiosos lá embaixo").
+Esta descrição será lida pelo criador do vídeo no topo do cartão da cena para entender o visual antes da fala.
 
 ${VIRAL_PACING_INSTRUCTION}
 
@@ -433,6 +452,11 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
         type: 'STRING',
         enum: [...VALID_AVATAR_SPRITES],
       },
+      visual_description: {
+        type: 'STRING',
+        description:
+          'Descrição concisa em português do cenário histórico e da ação visual da cena.',
+      },
       imagePrompt: {
         type: 'STRING',
       },
@@ -466,6 +490,7 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
       'speaker',
       'text',
       'avatarSprite',
+      'visual_description',
       'imagePrompt',
       'sfx_suggestion',
       'sfx_prompt',

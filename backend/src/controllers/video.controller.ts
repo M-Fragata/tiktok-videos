@@ -122,6 +122,7 @@ export async function generateScriptController(
         speaker: scene.speaker,
         text: scene.text,
         avatarSprite: scene.avatarSprite,
+        visual_description: scene.visual_description || '',
         imagePrompt: scene.imagePrompt,
         sfx_suggestion: scene.sfx_suggestion || '',
         sfx_prompt: scene.sfx_prompt || '',

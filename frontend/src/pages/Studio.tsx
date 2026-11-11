@@ -43,9 +43,9 @@ const SUGGESTED_THEMES = [
 ];
 
 const DURATION_OPTIONS: Array<{ value: DurationPreset; label: string }> = [
-  { value: 'short', label: 'Curto (15s • máx 40 palavras)' },
-  { value: 'medium', label: 'Médio (30s • máx 70 palavras)' },
-  { value: 'long', label: 'Longo (60s • máx 140 palavras)' },
+  { value: 'short', label: 'Curto (15s • 32 a 42 pal.)' },
+  { value: 'medium', label: 'Médio (30s • 65 a 78 pal.)' },
+  { value: 'long', label: 'Longo (60s • 130 a 150 pal.)' },
 ];
 
 /**
@@ -2119,6 +2119,18 @@ export const Studio: React.FC = () => {
                           {/* Corpo da Cena */}
                           {!isCollapsed && (
                             <div className="mt-4 space-y-3.5">
+                              {/* Campo: Cenário (Visual) */}
+                              {scene.visual_description && (
+                                <div className="rounded-lg bg-[#141418] border border-[#272730] px-3 py-2 text-xs text-slate-300">
+                                  <span className="font-semibold text-amber-400 mr-1.5">
+                                    🖼️ Cenário:
+                                  </span>
+                                  <span className="italic">
+                                    {scene.visual_description}
+                                  </span>
+                                </div>
+                              )}
+
                               {/* Campo: Texto */}
                               <div>
                                 <label className="block text-xs text-slate-400 mb-1.5">
