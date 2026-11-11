@@ -408,6 +408,7 @@ export const Studio: React.FC = () => {
 
   useEffect(() => {
     void fetchVideoData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Sincronização de eventos de frame e play/pause com @remotion/player
@@ -1484,6 +1485,7 @@ export const Studio: React.FC = () => {
     }, 2500);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, videoRecord?.status, currentRenderSignature, theme]);
 
   // Arraste direto da caixa de legenda sobre o Player 9:16 (sem disparar Play/Pause)
@@ -1683,6 +1685,7 @@ export const Studio: React.FC = () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScrubbingTimeline, effectiveTotalFrames]);
 
   // Identifica qual Cena e qual Legenda estão ativas no frame atual da agulha

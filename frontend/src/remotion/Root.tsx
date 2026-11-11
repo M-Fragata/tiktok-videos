@@ -1,12 +1,12 @@
 import React from 'react';
 import { Composition } from 'remotion';
 import { TimeMachineVideo } from './TimeMachineVideo';
-import { defaultTimeMachineProps, TimeMachineVideoProps } from './types';
+import { defaultTimeMachineProps } from './types';
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition<any, TimeMachineVideoProps>
+      <Composition
         id="TimeMachineVideo"
         component={TimeMachineVideo}
         durationInFrames={450}
