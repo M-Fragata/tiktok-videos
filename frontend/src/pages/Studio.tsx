@@ -13,6 +13,8 @@ import {
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
   ensureSubtitleWordTimings,
+  getSceneDialogues,
+  getSceneFullText,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
   resolveAssetSrc,
@@ -82,8 +84,9 @@ function computeRenderSignature(params: {
   subtitleStyle: SubtitleStyleConfig;
   avatarTimeline: AvatarSegment[];
   scenes: Array<{
-    speaker: string;
-    text: string;
+    speaker?: string;
+    text?: string;
+    dialogues?: unknown[];
     avatarSprite: string;
     selectedImage?: string | null;
   }>;
@@ -113,6 +116,7 @@ function computeRenderSignature(params: {
     scenes: params.scenes.map((sc) => ({
       speaker: sc.speaker,
       text: sc.text,
+      dialogues: sc.dialogues,
       avatarSprite: sc.avatarSprite,
       selectedImage: sc.selectedImage || null,
     })),
@@ -528,8 +532,10 @@ export const Studio: React.FC = () => {
               theme: approvedTitle?.trim() || theme,
               avatarConfig,
               scenes: finalMixScenes.map((item) => ({
+                id: item.uid,
                 speaker: item.scene.speaker,
                 text: item.scene.text,
+                dialogues: getSceneDialogues(item.scene),
                 avatarSprite: item.scene.avatarSprite,
                 visual_description: item.scene.visual_description || '',
                 imagePrompt: item.scene.imagePrompt || '',
@@ -550,6 +556,10 @@ export const Studio: React.FC = () => {
             consolidatedScenes = reviewData.scenes.map(
               (revScene: StoryboardScene, idx: number) => ({
                 ...revScene,
+                dialogues:
+                  revScene.dialogues && revScene.dialogues.length > 0
+                    ? revScene.dialogues
+                    : getSceneDialogues(finalMixScenes[idx]?.scene),
                 candidateImages:
                   finalMixScenes[idx]?.scene.candidateImages || [],
                 selectedImage:
@@ -569,6 +579,7 @@ export const Studio: React.FC = () => {
       if (consolidatedScenes.length === 0) {
         consolidatedScenes = finalMixScenes.map((item) => ({
           ...item.scene,
+          dialogues: getSceneDialogues(item.scene),
           imagePrompt: injectAvatarConfigIntoPrompt(
             item.scene.imagePrompt,
             avatarConfig
@@ -670,6 +681,77 @@ export const Studio: React.FC = () => {
     );
   };
 
+  const handleAddDialogueInStudio = (sceneIndex: number) => {
+    setScenes((prev) =>
+      prev.map((scene, idx) => {
+        if (idx !== sceneIndex) return scene;
+        const currentDialogues = getSceneDialogues(scene);
+        const newDialogue = {
+          id: `dlg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          speaker: 'character' as SpeakerType,
+          text: '',
+        };
+        const updatedDialogues = [...currentDialogues, newDialogue];
+        return {
+          ...scene,
+          dialogues: updatedDialogues,
+          speaker: updatedDialogues[0]?.speaker || scene.speaker,
+          text: updatedDialogues.map((d) => d.text).join(' '),
+        };
+      })
+    );
+  };
+
+  const handleUpdateDialogueInStudio = (
+    sceneIndex: number,
+    dialogueId: string,
+    field: 'speaker' | 'text',
+    value: string
+  ) => {
+    setScenes((prev) =>
+      prev.map((scene, idx) => {
+        if (idx !== sceneIndex) return scene;
+        const currentDialogues = getSceneDialogues(scene);
+        const updatedDialogues = currentDialogues.map((d) =>
+          d.id === dialogueId
+            ? {
+                ...d,
+                [field]: field === 'speaker' ? (value as SpeakerType) : value,
+              }
+            : d
+        );
+        return {
+          ...scene,
+          dialogues: updatedDialogues,
+          speaker: updatedDialogues[0]?.speaker || scene.speaker,
+          text: updatedDialogues.map((d) => d.text).join(' '),
+        };
+      })
+    );
+  };
+
+  const handleRemoveDialogueInStudio = (
+    sceneIndex: number,
+    dialogueId: string
+  ) => {
+    setScenes((prev) =>
+      prev.map((scene, idx) => {
+        if (idx !== sceneIndex) return scene;
+        const currentDialogues = getSceneDialogues(scene);
+        if (currentDialogues.length <= 1) return scene;
+        const updatedDialogues = currentDialogues.filter(
+          (d) => d.id !== dialogueId
+        );
+        return {
+          ...scene,
+          dialogues: updatedDialogues,
+          speaker: updatedDialogues[0]?.speaker || scene.speaker,
+          text: updatedDialogues.map((d) => d.text).join(' '),
+        };
+      })
+    );
+  };
+
   const toggleSceneCollapse = (sceneIndex: number) => {
     setCollapsedScenes((prev) => ({
       ...prev,
@@ -680,7 +762,8 @@ export const Studio: React.FC = () => {
   const handleRegenerateScenePromptInStudio = async (sceneIndex: number) => {
     if (!id) return;
     const targetScene = scenes[sceneIndex];
-    if (!targetScene?.text?.trim()) return;
+    const fullText = getSceneFullText(targetScene);
+    if (!fullText) return;
 
     setGeneratingPromptForScene((prev) => ({ ...prev, [sceneIndex]: true }));
     setErrorMsg(null);
@@ -690,8 +773,9 @@ export const Studio: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: targetScene.text,
+          text: fullText,
           speaker: targetScene.speaker,
+          dialogues: getSceneDialogues(targetScene),
           theme,
           avatarConfig,
           visual_description: targetScene.visual_description,
@@ -2246,51 +2330,91 @@ export const Studio: React.FC = () => {
                                 </div>
                               )}
 
-                              {/* Campo: Texto */}
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1.5">
-                                  Texto
+                              {/* Diálogos Dinâmicos da Cena (Suporta Múltiplas Falas) */}
+                              <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-slate-300">
+                                  Falas / Diálogos da Cena
                                 </label>
-                                <textarea
-                                  rows={2}
-                                  value={scene.text}
-                                  onChange={(e) =>
-                                    handleSceneFieldChange(
-                                      index,
-                                      'text',
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-2.5 text-xs text-slate-100 leading-relaxed focus:border-amber-500 focus:outline-none transition"
-                                />
-                              </div>
+                                {getSceneDialogues(scene).map(
+                                  (dialogue, dIdx, arr) => (
+                                    <div
+                                      key={dialogue.id || `dlg_${dIdx}`}
+                                      className="flex items-start gap-2 rounded-lg border border-[#272730] bg-[#141418] p-2"
+                                    >
+                                      <div className="w-36 shrink-0">
+                                        <select
+                                          value={dialogue.speaker}
+                                          onChange={(e) =>
+                                            handleUpdateDialogueInStudio(
+                                              index,
+                                              dialogue.id,
+                                              'speaker',
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-full rounded-md border border-[#30303c] bg-[#202028] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
+                                        >
+                                          <option value="protagonist">
+                                            🧑 Protagonista
+                                          </option>
+                                          <option value="character">
+                                            🎭 Personagem
+                                          </option>
+                                          <option value="narrator">
+                                            🎙️ Narrador
+                                          </option>
+                                        </select>
+                                      </div>
 
-                              {/* Campo: Voz (Speaker) */}
-                              <div>
-                                <label className="block text-xs text-slate-400 mb-1.5">
-                                  Voz
-                                </label>
-                                <select
-                                  value={scene.speaker}
-                                  onChange={(e) =>
-                                    handleSceneFieldChange(
-                                      index,
-                                      'speaker',
-                                      e.target.value as SpeakerType
-                                    )
-                                  }
-                                  className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] py-2 px-3 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
-                                >
-                                  <option value="protagonist">
-                                    Protagonista
-                                  </option>
-                                  <option value="character">
-                                    Personagem Histórico
-                                  </option>
-                                  <option value="narrator">
-                                    Narrador Épico
-                                  </option>
-                                </select>
+                                      <textarea
+                                        rows={2}
+                                        value={dialogue.text}
+                                        onChange={(e) =>
+                                          handleUpdateDialogueInStudio(
+                                            index,
+                                            dialogue.id,
+                                            'text',
+                                            e.target.value
+                                          )
+                                        }
+                                        placeholder={`Fala #${dIdx + 1} / Legenda...`}
+                                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 font-medium leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
+                                      />
+
+                                      {arr.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleRemoveDialogueInStudio(
+                                              index,
+                                              dialogue.id
+                                            )
+                                          }
+                                          title="Remover esta fala"
+                                          className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-rose-500/30 bg-rose-500/10 text-xs font-bold text-rose-300 transition hover:bg-rose-500/25 hover:text-rose-200"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
+                                  )
+                                )}
+
+                                <div className="flex justify-end pt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleAddDialogueInStudio(index)
+                                    }
+                                    title="Adicionar mais uma fala nesta mesma cena"
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[#3a3a46] bg-[#16161b] px-2.5 py-1 text-[11px] font-medium text-amber-400/90 transition hover:border-amber-500/60 hover:bg-[#1f1f26] hover:text-amber-300 active:scale-[0.98]"
+                                  >
+                                    <span className="text-xs font-bold leading-none">
+                                      +
+                                    </span>
+                                    <span>Nova Fala</span>
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Campo: Expressão do Avatar */}
@@ -2334,7 +2458,7 @@ export const Studio: React.FC = () => {
                                     type="button"
                                     disabled={
                                       generatingPromptForScene[index] ||
-                                      !scene.text.trim()
+                                      !getSceneFullText(scene).trim()
                                     }
                                     onClick={() =>
                                       void handleRegenerateScenePromptInStudio(

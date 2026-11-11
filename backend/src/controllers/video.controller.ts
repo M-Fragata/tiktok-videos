@@ -122,9 +122,17 @@ export async function generateScriptController(
       badge: opt.badge,
       description: opt.description,
       bgmVibe: opt.bgmVibe || 'epic',
-      scenes: opt.scenes.map((scene) => ({
+      scenes: opt.scenes.map((scene, sIdx) => ({
+        id: `opt_${opt.id}_scene_${sIdx}`,
         speaker: scene.speaker,
         text: scene.text,
+        dialogues: [
+          {
+            id: `dlg_${opt.id}_${sIdx}`,
+            speaker: scene.speaker,
+            text: scene.text,
+          },
+        ],
         avatarSprite: scene.avatarSprite,
         visual_description: scene.visual_description || '',
         imagePrompt: scene.imagePrompt,
@@ -336,6 +344,7 @@ export async function generateAudioController(
     const scriptScenesForTts: ScriptScene[] = scenes.map((s) => ({
       speaker: s.speaker,
       text: s.text,
+      dialogues: s.dialogues,
       avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
       imagePrompt: s.imagePrompt,
       sfx_suggestion: s.sfx_suggestion,

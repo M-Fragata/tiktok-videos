@@ -113,9 +113,17 @@ export const avatarConfigSchema = z.object({
   angle: avatarAngleSchema.optional().default('front'),
 });
 
-export const storyboardSceneSchema = z.object({
+export const dialogueItemSchema = z.object({
+  id: z.string().min(1),
   speaker: speakerTypeSchema,
-  text: z.string().min(1, 'O texto da fala não pode estar vazio'),
+  text: z.string().default(''),
+});
+
+export const storyboardSceneSchema = z.object({
+  id: z.string().optional(),
+  speaker: speakerTypeSchema.optional().default('protagonist'),
+  text: z.string().optional().default(''),
+  dialogues: z.array(dialogueItemSchema).optional().default([]),
   avatarSprite: z.string().min(1, 'O sprite do avatar é obrigatório'),
   visual_description: z.string().optional().default(''),
   imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
@@ -258,14 +266,17 @@ export const updateVideoTitleSchema = z.object({
 export const generateScenePromptSchema = z.object({
   text: z.string().min(1, 'A fala da cena é obrigatória'),
   speaker: speakerTypeSchema.optional().default('protagonist'),
+  dialogues: z.array(dialogueItemSchema).optional(),
   theme: z.string().optional().default('Viagem no Tempo'),
   avatarConfig: avatarConfigSchema.optional(),
   visual_description: z.string().optional(),
 });
 
 export const reviewFinalScriptSceneSchema = z.object({
-  speaker: speakerTypeSchema,
-  text: z.string().min(1, 'A fala da cena é obrigatória'),
+  id: z.string().optional(),
+  speaker: speakerTypeSchema.optional().default('protagonist'),
+  text: z.string().optional().default(''),
+  dialogues: z.array(dialogueItemSchema).optional().default([]),
   avatarSprite: z.string().optional(),
   visual_description: z.string().optional().default(''),
   imagePrompt: z.string().optional().default(''),

@@ -373,9 +373,17 @@ export interface SceneFrameTiming {
   frameEnd: number;
 }
 
-export interface StoryboardScene {
+export interface DialogueItem {
+  id: string;
   speaker: SpeakerType;
   text: string;
+}
+
+export interface StoryboardScene {
+  id?: string;
+  speaker?: SpeakerType;
+  text?: string;
+  dialogues?: DialogueItem[];
   avatarSprite: AvatarSpritePath;
   visual_description?: string;
   imagePrompt: string;
@@ -385,6 +393,34 @@ export interface StoryboardScene {
   candidateImages: string[];
   selectedImage: string | null;
 }
+
+export const getSceneDialogues = (
+  scene: Partial<StoryboardScene> | null | undefined
+): DialogueItem[] => {
+  if (!scene) {
+    return [{ id: 'd_default', speaker: 'protagonist', text: '' }];
+  }
+  if (scene.dialogues && scene.dialogues.length > 0) {
+    return scene.dialogues;
+  }
+  return [
+    {
+      id: 'd_default',
+      speaker: (scene.speaker as SpeakerType) || 'protagonist',
+      text: scene.text || '',
+    },
+  ];
+};
+
+export const getSceneFullText = (
+  scene: Partial<StoryboardScene> | null | undefined
+): string => {
+  const dials = getSceneDialogues(scene);
+  return dials
+    .map((d) => d.text.trim())
+    .filter(Boolean)
+    .join(' ');
+};
 
 export interface IdeationOption {
   id: string;

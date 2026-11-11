@@ -379,89 +379,121 @@ export async function generateNarrationWithTimestamps(
   };
 
   let cumulativeDurationSeconds = 0;
+  let chunkCounter = 0;
 
   for (let index = 0; index < scenes.length; index++) {
     const scene = scenes[index];
-    console.log(
-      `[ElevenLabs] Gerando chunk #${index} (speaker: "${scene.speaker}")...`
+    const rawDialogues =
+      scene.dialogues && scene.dialogues.length > 0
+        ? scene.dialogues
+        : [
+            {
+              id: `dlg_${index}`,
+              speaker: scene.speaker || 'protagonist',
+              text: scene.text || '',
+            },
+          ];
+
+    const activeDialogues = rawDialogues.filter(
+      (d) => d.text && d.text.trim().length > 0
     );
 
-    const data = await synthesizeSceneChunk(
-      scene.text,
-      scene.speaker,
-      apiKey
-    );
-
-    const chunkFilePath = path.join(chunksDir, `chunk_${index}.mp3`);
-    fs.writeFileSync(chunkFilePath, Buffer.from(data.audio_base64, 'base64'));
-    chunkFilePaths.push(chunkFilePath);
-
-    const alignment = data.alignment || data.normalized_alignment;
-    if (!alignment || alignment.character_end_times_seconds.length === 0) {
-      throw new Error(
-        `A resposta da ElevenLabs para a cena #${index} não contém dados de alignment válidos.`
-      );
-    }
-
-    // Matemática de Timestamps: desloca todos os tempos do chunk atual somando a duração cumulativa anterior
-    const shiftedStartTimes = alignment.character_start_times_seconds.map(
-      (t) => t + cumulativeDurationSeconds
-    );
-    const shiftedEndTimes = alignment.character_end_times_seconds.map(
-      (t) => t + cumulativeDurationSeconds
-    );
-
-    const shiftedChunkAlignment: ElevenLabsAlignment = {
-      characters: alignment.characters,
-      character_start_times_seconds: shiftedStartTimes,
-      character_end_times_seconds: shiftedEndTimes,
-    };
-
-    // Adiciona um espaço separador no alignment global entre cenas
-    if (index > 0) {
-      mergedAlignment.characters.push(' ');
-      mergedAlignment.character_start_times_seconds.push(
-        cumulativeDurationSeconds
-      );
-      mergedAlignment.character_end_times_seconds.push(
-        cumulativeDurationSeconds
-      );
-    }
-    mergedAlignment.characters.push(...shiftedChunkAlignment.characters);
-    mergedAlignment.character_start_times_seconds.push(
-      ...shiftedChunkAlignment.character_start_times_seconds
-    );
-    mergedAlignment.character_end_times_seconds.push(
-      ...shiftedChunkAlignment.character_end_times_seconds
-    );
-
-    // Extrai as palavras e legendas desta cena já com os timestamps deslocados
-    const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
-    const sceneSubtitles = buildSubtitlesFromWords(
-      sceneWords,
-      WORDS_PER_SUBTITLE_CHUNK
-    );
-    allSubtitles.push(...sceneSubtitles);
-
-    // Calcula a duração real do chunk de áudio para manter sincronia exata com o arquivo concatenado pelo FFmpeg
-    const lastCharEndSec =
-      alignment.character_end_times_seconds[
-        alignment.character_end_times_seconds.length - 1
-      ] ?? 0;
-    const chunkDurationSeconds = await getAudioFileDurationSeconds(
-      chunkFilePath,
-      lastCharEndSec
-    );
+    const dialoguesToSynthesize =
+      activeDialogues.length > 0
+        ? activeDialogues
+        : [
+            {
+              id: `dlg_${index}_empty`,
+              speaker: scene.speaker || 'protagonist',
+              text: scene.text?.trim() || '...',
+            },
+          ];
 
     const sceneStartSecond = cumulativeDurationSeconds;
-    const sceneEndSecond = cumulativeDurationSeconds + chunkDurationSeconds;
+
+    for (let dIdx = 0; dIdx < dialoguesToSynthesize.length; dIdx++) {
+      const dialogue = dialoguesToSynthesize[dIdx];
+      const chunkId = chunkCounter++;
+      console.log(
+        `[ElevenLabs] Gerando chunk #${chunkId} (cena #${index + 1}, fala #${dIdx + 1}, speaker: "${dialogue.speaker}")...`
+      );
+
+      const data = await synthesizeSceneChunk(
+        dialogue.text,
+        dialogue.speaker,
+        apiKey
+      );
+
+      const chunkFilePath = path.join(chunksDir, `chunk_${chunkId}.mp3`);
+      fs.writeFileSync(chunkFilePath, Buffer.from(data.audio_base64, 'base64'));
+      chunkFilePaths.push(chunkFilePath);
+
+      const alignment = data.alignment || data.normalized_alignment;
+      if (!alignment || alignment.character_end_times_seconds.length === 0) {
+        throw new Error(
+          `A resposta da ElevenLabs para a cena #${index} (fala #${dIdx + 1}) não contém dados de alignment válidos.`
+        );
+      }
+
+      // Matemática de Timestamps: desloca todos os tempos do chunk atual somando a duração cumulativa anterior
+      const shiftedStartTimes = alignment.character_start_times_seconds.map(
+        (t) => t + cumulativeDurationSeconds
+      );
+      const shiftedEndTimes = alignment.character_end_times_seconds.map(
+        (t) => t + cumulativeDurationSeconds
+      );
+
+      const shiftedChunkAlignment: ElevenLabsAlignment = {
+        characters: alignment.characters,
+        character_start_times_seconds: shiftedStartTimes,
+        character_end_times_seconds: shiftedEndTimes,
+      };
+
+      // Adiciona um espaço separador no alignment global entre falas/cenas
+      if (chunkId > 0) {
+        mergedAlignment.characters.push(' ');
+        mergedAlignment.character_start_times_seconds.push(
+          cumulativeDurationSeconds
+        );
+        mergedAlignment.character_end_times_seconds.push(
+          cumulativeDurationSeconds
+        );
+      }
+      mergedAlignment.characters.push(...shiftedChunkAlignment.characters);
+      mergedAlignment.character_start_times_seconds.push(
+        ...shiftedChunkAlignment.character_start_times_seconds
+      );
+      mergedAlignment.character_end_times_seconds.push(
+        ...shiftedChunkAlignment.character_end_times_seconds
+      );
+
+      // Extrai as palavras e legendas desta fala já com os timestamps deslocados
+      const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
+      const sceneSubtitles = buildSubtitlesFromWords(
+        sceneWords,
+        WORDS_PER_SUBTITLE_CHUNK
+      );
+      allSubtitles.push(...sceneSubtitles);
+
+      // Calcula a duração real do chunk de áudio para manter sincronia exata com o arquivo concatenado pelo FFmpeg
+      const lastCharEndSec =
+        alignment.character_end_times_seconds[
+          alignment.character_end_times_seconds.length - 1
+        ] ?? 0;
+      const chunkDurationSeconds = await getAudioFileDurationSeconds(
+        chunkFilePath,
+        lastCharEndSec
+      );
+
+      cumulativeDurationSeconds += chunkDurationSeconds;
+    }
+
+    const sceneEndSecond = cumulativeDurationSeconds;
 
     rawSceneTimings.push({
       startSecond: sceneStartSecond,
       endSecond: sceneEndSecond,
     });
-
-    cumulativeDurationSeconds = sceneEndSecond;
   }
 
   // Evita sobreposição de frame entre legendas na transição entre cenas

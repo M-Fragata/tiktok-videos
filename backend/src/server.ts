@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { prisma } from './lib/prisma.ts';
 import { videoRoutes } from './routes/video.routes.ts';
 import {
   RENDERS_OUTPUT_DIR,
@@ -32,6 +33,19 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'fragata-shorts-backend' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Fragata Shorts Back-end Express em execução em http://localhost:${PORT}`);
+  try {
+    const recovered = await prisma.video.updateMany({
+      where: { status: 'PENDING' },
+      data: { status: 'DRAFT' },
+    });
+    if (recovered.count > 0) {
+      console.log(
+        `[Auto-Recovery] ${recovered.count} vídeo(s) com status PENDING resetado(s) para DRAFT após reinício do servidor.`
+      );
+    }
+  } catch (err) {
+    console.warn('[Auto-Recovery] Falha ao verificar vídeos pendentes na inicialização:', err);
+  }
 });

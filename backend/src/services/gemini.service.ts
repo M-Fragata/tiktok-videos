@@ -48,9 +48,17 @@ export interface AvatarConfigInput {
   angle?: AvatarAngle;
 }
 
-export interface ScriptScene {
+export interface DialogueItem {
+  id: string;
   speaker: SpeakerType;
   text: string;
+}
+
+export interface ScriptScene {
+  id?: string;
+  speaker?: SpeakerType;
+  text?: string;
+  dialogues?: DialogueItem[];
   avatarSprite: AvatarSprite;
   visual_description?: string;
   imagePrompt: string;
@@ -735,8 +743,10 @@ AVATAR SPRITE:
 }
 
 export interface FinalScriptSceneInput {
-  speaker: SpeakerType;
-  text: string;
+  id?: string;
+  speaker?: SpeakerType;
+  text?: string;
+  dialogues?: DialogueItem[];
   avatarSprite?: AvatarSprite;
   visual_description?: string;
   imagePrompt?: string;
@@ -774,9 +784,18 @@ export async function reviewAndEnrichFinalScript(params: {
         !s.imagePrompt.includes('historical environment, illuminated')
           ? `\n  - Prompt Visual prévio: "${s.imagePrompt}"`
           : '';
-      return `Cena #${idx + 1}${customTag}:
-  - Locutor: "${s.speaker}"
-  - Fala / Legenda: "${s.text}"${visualDesc}${existingPrompt}`;
+
+      const dialoguesText =
+        s.dialogues && s.dialogues.length > 0
+          ? s.dialogues
+              .map(
+                (d, dIdx) =>
+                  `\n  - Fala #${dIdx + 1} (${d.speaker}): "${d.text}"`
+              )
+              .join('')
+          : `\n  - Locutor: "${s.speaker || 'protagonist'}"\n  - Fala / Legenda: "${s.text || ''}"`;
+
+      return `Cena #${idx + 1}${customTag}:${dialoguesText}${visualDesc}${existingPrompt}`;
     })
     .join('\n\n');
 
@@ -882,7 +901,25 @@ A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
           console.log(
             `[Gemini Final Script Review] Roteiro final de ${parsed.scenes.length} cenas revisado e enriquecido com sucesso usando ${model}.`
           );
-          return parsed.scenes;
+          return (parsed.scenes as ScriptScene[]).map((reviewedScene, sIdx) => {
+            const originalInput = params.scenes[sIdx];
+            return {
+              ...reviewedScene,
+              dialogues:
+                originalInput?.dialogues && originalInput.dialogues.length > 0
+                  ? originalInput.dialogues
+                  : [
+                      {
+                        id: `dlg_${sIdx}_0`,
+                        speaker:
+                          reviewedScene.speaker ||
+                          originalInput?.speaker ||
+                          'protagonist',
+                        text: reviewedScene.text || originalInput?.text || '',
+                      },
+                    ],
+            };
+          });
         }
       }
     } catch (e) {

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AvatarStage } from './AvatarStage.tsx';
+import { SceneCard } from './SceneCard.tsx';
 import {
   AVAILABLE_AVATAR_SPRITES,
   AvatarAccessory,
@@ -11,10 +12,12 @@ import {
   BRIEFING_BGM_OPTIONS,
   BriefingBgmOption,
   buildClientAvatarPromptDescriptor,
+  DialogueItem,
   DurationPreset,
+  getSceneDialogues,
+  getSceneFullText,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
-  SFX_OPTIONS,
   SpeakerType,
   StoryboardScene,
 } from '../remotion/types';
@@ -136,8 +139,11 @@ export const IdeationDressingRoomTab: React.FC<
   // Estatísticas de ritmo e duração estimada do Roteiro Final (ElevenLabs ~2.4 palavras/segundo)
   const finalTotalWords = useMemo(() => {
     return finalMixScenes.reduce((acc, item) => {
-      const words = item.scene.text.trim().split(/\s+/).filter(Boolean).length;
-      return acc + words;
+      const dials = getSceneDialogues(item.scene);
+      const sceneWords = dials.reduce((sum, d) => {
+        return sum + d.text.trim().split(/\s+/).filter(Boolean).length;
+      }, 0);
+      return acc + sceneWords;
     }, 0);
   }, [finalMixScenes]);
 
@@ -196,7 +202,9 @@ export const IdeationDressingRoomTab: React.FC<
   const handleGenerateScenePrompt = async (index: number) => {
     if (!videoId) return;
     const item = finalMixScenes[index];
-    if (!item?.scene.text.trim()) return;
+    const dialogues = getSceneDialogues(item?.scene);
+    const fullText = getSceneFullText(item?.scene);
+    if (!fullText) return;
 
     setGeneratingPromptIndex(index);
     try {
@@ -204,8 +212,9 @@ export const IdeationDressingRoomTab: React.FC<
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: item.scene.text,
-          speaker: item.scene.speaker,
+          text: fullText,
+          speaker: item.scene.speaker || dialogues[0]?.speaker || 'protagonist',
+          dialogues,
           theme: finalScriptTitle || theme,
           avatarConfig,
           visual_description: item.scene.visual_description,
@@ -278,6 +287,8 @@ export const IdeationDressingRoomTab: React.FC<
       }
       const clonedScene: StoryboardScene = {
         ...scene,
+        id: uid,
+        dialogues: getSceneDialogues(scene).map((d) => ({ ...d })),
         imagePrompt: injectAvatarConfigIntoPrompt(
           scene.imagePrompt,
           avatarConfig
@@ -309,21 +320,26 @@ export const IdeationDressingRoomTab: React.FC<
       setBgmVibe(option.bgmVibe);
     }
     const mapped: SelectedFinalSceneItem[] = option.scenes.map(
-      (scene, idx) => ({
-        uid: makeSceneUid(option.id, idx),
-        sourceOptionId: option.id,
-        sourceOptionBadge: option.badge || option.title,
-        sourceSceneIndex: idx,
-        scene: {
-          ...scene,
-          imagePrompt: injectAvatarConfigIntoPrompt(
-            scene.imagePrompt,
-            avatarConfig
-          ),
-          candidateImages: [...(scene.candidateImages || [])],
-          selectedImage: scene.selectedImage || null,
-        },
-      })
+      (scene, idx) => {
+        const uid = makeSceneUid(option.id, idx);
+        return {
+          uid,
+          sourceOptionId: option.id,
+          sourceOptionBadge: option.badge || option.title,
+          sourceSceneIndex: idx,
+          scene: {
+            ...scene,
+            id: uid,
+            dialogues: getSceneDialogues(scene).map((d) => ({ ...d })),
+            imagePrompt: injectAvatarConfigIntoPrompt(
+              scene.imagePrompt,
+              avatarConfig
+            ),
+            candidateImages: [...(scene.candidateImages || [])],
+            selectedImage: scene.selectedImage || null,
+          },
+        };
+      }
     );
     setFinalMixScenes(mapped);
     setIsFinalScriptOpen(true);
@@ -367,7 +383,7 @@ export const IdeationDressingRoomTab: React.FC<
     setDraggedFinalIndex(null);
   };
 
-  // Edição rápida de texto ou locutor dentro do Roteiro Final
+  // Edição rápida de campos genéricos da cena dentro do Roteiro Final
   const handleUpdateFinalSceneField = <K extends keyof StoryboardScene>(
     index: number,
     field: K,
@@ -388,6 +404,93 @@ export const IdeationDressingRoomTab: React.FC<
     );
   };
 
+  // Manipulação de diálogos dinâmicos (Múltiplas falas por cena)
+  const handleAddDialogue = (sceneId: string) => {
+    setFinalMixScenes((prev) =>
+      prev.map((item) => {
+        if (item.uid !== sceneId && item.scene.id !== sceneId) return item;
+        const currentDialogues = getSceneDialogues(item.scene);
+        const newDialogue: DialogueItem = {
+          id: `dlg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          speaker: 'character',
+          text: '',
+        };
+        const updatedDialogues = [...currentDialogues, newDialogue];
+        return {
+          ...item,
+          scene: {
+            ...item.scene,
+            dialogues: updatedDialogues,
+            speaker:
+              updatedDialogues[0]?.speaker ||
+              item.scene.speaker ||
+              'protagonist',
+            text: updatedDialogues.map((d) => d.text).join(' '),
+          },
+        };
+      })
+    );
+  };
+
+  const handleUpdateDialogue = (
+    sceneId: string,
+    dialogueId: string,
+    field: 'speaker' | 'text',
+    value: string
+  ) => {
+    setFinalMixScenes((prev) =>
+      prev.map((item) => {
+        if (item.uid !== sceneId && item.scene.id !== sceneId) return item;
+        const currentDialogues = getSceneDialogues(item.scene);
+        const updatedDialogues = currentDialogues.map((d) =>
+          d.id === dialogueId
+            ? {
+                ...d,
+                [field]: field === 'speaker' ? (value as SpeakerType) : value,
+              }
+            : d
+        );
+        return {
+          ...item,
+          scene: {
+            ...item.scene,
+            dialogues: updatedDialogues,
+            speaker:
+              updatedDialogues[0]?.speaker ||
+              item.scene.speaker ||
+              'protagonist',
+            text: updatedDialogues.map((d) => d.text).join(' '),
+          },
+        };
+      })
+    );
+  };
+
+  const handleRemoveDialogue = (sceneId: string, dialogueId: string) => {
+    setFinalMixScenes((prev) =>
+      prev.map((item) => {
+        if (item.uid !== sceneId && item.scene.id !== sceneId) return item;
+        const currentDialogues = getSceneDialogues(item.scene);
+        if (currentDialogues.length <= 1) return item; // Mantém no mínimo 1 fala
+        const updatedDialogues = currentDialogues.filter(
+          (d) => d.id !== dialogueId
+        );
+        return {
+          ...item,
+          scene: {
+            ...item.scene,
+            dialogues: updatedDialogues,
+            speaker:
+              updatedDialogues[0]?.speaker ||
+              item.scene.speaker ||
+              'protagonist',
+            text: updatedDialogues.map((d) => d.text).join(' '),
+          },
+        };
+      })
+    );
+  };
+
   const handleRemoveFinalScene = (index: number) => {
     setFinalMixScenes((prev) => prev.filter((_, idx) => idx !== index));
   };
@@ -396,8 +499,16 @@ export const IdeationDressingRoomTab: React.FC<
     const customUid = `custom__${Date.now()}`;
     const descriptor = buildClientAvatarPromptDescriptor(avatarConfig);
     const newScene: StoryboardScene = {
+      id: customUid,
       speaker: 'protagonist',
       text: 'Nova fala personalizada na linha do tempo...',
+      dialogues: [
+        {
+          id: `dlg_${Date.now()}_0`,
+          speaker: 'protagonist',
+          text: 'Nova fala personalizada na linha do tempo...',
+        },
+      ],
       avatarSprite: AVAILABLE_AVATAR_SPRITES[0],
       visual_description: 'Descrição visual do cenário...',
       imagePrompt: `Mixed media 2D/3D illustration, a ${descriptor}, integrated seamlessly into a realistic 3D cinematic historical environment, illuminated by warm volumetric rim lighting, casting realistic 3D shadows, 9:16 vertical composition.`,
@@ -943,14 +1054,22 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                                 </div>
                               )}
 
-                              {/* 2. Locutor à esquerda + Fala / Legenda */}
-                              <div className="rounded-lg bg-[#141418] border border-[#272730] p-2.5 flex items-start gap-2 mb-2">
-                                <span className="shrink-0 rounded bg-[#202028] px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-[#30303c]">
-                                  {SPEAKER_SHORT_LABELS[scene.speaker]}
-                                </span>
-                                <p className="text-xs text-slate-100 font-medium leading-relaxed">
-                                  “{scene.text}”
-                                </p>
+                              {/* 2. Locutor à esquerda + Fala / Legenda (Suporta Diálogos Múltiplos) */}
+                              <div className="space-y-1.5 mb-2">
+                                {getSceneDialogues(scene).map((dial, dIdx) => (
+                                  <div
+                                    key={dial.id || dIdx}
+                                    className="rounded-lg bg-[#141418] border border-[#272730] p-2 flex items-start gap-2"
+                                  >
+                                    <span className="shrink-0 rounded bg-[#202028] px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-[#30303c]">
+                                      {SPEAKER_SHORT_LABELS[dial.speaker] ||
+                                        dial.speaker}
+                                    </span>
+                                    <p className="text-xs text-slate-100 font-medium leading-relaxed">
+                                      “{dial.text}”
+                                    </p>
+                                  </div>
+                                ))}
                               </div>
 
                               {/* 3. Design de Som: Som Escolhido + Prompt ElevenLabs */}
@@ -1116,250 +1235,43 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                   </button>
                 </div>
 
-                {/* Lista de Cenas Reordenáveis */}
+                {/* Lista de Cenas Reordenáveis com SceneCard Multi-Diálogos */}
                 <div className="space-y-2.5">
                   {finalMixScenes.map((item, idx) => (
-                    <div
+                    <SceneCard
                       key={`${item.uid}_${idx}`}
-                      draggable
+                      scene={item.scene}
+                      sceneIndex={idx}
+                      sceneId={item.uid}
+                      sourceBadge={item.sourceOptionBadge}
+                      isDraggable
+                      isDragging={draggedFinalIndex === idx}
                       onDragStart={() => handleDragStart(idx)}
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
-                      className={`rounded-xl border p-3 transition-all duration-200 ${
-                        draggedFinalIndex === idx
-                          ? 'border-amber-400 bg-amber-500/15 opacity-75 scale-[0.99]'
-                          : 'border-[#2c2c32] bg-[#1b1b20] hover:border-amber-500/40'
-                      }`}
-                    >
-                      {/* Topo do Card: Alça de Arrasto + Posição + Badge de Origem + Setas Cima/Baixo + Remover */}
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            title="Arraste para reordenar"
-                            className="cursor-grab active:cursor-grabbing text-slate-500 hover:text-amber-400 px-1"
-                          >
-                            ⋮⋮
-                          </span>
-                          <span className="rounded-md bg-amber-500 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-slate-950">
-                            #{idx + 1}
-                          </span>
-                          <span className="truncate rounded border border-[#2c2c32] bg-[#121214] px-2 py-0.5 text-[10px] font-semibold text-teal-300">
-                            {item.sourceOptionBadge}
-                          </span>
-                        </div>
-
-                        {/* Controles de Reordenação (Cima / Baixo) e Remoção */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveFinalScene(idx, 'up')}
-                            title="Mover cena para cima"
-                            className="flex h-6 w-6 items-center justify-center rounded border border-[#2c2c32] bg-[#121214] text-xs text-slate-300 transition hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-30 disabled:pointer-events-none"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === finalMixScenes.length - 1}
-                            onClick={() => handleMoveFinalScene(idx, 'down')}
-                            title="Mover cena para baixo"
-                            className="flex h-6 w-6 items-center justify-center rounded border border-[#2c2c32] bg-[#121214] text-xs text-slate-300 transition hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-30 disabled:pointer-events-none"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFinalScene(idx)}
-                            title="Remover cena do Roteiro Final"
-                            className="ml-1 flex h-6 w-6 items-center justify-center rounded border border-rose-500/30 bg-rose-500/10 text-xs font-bold text-rose-300 transition hover:bg-rose-500/25"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 1. Descrição do Cenário (Visual) */}
-                      <div className="mb-2 text-[11px] text-slate-300">
-                        <div className="flex items-center justify-between gap-1.5 mb-1 font-semibold text-amber-400">
-                          <span className="flex items-center gap-1.5">
-                            <span>🖼️ Cenário:</span>
-                          </span>
-                          <button
-                            type="button"
-                            disabled={
-                              generatingPromptIndex === idx ||
-                              !item.scene.text.trim()
-                            }
-                            onClick={() => void handleGenerateScenePrompt(idx)}
-                            title="Gerar prompt de imagem e descrição com IA a partir da fala"
-                            className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-40 transition"
-                          >
-                            {generatingPromptIndex === idx ? (
-                              <>
-                                <span className="h-2.5 w-2.5 animate-spin rounded-full border border-amber-300 border-t-transparent" />
-                                <span>Criando prompt...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>🪄</span>
-                                <span>Gerar Prompt Visual</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={item.scene.visual_description || ''}
-                          onChange={(e) =>
-                            handleUpdateFinalSceneField(
-                              idx,
-                              'visual_description',
-                              e.target.value
-                            )
-                          }
-                          placeholder="Descrição visual do cenário histórico..."
-                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition italic"
-                        />
-                      </div>
-
-                      {/* 2. Locutor à esquerda + Fala / Legenda */}
-                      <div className="rounded-lg bg-[#141418] border border-[#272730] p-2 flex items-start gap-2 mb-2">
-                        <div className="shrink-0 w-36">
-                          <select
-                            value={item.scene.speaker}
-                            onChange={(e) =>
-                              handleUpdateFinalSceneField(
-                                idx,
-                                'speaker',
-                                e.target.value as SpeakerType
-                              )
-                            }
-                            className="w-full rounded-md border border-[#30303c] bg-[#202028] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
-                          >
-                            <option value="protagonist">🧑 Protagonista</option>
-                            <option value="character">🎭 Personagem</option>
-                            <option value="narrator">🎙️ Narrador</option>
-                          </select>
-                        </div>
-                        <textarea
-                          rows={2}
-                          value={item.scene.text}
-                          onChange={(e) =>
-                            handleUpdateFinalSceneField(
-                              idx,
-                              'text',
-                              e.target.value
-                            )
-                          }
-                          placeholder="Fala / Legenda da cena..."
-                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 font-medium leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
-                        />
-                      </div>
-
-                      {/* 3. Design de Som Integrado (Som Escolhido + Prompt ElevenLabs) */}
-                      <div className="rounded-lg border border-[#262630] bg-[#121216] p-2.5 space-y-2">
-                        {/* Linha do Som Escolhido (Biblioteca Local) */}
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <span className="font-semibold text-teal-400 flex items-center gap-1">
-                              <span>🔊 Som Escolhido:</span>
-                            </span>
-                            <select
-                              value={item.scene.sfx_suggestion || 'whoosh'}
-                              onChange={(e) =>
-                                handleUpdateFinalSceneField(
-                                  idx,
-                                  'sfx_suggestion',
-                                  e.target.value
-                                )
-                              }
-                              className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none max-w-[220px]"
-                            >
-                              {SFX_OPTIONS.map((sfx) => (
-                                <option key={sfx.value} value={sfx.value}>
-                                  {sfx.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {item.scene.custom_sfx_url && (
-                            <div className="flex items-center gap-1.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                              <span>✨ Áudio IA Ativo</span>
-                              <button
-                                type="button"
-                                title="Ouvir áudio gerado pela ElevenLabs"
-                                onClick={() =>
-                                  playAudioPreview(item.scene.custom_sfx_url!)
-                                }
-                                className="hover:scale-110 transition"
-                              >
-                                ▶️
-                              </button>
-                              <button
-                                type="button"
-                                title="Remover áudio customizado e voltar ao som da biblioteca"
-                                onClick={() =>
-                                  handleUpdateFinalSceneField(
-                                    idx,
-                                    'custom_sfx_url',
-                                    null
-                                  )
-                                }
-                                className="text-slate-400 hover:text-rose-400 transition"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Linha do Prompt IA (ElevenLabs Text-to-SFX) */}
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex items-center gap-1 shrink-0 text-[11px] font-semibold text-slate-400">
-                            <span>🎧 Prompt IA:</span>
-                          </div>
-                          <input
-                            type="text"
-                            value={item.scene.sfx_prompt || ''}
-                            onChange={(e) =>
-                              handleUpdateFinalSceneField(
-                                idx,
-                                'sfx_prompt',
-                                e.target.value
-                              )
-                            }
-                            placeholder="Prompt de som para ElevenLabs (ex: Loud stone cracking sound with desert echo)"
-                            className="w-full rounded-md border border-[#2c2c32] bg-[#18181f] px-2.5 py-1 text-[11px] text-slate-200 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition italic"
-                          />
-
-                          <button
-                            type="button"
-                            disabled={
-                              !item.scene.sfx_prompt?.trim() ||
-                              generatingSfxIndex === idx ||
-                              !videoId
-                            }
-                            onClick={() => void handleGenerateCustomSfx(idx)}
-                            title="Gerar som exclusivo com ElevenLabs a partir deste prompt"
-                            className="flex shrink-0 items-center gap-1 rounded-md border border-teal-500/40 bg-teal-500/15 px-2.5 py-1 text-[10px] font-bold text-teal-300 hover:bg-teal-500/25 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                          >
-                            {generatingSfxIndex === idx ? (
-                              <>
-                                <span className="h-3 w-3 animate-spin rounded-full border border-teal-300 border-t-transparent" />
-                                <span>Gerando...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>✨</span>
-                                <span>Gerar SFX</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                      canMoveUp={idx > 0}
+                      canMoveDown={idx < finalMixScenes.length - 1}
+                      onMoveUp={() => handleMoveFinalScene(idx, 'up')}
+                      onMoveDown={() => handleMoveFinalScene(idx, 'down')}
+                      onRemoveScene={() => handleRemoveFinalScene(idx)}
+                      onUpdateField={(field, value) =>
+                        handleUpdateFinalSceneField(
+                          idx,
+                          field,
+                          value as StoryboardScene[typeof field]
+                        )
+                      }
+                      onAddDialogue={handleAddDialogue}
+                      onUpdateDialogue={handleUpdateDialogue}
+                      onRemoveDialogue={handleRemoveDialogue}
+                      onGenerateVisualPrompt={() =>
+                        void handleGenerateScenePrompt(idx)
+                      }
+                      isGeneratingVisualPrompt={generatingPromptIndex === idx}
+                      onGenerateSfx={() => void handleGenerateCustomSfx(idx)}
+                      isGeneratingSfx={generatingSfxIndex === idx}
+                      onPlayAudioPreview={playAudioPreview}
+                    />
                   ))}
                 </div>
 
