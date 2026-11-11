@@ -125,7 +125,7 @@ export function buildAvatarPromptDescriptor(
   const strokeColor = avatarConfig?.strokeColor || '#111827';
   const neckPhrase = neckAccessory ? `, ${neckAccessory}` : '';
 
-  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}, expressive winking facial expression with a confident cocky smirk, and thin stick-figure limbs with hands on hips outlined in ${strokeColor} ink`;
+  return `2D cartoon stickman protagonist with a smooth round white head, a distinct solid white capsule torso with smooth thickness outlined in clean ${strokeColor} ink (NOT a stick-line torso), thin stick-figure arms and legs, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}`;
 }
 
 const DURATION_RULES: Record<
@@ -197,17 +197,16 @@ Duração Selecionada (${rule.label}):
 
 ${VIRAL_PACING_INSTRUCTION}
 
-DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
-Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminologia de modelos de difusão (FLUX / Imagen) para forçar a estética "Mixed Media Illustration" (evitando que a IA gere humanos de carne e osso):
-1. GATILHO DE ESTILO (Style Anchor): Comece SEMPRE o prompt com:
-   "Mixed media 2D/3D illustration, a 2D cartoon stickman character with a smooth round white head, expressive simple black ink facial features, and thin black stick-figure limbs, integrated seamlessly into a realistic 3D cinematic environment."
-2. ANATOMIA E TRAJES DO PERSONAGEM (Character & Attire):
-   - Qualquer personagem na cena (seja o viajante estudioso com óculos redondos e colete ou figuras históricas como soldados, reis, cavaleiros ou camponeses) DEVE ter cabeça redonda branca 2D plana em estilo doodle/comic, olhos e boca expressivos desenhados a traço preto simples e braços/pernas de palito pretos finos.
-   - Sobre o corpo de palito, o personagem veste trajes ou armaduras históricas texturizadas (ex: "wearing a textured medieval knight armor and red cape", "wearing a weathered WWI helmet and trench coat", "wearing round glasses, curly black hair, and an olive explorer vest").
-   - NUNCA descreva pele humana realista; inclua sempre a restrição implícita de estilo ("stylized 2D white doodle head, no realistic human skin or photorealistic faces").
-3. INTERAÇÃO FÍSICA, ILUMINAÇÃO E SOMBRAS 3D (Lighting & Physical Integration):
-   - O personagem 2D não pode parecer um adesivo colado; ele DEVE interagir fisicamente com objetos e cenários 3D realistas (ex: segurando uma lupa que refrata um osso fóssil realista, montado num cavalo 3D em pleno campo de batalha com fumo e fogo, segurando uma espada e escudo, ou examinando um crânio numa mesa de madeira iluminada).
-   - Inclua SEMPRE termos de integração luminosa no final: "integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT VISUAL ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
+Cada "imagePrompt" DEVE ser escrito em INGLÊS e estruturado para difusão (FLUX / Imagen), garantindo dinamismo e coerência:
+1. GATILHO DE ESTILO + AVATAR: Comece SEMPRE o prompt com:
+   "Mixed media 2D/3D illustration, a 2D cartoon stickman character with a smooth round white head, a distinct solid white capsule torso with smooth thickness outlined in clean dark ink (NOT a stick-line torso), thin stick-figure arms and legs, [EXPRESSÃO FACIAL DINÂMICA DA CENA], [POSE E AÇÃO DINÂMICA DO PERSONAGEM], [CENÁRIO HISTÓRICO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+2. EXPRESSÕES FACIAIS E POSES DINÂMICAS:
+   - A EXPRESSÃO FACIAL DEVE variar cena a cena de acordo com a emoção do momento e o "avatarSprite" escolhido (talking, shocked, scared, happy, angry, laughing, thinking, etc.).
+   - A POSE E AÇÃO FÍSICA DEVE ser ativa (escalando, correndo, tropeçando, apontando, espiando, etc. — NUNCA todos com mãos na cintura).
+3. ANATOMIA E REGRA DE TODOS OS PERSONAGENS:
+   - TRONCO COM ESPESSURA: Tanto o protagonista quanto qualquer personagem devem ter tronco branco com espessura visível (cápsula/torso branco 2D contornado a nanquim). NUNCA desenhe o tronco como linha única de palito.
+   - TODOS OS PERSONAGENS NO MESMO ESTILO: Figuras secundárias, soldados de Napoleão, Sa'im al-Dahr e multidões históricas DEVEM ser desenhados no MESMO formato de cartoon 2D ("all secondary characters and historical figures are also stylized 2D cartoon stickmen with smooth round white heads, distinct solid white capsule torsos with thickness, and thin stick limbs, wearing cartoon historical costumes. ABSOLUTELY NO photorealistic human skin or realistic human faces").
 
 Regras de Roteiro:
 1. GANCHO DE URGÊNCIA: A cena 1 começa no meio da ação ou de uma descoberta intrigante.
@@ -384,17 +383,41 @@ APARÊNCIA CUSTOMIZADA DO AVATAR PROTAGONISTA (OBRIGATÓRIO EM TODOS OS "imagePr
 O utilizador configurou o protagonista no Camarim 360º com a seguinte aparência exata:
 "${avatarDescriptor}"
 
-DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
-Cada "imagePrompt" DEVE ser escrito em INGLÊS e seguir rigorosamente a terminologia de modelos de difusão para forçar a estética "Mixed Media Illustration":
-1. GATILHO DE ESTILO + AVATAR CUSTOMIZADO: Comece SEMPRE o prompt com:
-   "Mixed media 2D/3D illustration, a ${avatarDescriptor}, integrated seamlessly into a realistic 3D cinematic environment."
-2. ANATOMIA E TRAJES DO PERSONAGEM:
-   - O protagonista mantém sempre as características do Camarim (${avatarDescriptor}), combinadas com roupas ou objetos que interajam com a época histórica.
-   - Figuras secundárias da época também têm cabeça redonda branca 2D plana em estilo doodle/comic e membros de palito finos com trajes históricos texturizados.
-   - NUNCA descreva pele humana realista ("stylized 2D white doodle head, no realistic human skin or photorealistic faces").
-3. INTERAÇÃO FÍSICA, ILUMINAÇÃO E SOMBRAS 3D:
-   - O personagem 2D interage fisicamente com objetos e cenários 3D realistas.
-   - Termine SEMPRE o prompt com: "integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+DIRETRIZES OBRIGATÓRIAS DE ENGENHARIA DE PROMPT VISUAL ("imagePrompt" — ESTILO MIXED MEDIA 2D/3D):
+Cada "imagePrompt" DEVE ser escrito em INGLÊS e estruturado para difusão (FLUX / Imagen), garantindo dinamismo e coerência:
+
+1. ESTRUTURA DO PROMPT POR CENA:
+   Inicie SEMPRE o prompt com:
+   "Mixed media 2D/3D illustration, a ${avatarDescriptor}, [EXPRESSÃO FACIAL DINÂMICA DA CENA], [POSE E AÇÃO DINÂMICA DO PERSONAGEM], [CENÁRIO HISTÓRICO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+
+2. EXPRESSÕES FACIAIS E POSES NUNCA DEVEM SER REPETIDAS NEM ESTÁTICAS:
+   - É expressamente PROIBIDO colocar "with hands on hips" ou expressão cocky/confiante em todas as cenas!
+   - A EXPRESSÃO FACIAL DEVE variar cena a cena de acordo com a emoção do momento e o "avatarSprite" escolhido:
+     * talking/narrando: "expressive speaking face with open animated mouth and lively eyes"
+     * shocked/surpreso: "shocked face with wide circular eyes and dropped jaw in disbelief"
+     * scared/em pânico: "panicking face with wide frightened eyes, raised eyebrows and cartoon sweat drops"
+     * happy/aliviado: "beaming cheerful grin with friendly eyes"
+     * angry/determinado: "focused determined grimace with intense furrowed brows"
+     * laughing/cômico: "laughing cheerful expression with squinched comic eyes"
+     * thinking/curioso: "curious thoughtful squint looking up, one eyebrow raised"
+     * wink/irônico: "cheeky one-eye wink with subtle smirk"
+   - A POSE E AÇÃO FÍSICA DEVE ser ativa e específica da cena:
+     * escalando a rocha histórica com uma das mãos na borda (corpo inclinado e pé apoiado, como na referência)
+     * correndo assustado com pernas de palito em movimento acelerado e bandana esvoaçando ao vento
+     * escorregando e se desequilibrando de forma cômica
+     * apontando com o braço de palito estendido para a multidão ou monumento
+     * espiando cautelosamente por trás de uma estátua ou coluna de pedra
+     * quebrando a 4ª parede olhando diretamente para a câmara com expressão de culpa
+
+3. ANATOMIA E REGRA GERAL DE TODOS OS PERSONAGENS (PROTAGONISTA E SECUNDÁRIOS):
+   - TRONCO BRANCO COM ESPESSURA: Tanto o protagonista quanto qualquer personagem devem ter tronco branco com espessura visível (cápsula/torso branco 2D contornado a nanquim, similar a Henry Stickmin). É expressamente PROIBIDO gerar o tronco como uma linha única de palito (evitar tronco de fio único).
+   - BRAÇOS E PERNAS DE PALITO: Apenas os braços e pernas são traços pretos finos de palito.
+   - TODOS OS PERSONAGENS NO MESMO ESTILO: Figuras secundárias, soldados de Napoleão, Sa'im al-Dahr, sacerdotes, operários e multidões históricas DEVEM ser desenhados no MESMO formato de cartoon 2D:
+     "all secondary characters and historical figures are also stylized 2D cartoon stickmen with smooth round white heads, distinct solid white capsule torsos with thickness, and thin stick limbs, wearing cartoon historical costumes (e.g. 18th-century military coats, turbans, robes). ABSOLUTELY NO photorealistic human skin or realistic human faces."
+
+4. CENÁRIO 3D REALISTA E ILUMINAÇÃO:
+   - O cenário de fundo é renderizado como ambiente 3D cinematográfico ultra-realista com texturas ricas de pedra, poeira e areia.
+   - Os personagens 2D interagem fisicamente e projetam sombras 3D realistas sobre o solo e pedras.
 
 DIRETRIZES DE TRILHA SONORA (BGM) E DESIGN DE SOM (SFX):
 1. TRILHA SONORA POR OPÇÃO ("bgmVibe"):
@@ -602,4 +625,106 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
   throw new Error(
     'Falha ao gerar opções de roteiro no Google Gemini com os modelos disponíveis.'
   );
+}
+
+/**
+ * Gera os metadados visuais e sonoros completos para uma cena individual (customizada ou editada)
+ * utilizando Gemini Structured Outputs e alinhado aos padrões Mixed Media 2D/3D.
+ */
+export async function generateSingleScenePrompt(params: {
+  theme: string;
+  sceneText: string;
+  speaker: SpeakerType;
+  avatarConfig?: AvatarConfigInput;
+}): Promise<{
+  imagePrompt: string;
+  visual_description: string;
+  sfx_suggestion: string;
+  sfx_prompt: string;
+  avatarSprite: AvatarSprite;
+}> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY não configurada no backend/.env.');
+  }
+
+  const avatarDescriptor = buildAvatarPromptDescriptor(params.avatarConfig);
+
+  const systemInstruction = `És o Diretor de Arte e Som especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts.
+A tua tarefa é gerar os metadados visuais e sonoros cinematográficos para UMA CENA específica de vídeo curto a partir do briefing histórico e da fala do locutor.
+
+Contexto Geral do Vídeo: "${params.theme}"
+Locutor da Cena: "${params.speaker}"
+Fala da Cena: "${params.sceneText}"
+
+Aparência base do protagonista configurada no Camarim:
+"${avatarDescriptor}"
+
+DIRETRIZES OBRIGATÓRIAS DO PROMPT VISUAL ("imagePrompt" — EM INGLÊS):
+- Inicie SEMPRE com: "Mixed media 2D/3D illustration, a ${avatarDescriptor}, [EXPRESSÃO FACIAL DINÂMICA], [POSE E AÇÃO DINÂMICA DA CENA], [CENÁRIO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+- Expressão facial dinâmica adaptada à emoção exata da fala (talking, shocked, scared, happy, angry, laughing, thinking, etc.).
+- Pose e ação física ativas no cenário histórico 3D (ex: escalando pedras, correndo, tropeçando, apontando, espiando, etc. NUNCA estático com mãos na cintura!).
+- Tronco branco com espessura (cápsula 2D branca contornada a nanquim), braços e pernas de palito (NUNCA tronco de linha única de palito).
+- Se houver personagens secundários, soldados ou multidão, TODOS devem ser 2D cartoon stickmen com cabeça redonda branca, tronco branco com espessura e roupas históricas em nanquim (NUNCA humanos fotorrealistas).
+
+DIRETRIZES DE DESCRIÇÃO VISUAL EM PORTUGUÊS ("visual_description"):
+- 1 frase em PORTUGUÊS resumindo o cenário histórico e a ação do personagem para o criador ler no card (ex: "Gizé em 1798: o viajante sobe no topo da cabeça da Esfinge enquanto soldados e mercadores se aglomeram furiosos lá embaixo").
+
+DIRETRIZES DE DESIGN DE SOM:
+- "sfx_suggestion": Escolha o som ideal da biblioteca local: "cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none".
+- "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs (ex: "Loud crumbling rock sound with sand debris echoing in desert").
+
+AVATAR SPRITE:
+- "avatarSprite": Uma destas opções: ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}.`;
+
+  const responseSchema = {
+    type: 'OBJECT',
+    properties: {
+      imagePrompt: { type: 'STRING' },
+      visual_description: { type: 'STRING' },
+      sfx_suggestion: { type: 'STRING' },
+      sfx_prompt: { type: 'STRING' },
+      avatarSprite: { type: 'STRING', enum: [...VALID_AVATAR_SPRITES] },
+    },
+    required: [
+      'imagePrompt',
+      'visual_description',
+      'sfx_suggestion',
+      'sfx_prompt',
+      'avatarSprite',
+    ],
+  };
+
+  const candidateModels = [
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
+  ];
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemInstruction }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawJson) {
+        return JSON.parse(rawJson);
+      }
+    } catch (e) {
+      console.warn(`[Gemini Single Scene Prompt] Falha no modelo ${model}:`, e);
+    }
+  }
+
+  throw new Error('Falha ao gerar metadados visuais da cena com Gemini.');
 }

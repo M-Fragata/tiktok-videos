@@ -259,21 +259,51 @@ export const buildClientAvatarPromptDescriptor = (
   const strokeColor = config.strokeColor || '#111827';
   const neckPhrase = neckAccessory ? `, ${neckAccessory}` : '';
 
-  return `2D cartoon stickman protagonist with a smooth round white head, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}, expressive winking facial expression with a confident cocky smirk, and thin stick-figure limbs with hands on hips outlined in ${strokeColor} ink`;
+  return `2D cartoon stickman protagonist with a smooth round white head, a distinct solid white capsule torso with smooth thickness outlined in clean ${strokeColor} ink (NOT a stick-line torso), thin stick-figure arms and legs, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}`;
+};
+
+export const sanitizePromptArtifacts = (prompt: string): string => {
+  if (!prompt) return '';
+  // Remove repeticoes espurias herdadas de regex anteriores
+  let cleaned = prompt.replace(
+    /(?:,\s*and thin stick-figure limbs)?(?: with hands on hips outlined in #[0-9a-fA-F]{3,6} ink)+/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /(?:,\s*)?expressive winking facial expression with a confident cocky smirk/gi,
+    ''
+  );
+  cleaned = cleaned.replace(/,\s*,+/g, ',').replace(/\s{2,}/g, ' ').trim();
+  return cleaned;
 };
 
 export const injectAvatarConfigIntoPrompt = (
   rawPrompt: string,
   config: AvatarConfig
 ): string => {
+  if (!rawPrompt) return '';
+  const sanitized = sanitizePromptArtifacts(rawPrompt);
   const descriptor = buildClientAvatarPromptDescriptor(config);
-  const genericPattern =
-    /2D cartoon stickman (?:character|protagonist) with a smooth round white head,[^.]+?limbs(?: outlined in #[0-9a-fA-F]{3,6} ink)?/i;
 
-  if (genericPattern.test(rawPrompt)) {
-    return rawPrompt.replace(genericPattern, descriptor);
+  if (sanitized.includes(descriptor)) {
+    return sanitized;
   }
-  return `Mixed media 2D/3D illustration, a ${descriptor}. ${rawPrompt}`;
+
+  const genericPattern =
+    /2D cartoon stickman (?:character|protagonist) with a smooth round white head.+?(?=,\s*(?:expressive|wearing|standing|climbing|running|peeking|pointing|falling|looking|facing|holding|integrated|all secondary))/i;
+
+  if (genericPattern.test(sanitized)) {
+    return sanitized.replace(genericPattern, descriptor);
+  }
+
+  if (/^Mixed media 2D\/3D illustration/i.test(sanitized)) {
+    return sanitized.replace(
+      /^Mixed media 2D\/3D illustration(?:,\s*a 2D cartoon stickman[^,]+)?/i,
+      `Mixed media 2D/3D illustration, a ${descriptor}`
+    );
+  }
+
+  return `Mixed media 2D/3D illustration, a ${descriptor}. ${sanitized}`;
 };
 
 export interface SubtitleWordTiming {

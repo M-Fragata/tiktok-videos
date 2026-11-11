@@ -9,7 +9,7 @@ const MOCK_STORAGE_DIR = path.resolve(
 );
 
 const MIXED_MEDIA_STYLE_SUFFIX =
-  'Mixed media 2D/3D illustration, 2D white round-headed stickman cartoon character with simple black ink facial features and thin black stick-figure limbs integrated seamlessly into a realistic 3D cinematic historical environment, casting realistic 3D shadows, warm volumetric lighting, no photorealistic human faces, no flesh skin, vertical 9:16 aspect ratio, no text, no captions, no watermarks.';
+  'Mixed media 2D/3D illustration, 2D white round-headed cartoon stickman character with distinct white capsule-shaped torso with smooth visible thickness (NOT a single stick-line spine), thin black stick-figure limbs, integrated seamlessly into a realistic 3D cinematic historical environment, casting realistic 3D shadows, warm volumetric lighting, all secondary characters and crowd also in 2D cartoon stickman style, no photorealistic human faces, no flesh skin, vertical 9:16 aspect ratio, no text, no captions, no watermarks.';
 
 /**
  * Gera uma imagem usando Pollinations.ai (FLUX) de forma 100% gratuita.

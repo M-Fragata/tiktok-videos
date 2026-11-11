@@ -255,6 +255,13 @@ export const updateVideoTitleSchema = z.object({
     .max(240, 'O título é demasiado longo'),
 });
 
+export const generateScenePromptSchema = z.object({
+  text: z.string().min(1, 'A fala da cena é obrigatória'),
+  speaker: speakerTypeSchema.optional().default('protagonist'),
+  theme: z.string().optional().default('Viagem no Tempo'),
+  avatarConfig: avatarConfigSchema.optional(),
+});
+
 export type GenerateVideoInput = z.infer<typeof generateVideoSchema>;
 export type RenderVideoInput = z.infer<typeof renderVideoSchema>;
 export type StoryboardSceneInput = z.infer<typeof storyboardSceneSchema>;

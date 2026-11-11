@@ -6,6 +6,7 @@ import {
   createDraftVideoSchema,
   generateAudioSchema,
   generateSceneImagesSchema,
+  generateScenePromptSchema,
   generateSceneSfxSchema,
   generateScriptSchema,
   generateVideoSchema,
@@ -20,6 +21,7 @@ import {
   STORAGE_OUTPUT_DIR,
 } from '../services/remotion.service.ts';
 import {
+  generateSingleScenePrompt,
   generateTimeMachineIdeation,
   generateTimeMachineScript,
   type ScriptScene,
@@ -1061,6 +1063,63 @@ export async function generateSceneSfxController(
         err instanceof Error
           ? err.message
           : 'Erro interno ao gerar efeito sonoro.',
+    });
+  }
+}
+
+/**
+ * POST /api/videos/:id/generate-scene-prompt
+ * Gera os metadados visuais (imagePrompt com anatomia 2D stickman e expressão dinâmica)
+ * e sonoros para uma cena a partir do texto/fala via Google Gemini.
+ */
+export async function generateScenePromptController(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateScenePromptSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos.',
+      details: parsedBody.error.flatten(),
+    });
+    return;
+  }
+
+  const { text, speaker, theme, avatarConfig } = parsedBody.data;
+
+  try {
+    const video = await prisma.video.findUnique({ where: { id } });
+    if (!video) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const effectiveTheme = theme || video.theme || 'Viagem no Tempo';
+
+    console.log(
+      `[Gemini Scene Prompt] Gerando prompt visual para fala: "${text.slice(0, 50)}..."`
+    );
+
+    const result = await generateSingleScenePrompt({
+      theme: effectiveTheme,
+      sceneText: text,
+      speaker,
+      avatarConfig,
+    });
+
+    res.status(200).json({
+      message: 'Prompt visual e sonoro gerados com sucesso pelo Gemini.',
+      ...result,
+    });
+  } catch (err) {
+    console.error('[Gemini Scene Prompt] Erro ao gerar prompt da cena:', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro interno ao gerar prompt visual da cena.',
     });
   }
 }

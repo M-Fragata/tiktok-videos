@@ -129,6 +129,9 @@ export const IdeationDressingRoomTab: React.FC<
   const [generatingSfxIndex, setGeneratingSfxIndex] = useState<number | null>(
     null
   );
+  const [generatingPromptIndex, setGeneratingPromptIndex] = useState<
+    number | null
+  >(null);
 
   // Estatísticas de ritmo e duração estimada do Roteiro Final (ElevenLabs ~2.4 palavras/segundo)
   const finalTotalWords = useMemo(() => {
@@ -187,6 +190,59 @@ export const IdeationDressingRoomTab: React.FC<
       );
     } finally {
       setGeneratingSfxIndex(null);
+    }
+  };
+
+  const handleGenerateScenePrompt = async (index: number) => {
+    if (!videoId) return;
+    const item = finalMixScenes[index];
+    if (!item?.scene.text.trim()) return;
+
+    setGeneratingPromptIndex(index);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/generate-scene-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: item.scene.text,
+          speaker: item.scene.speaker,
+          theme: finalScriptTitle || theme,
+          avatarConfig,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao gerar prompt visual');
+      }
+
+      setFinalMixScenes((prev) =>
+        prev.map((it, idx) =>
+          idx === index
+            ? {
+                ...it,
+                scene: {
+                  ...it.scene,
+                  imagePrompt: data.imagePrompt,
+                  visual_description: data.visual_description,
+                  sfx_suggestion:
+                    data.sfx_suggestion || it.scene.sfx_suggestion,
+                  sfx_prompt: data.sfx_prompt || it.scene.sfx_prompt,
+                  avatarSprite: data.avatarSprite || it.scene.avatarSprite,
+                },
+              }
+            : it
+        )
+      );
+    } catch (err) {
+      console.error('[Gemini Scene Prompt Error]', err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao gerar prompt visual com IA.'
+      );
+    } finally {
+      setGeneratingPromptIndex(null);
     }
   };
 
@@ -1124,8 +1180,32 @@ Cena 4: Conclusão instigante convidando a comentar.`}
 
                       {/* 1. Descrição do Cenário (Visual) */}
                       <div className="mb-2 text-[11px] text-slate-300">
-                        <div className="flex items-center gap-1.5 mb-1 font-semibold text-amber-400">
-                          <span>🖼️ Cenário:</span>
+                        <div className="flex items-center justify-between gap-1.5 mb-1 font-semibold text-amber-400">
+                          <span className="flex items-center gap-1.5">
+                            <span>🖼️ Cenário:</span>
+                          </span>
+                          <button
+                            type="button"
+                            disabled={
+                              generatingPromptIndex === idx ||
+                              !item.scene.text.trim()
+                            }
+                            onClick={() => void handleGenerateScenePrompt(idx)}
+                            title="Gerar prompt de imagem e descrição com IA a partir da fala"
+                            className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-40 transition"
+                          >
+                            {generatingPromptIndex === idx ? (
+                              <>
+                                <span className="h-2.5 w-2.5 animate-spin rounded-full border border-amber-300 border-t-transparent" />
+                                <span>Criando prompt...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>🪄</span>
+                                <span>Gerar Prompt Visual</span>
+                              </>
+                            )}
+                          </button>
                         </div>
                         <input
                           type="text"

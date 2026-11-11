@@ -175,6 +175,9 @@ export const Studio: React.FC = () => {
   const [isUploadingManualImage, setIsUploadingManualImage] = useState<
     Record<number, boolean>
   >({});
+  const [generatingPromptForScene, setGeneratingPromptForScene] = useState<
+    Record<number, boolean>
+  >({});
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [audioGenerated, setAudioGenerated] = useState<boolean>(false);
   const [isAssembled, setIsAssembled] = useState<boolean>(false);
@@ -510,15 +513,63 @@ export const Studio: React.FC = () => {
     setSuccessMsg(null);
 
     try {
-      const consolidatedScenes: StoryboardScene[] = finalMixScenes.map(
-        (item) => ({
-          ...item.scene,
-          imagePrompt: injectAvatarConfigIntoPrompt(
-            item.scene.imagePrompt,
-            avatarConfig
-          ),
-          candidateImages: item.scene.candidateImages || [],
-          selectedImage: item.scene.selectedImage || null,
+      // Enriquece automaticamente com o Gemini cenas autorais ou que possuam prompt genérico
+      const consolidatedScenes: StoryboardScene[] = await Promise.all(
+        finalMixScenes.map(async (item) => {
+          const isGeneric =
+            item.sourceOptionId === 'custom' ||
+            !item.scene.imagePrompt ||
+            item.scene.imagePrompt.includes(
+              'historical environment, illuminated'
+            );
+
+          if (isGeneric && item.scene.text.trim()) {
+            try {
+              const res = await fetch(
+                `/api/videos/${id}/generate-scene-prompt`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    text: item.scene.text,
+                    speaker: item.scene.speaker,
+                    theme: approvedTitle?.trim() || theme,
+                    avatarConfig,
+                  }),
+                }
+              );
+
+              if (res.ok) {
+                const data = await res.json();
+                return {
+                  ...item.scene,
+                  imagePrompt: data.imagePrompt,
+                  visual_description: data.visual_description,
+                  sfx_suggestion:
+                    data.sfx_suggestion || item.scene.sfx_suggestion,
+                  sfx_prompt: data.sfx_prompt || item.scene.sfx_prompt,
+                  avatarSprite: data.avatarSprite || item.scene.avatarSprite,
+                  candidateImages: item.scene.candidateImages || [],
+                  selectedImage: item.scene.selectedImage || null,
+                };
+              }
+            } catch (err) {
+              console.warn(
+                '[Studio] Falha ao auto-enriquecer cena manual:',
+                err
+              );
+            }
+          }
+
+          return {
+            ...item.scene,
+            imagePrompt: injectAvatarConfigIntoPrompt(
+              item.scene.imagePrompt,
+              avatarConfig
+            ),
+            candidateImages: item.scene.candidateImages || [],
+            selectedImage: item.scene.selectedImage || null,
+          };
         })
       );
 
@@ -619,6 +670,61 @@ export const Studio: React.FC = () => {
       ...prev,
       [sceneIndex]: !prev[sceneIndex],
     }));
+  };
+
+  const handleRegenerateScenePromptInStudio = async (sceneIndex: number) => {
+    if (!id) return;
+    const targetScene = scenes[sceneIndex];
+    if (!targetScene?.text?.trim()) return;
+
+    setGeneratingPromptForScene((prev) => ({ ...prev, [sceneIndex]: true }));
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch(`/api/videos/${id}/generate-scene-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: targetScene.text,
+          speaker: targetScene.speaker,
+          theme,
+          avatarConfig,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao gerar prompt visual');
+      }
+
+      setScenes((prev) =>
+        prev.map((s, idx) =>
+          idx === sceneIndex
+            ? {
+                ...s,
+                imagePrompt: data.imagePrompt,
+                visual_description: data.visual_description,
+                sfx_suggestion: data.sfx_suggestion || s.sfx_suggestion,
+                sfx_prompt: data.sfx_prompt || s.sfx_prompt,
+                avatarSprite: data.avatarSprite || s.avatarSprite,
+              }
+            : s
+        )
+      );
+
+      setSuccessMsg(
+        `Prompt da cena #${sceneIndex + 1} atualizado com sucesso!`
+      );
+    } catch (err) {
+      console.error('Erro ao gerar prompt da cena:', err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : 'Falha ao gerar prompt visual com IA.'
+      );
+    } finally {
+      setGeneratingPromptForScene((prev) => ({ ...prev, [sceneIndex]: false }));
+    }
   };
 
   // ========================================================
@@ -2214,9 +2320,37 @@ export const Studio: React.FC = () => {
 
                               {/* Campo: Prompt visual */}
                               <div>
-                                <label className="block text-xs text-slate-400 mb-1.5">
-                                  Prompt visual
-                                </label>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <label className="block text-xs text-slate-400">
+                                    Prompt visual
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      generatingPromptForScene[index] ||
+                                      !scene.text.trim()
+                                    }
+                                    onClick={() =>
+                                      void handleRegenerateScenePromptInStudio(
+                                        index
+                                      )
+                                    }
+                                    title="Regenerar prompt visual com IA a partir da fala"
+                                    className="flex items-center gap-1 text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-40 transition"
+                                  >
+                                    {generatingPromptForScene[index] ? (
+                                      <>
+                                        <span className="h-2.5 w-2.5 animate-spin rounded-full border border-amber-300 border-t-transparent" />
+                                        <span>Criando...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>🪄</span>
+                                        <span>Gerar com IA</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
                                 <textarea
                                   rows={3}
                                   value={scene.imagePrompt}

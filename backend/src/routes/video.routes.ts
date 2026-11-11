@@ -4,6 +4,7 @@ import {
   deleteVideoController,
   generateAudioController,
   generateSceneImagesController,
+  generateScenePromptController,
   generateSceneSfxController,
   generateScriptController,
   generateVideoController,
@@ -26,6 +27,10 @@ videoRoutes.post('/videos/:id/generate-script', generateScriptController);
 videoRoutes.post(
   '/videos/:id/generate-scene-images',
   generateSceneImagesController
+);
+videoRoutes.post(
+  '/videos/:id/generate-scene-prompt',
+  generateScenePromptController
 );
 videoRoutes.post('/videos/:id/generate-scene-sfx', generateSceneSfxController);
 videoRoutes.post(
