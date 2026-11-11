@@ -119,7 +119,11 @@ export const IdeationDressingRoomTab: React.FC<
   // Controlo de abertura dos 4 Accordions de Ideação + 5º Accordion do Roteiro Final
   const [isAvatarOpen, setIsAvatarOpen] = useState<boolean>(true);
   const [openOptionIds, setOpenOptionIds] = useState<Record<string, boolean>>({
-    humor: true,
+    in_media_res: true,
+    myth_buster: false,
+    witness_pov: false,
+    ticking_clock: false,
+    humor: false,
     action: false,
     dark: false,
     chaotic: false,
@@ -135,6 +139,30 @@ export const IdeationDressingRoomTab: React.FC<
   const [generatingPromptIndex, setGeneratingPromptIndex] = useState<
     number | null
   >(null);
+
+  // Diagnóstico do Seamless Loop para o Roteiro Final (Mix & Match)
+  const loopStatus = useMemo(() => {
+    if (finalMixScenes.length < 2) return null;
+    const firstItem = finalMixScenes[0];
+    const lastItem = finalMixScenes[finalMixScenes.length - 1];
+
+    const isSameSource =
+      Boolean(firstItem.sourceOptionId) &&
+      Boolean(lastItem.sourceOptionId) &&
+      firstItem.sourceOptionId === lastItem.sourceOptionId &&
+      firstItem.sourceOptionId !== 'custom';
+
+    const sourceOpt = isSameSource
+      ? ideationOptions.find((o) => o.id === firstItem.sourceOptionId)
+      : null;
+
+    return {
+      isPerfectLoop: Boolean(isSameSource),
+      sourceBadge: sourceOpt?.badge || firstItem.sourceOptionBadge || '',
+      closingFragment: sourceOpt?.narrative_plan?.loop_closing_fragment || '',
+      openingFragment: sourceOpt?.narrative_plan?.loop_opening_fragment || '',
+    };
+  }, [finalMixScenes, ideationOptions]);
 
   // Estatísticas de ritmo e duração estimada do Roteiro Final (ElevenLabs ~2.4 palavras/segundo)
   const finalTotalWords = useMemo(() => {
@@ -986,6 +1014,28 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                     {/* Corpo do Accordion com os Cartões de Cena */}
                     {isOpen && (
                       <div className="border-t border-[#2c2c32]/70 bg-[#151519] p-3 space-y-2 transition-all">
+                        {/* Preview Visual da Ponte Circular (Seamless Loop) */}
+                        {option.narrative_plan?.bridge_full_sentence && (
+                          <div className="rounded-lg bg-amber-500/10 border border-amber-500/25 p-2.5 text-[11px] text-amber-200">
+                            <div className="flex items-center justify-between font-bold text-amber-400">
+                              <div className="flex items-center gap-1.5">
+                                <span>🔁</span>
+                                <span>Loop Perfeito (Ponte Circular):</span>
+                              </div>
+                              {option.narrative_plan.bridge_speaker && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  Voz: {option.narrative_plan.bridge_speaker === 'narrator' ? '🎙️ Narrador' : '🧑 Billy'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 font-mono text-[10px] text-amber-300/90 leading-relaxed bg-[#101014] p-2 rounded border border-amber-500/20">
+                              <span className="text-amber-400/70 font-sans">Fim:</span> "...{option.narrative_plan.loop_closing_fragment}"
+                              <span className="mx-2 text-amber-500 font-bold">➔</span>
+                              <span className="text-amber-400/70 font-sans">Início:</span> "{option.narrative_plan.loop_opening_fragment}..."
+                            </p>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between pb-1">
                           <span className="text-[10px] text-slate-400">
                             Clique em qualquer cartão para adicionar/remover do
@@ -1179,6 +1229,48 @@ Cena 4: Conclusão instigante convidando a comentar.`}
               </div>
             ) : (
               <>
+                {/* Selo Dinâmico de Integridade do Seamless Loop */}
+                {loopStatus && (
+                  <div
+                    className={`rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border transition ${
+                      loopStatus.isPerfectLoop
+                        ? 'bg-emerald-950/25 border-emerald-500/40 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                        : 'bg-amber-950/20 border-amber-500/35 text-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-xl shrink-0 mt-0.5">
+                        {loopStatus.isPerfectLoop ? '🔁' : '⚡'}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold">
+                            {loopStatus.isPerfectLoop
+                              ? `Loop Perfeito Ativo (${loopStatus.sourceBadge})`
+                              : 'Ponte Híbrida / Otimização Automática'}
+                          </span>
+                          <span
+                            className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                              loopStatus.isPerfectLoop
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                            }`}
+                          >
+                            {loopStatus.isPerfectLoop
+                              ? '100% Sincronizado'
+                              : 'Auto-Reparo na Aprovação'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-300/90 mt-0.5">
+                          {loopStatus.isPerfectLoop
+                            ? 'A primeira e a última cena pertencem à mesma arquitetura narrativa. O player reiniciará o vídeo sem corte ou emenda audível.'
+                            : 'Você combinou cenas de opções distintas ou manuais. Ao aprovar o roteiro, a IA adaptará o conector sintático da cena final para fechar o ciclo.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Título Viral + Trilha Sonora Final */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">

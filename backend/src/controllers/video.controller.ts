@@ -113,7 +113,8 @@ export async function generateScriptController(
     const { options } = await generateTimeMachineIdeation(
       theme,
       durationPreset,
-      avatarConfig
+      avatarConfig,
+      bgmVibe
     );
 
     const formattedOptions = options.map((opt) => ({
@@ -122,26 +123,38 @@ export async function generateScriptController(
       badge: opt.badge,
       description: opt.description,
       bgmVibe: opt.bgmVibe || 'epic',
-      scenes: opt.scenes.map((scene, sIdx) => ({
-        id: `opt_${opt.id}_scene_${sIdx}`,
-        speaker: scene.speaker,
-        text: scene.text,
-        dialogues: [
-          {
-            id: `dlg_${opt.id}_${sIdx}`,
-            speaker: scene.speaker,
-            text: scene.text,
-          },
-        ],
-        avatarSprite: scene.avatarSprite,
-        visual_description: scene.visual_description || '',
-        imagePrompt: scene.imagePrompt,
-        sfx_suggestion: scene.sfx_suggestion || '',
-        sfx_prompt: scene.sfx_prompt || '',
-        custom_sfx_url: null as string | null,
-        candidateImages: [] as string[],
-        selectedImage: null as string | null,
-      })),
+      narrative_plan: opt.narrative_plan,
+      scenes: opt.scenes.map((scene, sIdx) => {
+        const dialogues =
+          scene.dialogues && scene.dialogues.length > 0
+            ? scene.dialogues.map((d, dIdx) => ({
+                id: d.id || `dlg_${opt.id}_${sIdx}_${dIdx}`,
+                speaker: d.speaker || scene.speaker || 'protagonist',
+                text: d.text || '',
+              }))
+            : [
+                {
+                  id: `dlg_${opt.id}_${sIdx}_0`,
+                  speaker: scene.speaker || 'protagonist',
+                  text: scene.text || '',
+                },
+              ];
+
+        return {
+          id: `opt_${opt.id}_scene_${sIdx}`,
+          speaker: dialogues[0]?.speaker || scene.speaker || 'protagonist',
+          text: dialogues.map((d) => d.text).join(' ') || scene.text || '',
+          dialogues,
+          avatarSprite: scene.avatarSprite,
+          visual_description: scene.visual_description || '',
+          imagePrompt: scene.imagePrompt,
+          sfx_suggestion: scene.sfx_suggestion || '',
+          sfx_prompt: scene.sfx_prompt || '',
+          custom_sfx_url: null as string | null,
+          candidateImages: [] as string[],
+          selectedImage: null as string | null,
+        };
+      }),
     }));
 
     const resolvedBgm =
@@ -1098,7 +1111,7 @@ export async function generateScenePromptController(
     return;
   }
 
-  const { text, speaker, theme, avatarConfig, visual_description } =
+  const { text, speaker, dialogues, theme, avatarConfig, visual_description } =
     parsedBody.data;
 
   try {
@@ -1109,15 +1122,20 @@ export async function generateScenePromptController(
     }
 
     const effectiveTheme = theme || video.theme || 'Viagem no Tempo';
+    const effectiveText =
+      dialogues && dialogues.length > 0
+        ? dialogues.map((d) => `${d.speaker}: "${d.text}"`).join(' | ')
+        : text;
+    const effectiveSpeaker = dialogues?.[0]?.speaker || speaker;
 
     console.log(
-      `[Gemini Scene Prompt] Gerando prompt visual para fala: "${text.slice(0, 50)}..."`
+      `[Gemini Scene Prompt] Gerando prompt visual para fala: "${effectiveText.slice(0, 50)}..."`
     );
 
     const result = await generateSingleScenePrompt({
       theme: effectiveTheme,
-      sceneText: text,
-      speaker,
+      sceneText: effectiveText,
+      speaker: effectiveSpeaker,
       avatarConfig,
       visualDescription: visual_description,
     });

@@ -296,27 +296,37 @@ function buildSubtitlesFromWords(
 async function synthesizeSceneChunk(
   text: string,
   speaker: SpeakerType,
-  apiKey: string
+  apiKey: string,
+  options?: { previous_text?: string; next_text?: string }
 ): Promise<ElevenLabsWithTimestampsResponse> {
   const targetVoiceId =
     SPEAKER_VOICE_MAP[speaker] || SPEAKER_VOICE_MAP.protagonist;
 
   async function requestTts(voiceIdToUse: string) {
     const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${voiceIdToUse}/with-timestamps`;
+    const payload: Record<string, unknown> = {
+      text: text.trim(),
+      model_id: 'eleven_multilingual_v2',
+      voice_settings: {
+        stability: speaker === 'protagonist' ? 0.4 : 0.55,
+        similarity_boost: 0.75,
+      },
+    };
+
+    if (options?.previous_text && options.previous_text.trim().length > 0) {
+      payload.previous_text = options.previous_text.trim();
+    }
+    if (options?.next_text && options.next_text.trim().length > 0) {
+      payload.next_text = options.next_text.trim();
+    }
+
     return fetch(endpoint, {
       method: 'POST',
       headers: {
         'xi-api-key': apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        text: text.trim(),
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: speaker === 'protagonist' ? 0.4 : 0.55,
-          similarity_boost: 0.75,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -378,6 +388,50 @@ export async function generateNarrationWithTimestamps(
     character_end_times_seconds: [],
   };
 
+  // Constrói lista plana de todas as falas das cenas para injeção de previous_text e next_text (context stitching)
+  const flatSpeechList: Array<{
+    sceneIndex: number;
+    dialogueIndex: number;
+    speaker: SpeakerType;
+    text: string;
+  }> = [];
+
+  for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
+    const s = scenes[sIdx];
+    const raw =
+      s.dialogues && s.dialogues.length > 0
+        ? s.dialogues
+        : [
+            {
+              id: `dlg_${sIdx}`,
+              speaker: s.speaker || 'protagonist',
+              text: s.text || '',
+            },
+          ];
+    const active = raw.filter((d) => d.text && d.text.trim().length > 0);
+    const toUse =
+      active.length > 0
+        ? active
+        : [
+            {
+              id: `dlg_${sIdx}_empty`,
+              speaker: s.speaker || 'protagonist',
+              text: s.text?.trim() || '...',
+            },
+          ];
+    for (let dIdx = 0; dIdx < toUse.length; dIdx++) {
+      flatSpeechList.push({
+        sceneIndex: sIdx,
+        dialogueIndex: dIdx,
+        speaker: toUse[dIdx].speaker,
+        text: toUse[dIdx].text,
+      });
+    }
+  }
+
+  const firstSpeechText = flatSpeechList[0]?.text || '';
+  let globalSpeechIdx = 0;
+
   let cumulativeDurationSeconds = 0;
   let chunkCounter = 0;
 
@@ -418,10 +472,24 @@ export async function generateNarrationWithTimestamps(
         `[ElevenLabs] Gerando chunk #${chunkId} (cena #${index + 1}, fala #${dIdx + 1}, speaker: "${dialogue.speaker}")...`
       );
 
+      const prevText =
+        globalSpeechIdx > 0
+          ? flatSpeechList[globalSpeechIdx - 1]?.text
+          : undefined;
+      const isVeryLastSpeech = globalSpeechIdx === flatSpeechList.length - 1;
+      // No último chunk do vídeo, injetamos a primeira fala do vídeo em next_text
+      // para a ElevenLabs manter a entonação ascendente/suspensa (Seamless Loop sem queda de pitch)
+      const nextText = isVeryLastSpeech
+        ? firstSpeechText
+        : flatSpeechList[globalSpeechIdx + 1]?.text;
+
+      globalSpeechIdx++;
+
       const data = await synthesizeSceneChunk(
         dialogue.text,
         dialogue.speaker,
-        apiKey
+        apiKey,
+        { previous_text: prevText, next_text: nextText }
       );
 
       const chunkFilePath = path.join(chunksDir, `chunk_${chunkId}.mp3`);
@@ -517,7 +585,10 @@ export async function generateNarrationWithTimestamps(
   fs.rmSync(chunksDir, { recursive: true, force: true });
   console.log(`[FFmpeg] Pasta temporária chunks/ removida com sucesso.`);
 
-  // Calcula durationInFrames final com base no último timestamp acumulado (+0.5s de margem)
+  // Calcula durationInFrames final com margem mínima de decaimento vocal (0.06s ~ 2 frames)
+  // Substitui a margem antiga de +0.5s para viabilizar o Seamless Loop sem pausa morta perceptível
+  // e sem mutilar a última consoante/vogal
+  const AUDIO_DECAY_PADDING_SECONDS = 0.06;
   const lastGlobalCharEnd =
     mergedAlignment.character_end_times_seconds[
       mergedAlignment.character_end_times_seconds.length - 1
@@ -526,7 +597,9 @@ export async function generateNarrationWithTimestamps(
     cumulativeDurationSeconds,
     lastGlobalCharEnd
   );
-  const durationInFrames = Math.ceil((ultimoTimestampSegundos + 0.5) * FPS);
+  const durationInFrames = Math.ceil(
+    (ultimoTimestampSegundos + AUDIO_DECAY_PADDING_SECONDS) * FPS
+  );
   const totalSeconds = durationInFrames / FPS;
 
   const sceneTimings: SceneFrameTiming[] = rawSceneTimings.map((timing, idx) => {

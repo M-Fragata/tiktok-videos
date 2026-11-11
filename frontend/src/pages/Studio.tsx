@@ -47,7 +47,7 @@ const SUGGESTED_THEMES = [
 const DURATION_OPTIONS: Array<{ value: DurationPreset; label: string }> = [
   { value: 'short', label: 'Curto (15s • 32 a 42 pal.)' },
   { value: 'medium', label: 'Médio (30s • 65 a 78 pal.)' },
-  { value: 'long', label: 'Longo (60s • 130 a 150 pal.)' },
+  { value: 'long', label: 'Longo (65s • 145 a 175 pal. - Monetização)' },
 ];
 
 /**

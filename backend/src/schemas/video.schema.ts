@@ -134,12 +134,35 @@ export const storyboardSceneSchema = z.object({
   selectedImage: z.string().nullable().optional().default(null),
 });
 
+export const narrativeArchitectureSchema = z.enum([
+  'in_media_res',
+  'myth_buster',
+  'witness_pov',
+  'ticking_clock',
+]);
+export type NarrativeArchitecture = z.infer<typeof narrativeArchitectureSchema>;
+
+export const bridgeSpeakerSchema = z.enum(['protagonist', 'narrator']);
+export type BridgeSpeaker = z.infer<typeof bridgeSpeakerSchema>;
+
+export const narrativePlanSchema = z.object({
+  architecture_id: narrativeArchitectureSchema,
+  hook_type: z.string().optional().default(''),
+  core_revelation: z.string().optional().default(''),
+  bridge_speaker: bridgeSpeakerSchema.optional().default('protagonist'),
+  bridge_full_sentence: z.string().optional().default(''),
+  loop_closing_fragment: z.string().optional().default(''),
+  loop_opening_fragment: z.string().optional().default(''),
+});
+export type NarrativePlan = z.infer<typeof narrativePlanSchema>;
+
 export const ideationOptionSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   badge: z.string().optional(),
   description: z.string().optional(),
   bgmVibe: bgmVibeSchema.optional(),
+  narrative_plan: narrativePlanSchema.optional(),
   scenes: z.array(storyboardSceneSchema).default([]),
 });
 

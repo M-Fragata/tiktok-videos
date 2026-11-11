@@ -422,12 +422,31 @@ export const getSceneFullText = (
     .join(' ');
 };
 
+export type NarrativeArchitecture =
+  | 'in_media_res'
+  | 'myth_buster'
+  | 'witness_pov'
+  | 'ticking_clock';
+
+export type BridgeSpeaker = 'protagonist' | 'narrator';
+
+export interface NarrativePlan {
+  architecture_id: NarrativeArchitecture;
+  hook_type?: string;
+  core_revelation?: string;
+  bridge_speaker?: BridgeSpeaker;
+  bridge_full_sentence?: string;
+  loop_closing_fragment?: string;
+  loop_opening_fragment?: string;
+}
+
 export interface IdeationOption {
-  id: string;
+  id: NarrativeArchitecture | string;
   title: string;
   badge?: string;
   description?: string;
   bgmVibe?: BgmVibe;
+  narrative_plan?: NarrativePlan;
   scenes: StoryboardScene[];
 }
 
