@@ -636,6 +636,7 @@ export async function generateSingleScenePrompt(params: {
   sceneText: string;
   speaker: SpeakerType;
   avatarConfig?: AvatarConfigInput;
+  visualDescription?: string;
 }): Promise<{
   imagePrompt: string;
   visual_description: string;
@@ -650,29 +651,33 @@ export async function generateSingleScenePrompt(params: {
 
   const avatarDescriptor = buildAvatarPromptDescriptor(params.avatarConfig);
 
+  const visualHint = params.visualDescription?.trim()
+    ? `\nDescrição do Cenário fornecida pelo Utilizador: "${params.visualDescription}"\nIMPORTANTE: Deves basear a ação, pose e elementos do "imagePrompt" estritamente nas orientações fornecidas pelo utilizador nesta descrição do cenário!`
+    : '';
+
   const systemInstruction = `És o Diretor de Arte e Som especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts.
-A tua tarefa é gerar os metadados visuais e sonoros cinematográficos para UMA CENA específica de vídeo curto a partir do briefing histórico e da fala do locutor.
+A tua tarefa é gerar os metadados visuais e sonoros cinematográficos para UMA CENA específica de vídeo curto a partir do briefing histórico, da fala do locutor e da descrição do cenário do utilizador.
 
 Contexto Geral do Vídeo: "${params.theme}"
 Locutor da Cena: "${params.speaker}"
-Fala da Cena: "${params.sceneText}"
+Fala da Cena: "${params.sceneText}"${visualHint}
 
 Aparência base do protagonista configurada no Camarim:
 "${avatarDescriptor}"
 
 DIRETRIZES OBRIGATÓRIAS DO PROMPT VISUAL ("imagePrompt" — EM INGLÊS):
-- Inicie SEMPRE com: "Mixed media 2D/3D illustration, a ${avatarDescriptor}, [EXPRESSÃO FACIAL DINÂMICA], [POSE E AÇÃO DINÂMICA DA CENA], [CENÁRIO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+- Inicie SEMPRE com: "Mixed media 2D/3D illustration, a ${avatarDescriptor}, [EXPRESSÃO FACIAL DINÂMICA], [POSE E AÇÃO DINÂMICA DA CENA BASEADA NO CENÁRIO DO USUÁRIO], [CENÁRIO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
 - Expressão facial dinâmica adaptada à emoção exata da fala (talking, shocked, scared, happy, angry, laughing, thinking, etc.).
 - Pose e ação física ativas no cenário histórico 3D (ex: escalando pedras, correndo, tropeçando, apontando, espiando, etc. NUNCA estático com mãos na cintura!).
 - Tronco branco com espessura (cápsula 2D branca contornada a nanquim), braços e pernas de palito (NUNCA tronco de linha única de palito).
 - Se houver personagens secundários, soldados ou multidão, TODOS devem ser 2D cartoon stickmen com cabeça redonda branca, tronco branco com espessura e roupas históricas em nanquim (NUNCA humanos fotorrealistas).
 
 DIRETRIZES DE DESCRIÇÃO VISUAL EM PORTUGUÊS ("visual_description"):
-- 1 frase em PORTUGUÊS resumindo o cenário histórico e a ação do personagem para o criador ler no card (ex: "Gizé em 1798: o viajante sobe no topo da cabeça da Esfinge enquanto soldados e mercadores se aglomeram furiosos lá embaixo").
+- Se o utilizador já forneceu uma descrição, preserva-a ou aprimora-a em uma frase cinematográfica concisa em PORTUGUÊS resumindo a ação visual para o criador.
 
 DIRETRIZES DE DESIGN DE SOM:
-- "sfx_suggestion": Escolha o som ideal da biblioteca local: "cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none".
-- "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs (ex: "Loud crumbling rock sound with sand debris echoing in desert").
+- "sfx_suggestion": Escolha o som ideal da biblioteca local condizente com a ação: "cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none".
+- "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs condizente com o cenário.
 
 AVATAR SPRITE:
 - "avatarSprite": Uma destas opções: ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}.`;
@@ -727,4 +732,163 @@ AVATAR SPRITE:
   }
 
   throw new Error('Falha ao gerar metadados visuais da cena com Gemini.');
+}
+
+export interface FinalScriptSceneInput {
+  speaker: SpeakerType;
+  text: string;
+  avatarSprite?: AvatarSprite;
+  visual_description?: string;
+  imagePrompt?: string;
+  sfx_suggestion?: string;
+  sfx_prompt?: string;
+  isCustom?: boolean;
+}
+
+/**
+ * Revisa a sequência completa do Roteiro Final antes de avançar para a Etapa 2.
+ * Analisa a narrativa completa e gera os prompts visuais em inglês para cenas extras autorais
+ * ou cenas onde o usuário informou/editou a descrição do cenário.
+ */
+export async function reviewAndEnrichFinalScript(params: {
+  theme: string;
+  scenes: FinalScriptSceneInput[];
+  avatarConfig?: AvatarConfigInput;
+}): Promise<ScriptScene[]> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY não configurada no backend/.env.');
+  }
+
+  const avatarDescriptor = buildAvatarPromptDescriptor(params.avatarConfig);
+
+  const formattedScenesText = params.scenes
+    .map((s, idx) => {
+      const customTag = s.isCustom ? ' [CENA EXTRA CRIADA PELO USUÁRIO]' : '';
+      const visualDesc = s.visual_description?.trim()
+        ? `\n  - Descrição do Cenário (escrita pelo utilizador): "${s.visual_description}"`
+        : '';
+      const existingPrompt =
+        s.imagePrompt &&
+        !s.isCustom &&
+        !s.imagePrompt.includes('historical environment, illuminated')
+          ? `\n  - Prompt Visual prévio: "${s.imagePrompt}"`
+          : '';
+      return `Cena #${idx + 1}${customTag}:
+  - Locutor: "${s.speaker}"
+  - Fala / Legenda: "${s.text}"${visualDesc}${existingPrompt}`;
+    })
+    .join('\n\n');
+
+  const systemInstruction = `És o Roteirista-Chefe e Diretor de Arte do Fragata Shorts.
+O utilizador acabou de submeter a sequência completa do seu "Roteiro Final" (${params.scenes.length} cenas) na sala de ideação.
+Ele pode ter selecionado cenas de ideias prévias e/ou criado CENAS EXTRAS AUTORAIS, informando quem fala, a fala e a descrição do cenário em cada uma.
+
+Contexto Geral / Título do Vídeo: "${params.theme}"
+
+Aparência base do protagonista configurada no Camarim:
+"${avatarDescriptor}"
+
+A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
+1. DEVES RETORNAR EXATAMENTE ${params.scenes.length} CENAS NA MESMA ORDEM CRONOLÓGICA.
+2. PRESERVA rigorosamente a fala ("text") e o locutor ("speaker") de cada cena conforme definidos pelo utilizador.
+3. GERAÇÃO DE PROMPTS VISUAIS ("imagePrompt" em INGLÊS):
+   - PARA CENAS EXTRAS CRIADAS PELO UTILIZADOR OU CENAS COM DESCRIÇÃO DE CENÁRIO:
+     DEVES OBRIGATORIAMENTE basear o "imagePrompt" nas informações, ações, monumentos e detalhes que o utilizador colocou na "Descrição do Cenário" ("visual_description") e na fala ("text")!
+   - Se uma cena já tiver um prompt visual completo e adequado que já represente bem a cena, podes preservá-lo garantindo a qualidade.
+4. DIRETRIZES OBRIGATÓRIAS DO "imagePrompt" (MIXED MEDIA 2D/3D):
+   - Inicie SEMPRE com: "Mixed media 2D/3D illustration, a ${avatarDescriptor}, [EXPRESSÃO FACIAL DINÂMICA], [POSE E AÇÃO DINÂMICA BASEADA NA DESCRIÇÃO DO CENÁRIO], [CENÁRIO 3D REALISTA E PERSONAGENS SECUNDÁRIOS], integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the environment, cinematic atmosphere, shallow depth of field, 9:16 vertical composition."
+   - O protagonista e TODOS os personagens secundários/soldados/multidões DEVEM ser 2D cartoon stickmen com cabeça redonda branca, tronco branco com espessura (cápsula 2D contornada a nanquim, NUNCA linha de palito única) e membros de palito.
+   - NUNCA repita a mesma expressão ou pose em todas as cenas (varie de acordo com a emoção e a ação descrita).
+5. DESCRIÇÃO VISUAL EM PORTUGUÊS ("visual_description"):
+   - Preenche ou aprimora a descrição em português com uma frase cinematográfica clara resumindo a cena para o criador.
+6. DESIGN DE SOM:
+   - "sfx_suggestion": Escolhe o som ideal da biblioteca local condizente com a ação ("cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none").
+   - "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs condizente com o cenário.
+7. EXPRESSÃO DO AVATAR ("avatarSprite"):
+   - Escolha o sprite mais adequado para a emoção da fala entre: ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}.`;
+
+  const responseSchema = {
+    type: 'OBJECT',
+    properties: {
+      scenes: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            speaker: {
+              type: 'STRING',
+              enum: ['protagonist', 'character', 'narrator'],
+            },
+            text: { type: 'STRING' },
+            avatarSprite: {
+              type: 'STRING',
+              enum: [...VALID_AVATAR_SPRITES],
+            },
+            visual_description: { type: 'STRING' },
+            imagePrompt: { type: 'STRING' },
+            sfx_suggestion: { type: 'STRING' },
+            sfx_prompt: { type: 'STRING' },
+          },
+          required: [
+            'speaker',
+            'text',
+            'avatarSprite',
+            'visual_description',
+            'imagePrompt',
+            'sfx_suggestion',
+            'sfx_prompt',
+          ],
+        },
+      },
+    },
+    required: ['scenes'],
+  };
+
+  const candidateModels = [
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
+  ];
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `${systemInstruction}\n\n=== SEQUÊNCIA DO ROTEIRO FINAL SUBMETIDO PELO UTILIZADOR ===\n${formattedScenesText}`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawJson) {
+        const parsed = JSON.parse(rawJson);
+        if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+          console.log(
+            `[Gemini Final Script Review] Roteiro final de ${parsed.scenes.length} cenas revisado e enriquecido com sucesso usando ${model}.`
+          );
+          return parsed.scenes;
+        }
+      }
+    } catch (e) {
+      console.warn(`[Gemini Final Script Review] Falha no modelo ${model}:`, e);
+    }
+  }
+
+  throw new Error('Falha ao revisar roteiro final com Google Gemini.');
 }

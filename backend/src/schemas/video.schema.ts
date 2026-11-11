@@ -260,6 +260,26 @@ export const generateScenePromptSchema = z.object({
   speaker: speakerTypeSchema.optional().default('protagonist'),
   theme: z.string().optional().default('Viagem no Tempo'),
   avatarConfig: avatarConfigSchema.optional(),
+  visual_description: z.string().optional(),
+});
+
+export const reviewFinalScriptSceneSchema = z.object({
+  speaker: speakerTypeSchema,
+  text: z.string().min(1, 'A fala da cena é obrigatória'),
+  avatarSprite: z.string().optional(),
+  visual_description: z.string().optional().default(''),
+  imagePrompt: z.string().optional().default(''),
+  sfx_suggestion: z.string().optional().default(''),
+  sfx_prompt: z.string().optional().default(''),
+  isCustom: z.boolean().optional().default(false),
+});
+
+export const reviewFinalScriptSchema = z.object({
+  theme: z.string().optional().default('Viagem no Tempo'),
+  avatarConfig: avatarConfigSchema.optional(),
+  scenes: z
+    .array(reviewFinalScriptSceneSchema)
+    .min(1, 'Pelo menos uma cena é necessária'),
 });
 
 export type GenerateVideoInput = z.infer<typeof generateVideoSchema>;

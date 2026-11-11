@@ -513,65 +513,70 @@ export const Studio: React.FC = () => {
     setSuccessMsg(null);
 
     try {
-      // Enriquece automaticamente com o Gemini cenas autorais ou que possuam prompt genérico
-      const consolidatedScenes: StoryboardScene[] = await Promise.all(
-        finalMixScenes.map(async (item) => {
-          const isGeneric =
-            item.sourceOptionId === 'custom' ||
-            !item.scene.imagePrompt ||
-            item.scene.imagePrompt.includes(
-              'historical environment, illuminated'
-            );
+      // O Roteirista-Chefe (Gemini) revisa a sequência completa do Roteiro Final.
+      // Se existirem cenas extras autorais ou edições na descrição do cenário ("visual_description"),
+      // ele gera os prompts de imagem ("imagePrompt") em inglês baseados estritamente nessas descrições.
+      let consolidatedScenes: StoryboardScene[] = [];
 
-          if (isGeneric && item.scene.text.trim()) {
-            try {
-              const res = await fetch(
-                `/api/videos/${id}/generate-scene-prompt`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    text: item.scene.text,
-                    speaker: item.scene.speaker,
-                    theme: approvedTitle?.trim() || theme,
-                    avatarConfig,
-                  }),
-                }
-              );
-
-              if (res.ok) {
-                const data = await res.json();
-                return {
-                  ...item.scene,
-                  imagePrompt: data.imagePrompt,
-                  visual_description: data.visual_description,
-                  sfx_suggestion:
-                    data.sfx_suggestion || item.scene.sfx_suggestion,
-                  sfx_prompt: data.sfx_prompt || item.scene.sfx_prompt,
-                  avatarSprite: data.avatarSprite || item.scene.avatarSprite,
-                  candidateImages: item.scene.candidateImages || [],
-                  selectedImage: item.scene.selectedImage || null,
-                };
-              }
-            } catch (err) {
-              console.warn(
-                '[Studio] Falha ao auto-enriquecer cena manual:',
-                err
-              );
-            }
+      try {
+        const reviewRes = await fetch(
+          `/api/videos/${id}/review-final-script`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              theme: approvedTitle?.trim() || theme,
+              avatarConfig,
+              scenes: finalMixScenes.map((item) => ({
+                speaker: item.scene.speaker,
+                text: item.scene.text,
+                avatarSprite: item.scene.avatarSprite,
+                visual_description: item.scene.visual_description || '',
+                imagePrompt: item.scene.imagePrompt || '',
+                sfx_suggestion: item.scene.sfx_suggestion || '',
+                sfx_prompt: item.scene.sfx_prompt || '',
+                isCustom: item.sourceOptionId === 'custom',
+              })),
+            }),
           }
+        );
 
-          return {
-            ...item.scene,
-            imagePrompt: injectAvatarConfigIntoPrompt(
-              item.scene.imagePrompt,
-              avatarConfig
-            ),
-            candidateImages: item.scene.candidateImages || [],
-            selectedImage: item.scene.selectedImage || null,
-          };
-        })
-      );
+        if (reviewRes.ok) {
+          const reviewData = await reviewRes.json();
+          if (
+            Array.isArray(reviewData.scenes) &&
+            reviewData.scenes.length === finalMixScenes.length
+          ) {
+            consolidatedScenes = reviewData.scenes.map(
+              (revScene: StoryboardScene, idx: number) => ({
+                ...revScene,
+                candidateImages:
+                  finalMixScenes[idx]?.scene.candidateImages || [],
+                selectedImage:
+                  finalMixScenes[idx]?.scene.selectedImage || null,
+              })
+            );
+          }
+        }
+      } catch (reviewErr) {
+        console.warn(
+          '[Studio] Falha na revisão via Gemini, aplicando fallback local:',
+          reviewErr
+        );
+      }
+
+      // Fallback de segurança se a chamada ao Gemini falhou
+      if (consolidatedScenes.length === 0) {
+        consolidatedScenes = finalMixScenes.map((item) => ({
+          ...item.scene,
+          imagePrompt: injectAvatarConfigIntoPrompt(
+            item.scene.imagePrompt,
+            avatarConfig
+          ),
+          candidateImages: item.scene.candidateImages || [],
+          selectedImage: item.scene.selectedImage || null,
+        }));
+      }
 
       setScenes(consolidatedScenes);
       setAudioGenerated(false);
@@ -689,6 +694,7 @@ export const Studio: React.FC = () => {
           speaker: targetScene.speaker,
           theme,
           avatarConfig,
+          visual_description: targetScene.visual_description,
         }),
       });
 

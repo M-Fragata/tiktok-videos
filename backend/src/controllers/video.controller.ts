@@ -11,6 +11,7 @@ import {
   generateScriptSchema,
   generateVideoSchema,
   renderVideoSchema,
+  reviewFinalScriptSchema,
   updateVideoTitleSchema,
   uploadSceneImageSchema,
   type RenderVideoInput,
@@ -24,6 +25,7 @@ import {
   generateSingleScenePrompt,
   generateTimeMachineIdeation,
   generateTimeMachineScript,
+  reviewAndEnrichFinalScript,
   type ScriptScene,
 } from '../services/gemini.service.ts';
 import {
@@ -1087,7 +1089,8 @@ export async function generateScenePromptController(
     return;
   }
 
-  const { text, speaker, theme, avatarConfig } = parsedBody.data;
+  const { text, speaker, theme, avatarConfig, visual_description } =
+    parsedBody.data;
 
   try {
     const video = await prisma.video.findUnique({ where: { id } });
@@ -1107,6 +1110,7 @@ export async function generateScenePromptController(
       sceneText: text,
       speaker,
       avatarConfig,
+      visualDescription: visual_description,
     });
 
     res.status(200).json({
@@ -1120,6 +1124,63 @@ export async function generateScenePromptController(
         err instanceof Error
           ? err.message
           : 'Erro interno ao gerar prompt visual da cena.',
+    });
+  }
+}
+
+/**
+ * POST /api/videos/:id/review-final-script
+ * O Roteirista-Chefe (Gemini) revisa a sequência completa do Roteiro Final antes de avançar para a Etapa 2.
+ * Analisa a narrativa e gera os prompts visuais de imagem para cenas extras autorais
+ * ou cenas onde o usuário informou/editou a descrição do cenário.
+ */
+export async function reviewFinalScriptController(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = reviewFinalScriptSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para revisão de roteiro.',
+      details: parsedBody.error.flatten(),
+    });
+    return;
+  }
+
+  const { theme, scenes, avatarConfig } = parsedBody.data;
+
+  try {
+    const video = await prisma.video.findUnique({ where: { id } });
+    if (!video) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const effectiveTheme = theme || video.theme || 'Viagem no Tempo';
+
+    console.log(
+      `[Gemini Final Script Review] Revisando roteiro final (${scenes.length} cenas) para "${effectiveTheme}"...`
+    );
+
+    const reviewedScenes = await reviewAndEnrichFinalScript({
+      theme: effectiveTheme,
+      scenes,
+      avatarConfig,
+    });
+
+    res.status(200).json({
+      message: 'Roteiro final revisado e prompts visuais gerados com sucesso.',
+      scenes: reviewedScenes,
+    });
+  } catch (err) {
+    console.error('[Gemini Final Script Review Error]', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro interno ao revisar roteiro final com o Gemini.',
     });
   }
 }

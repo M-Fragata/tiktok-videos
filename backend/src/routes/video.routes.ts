@@ -12,6 +12,7 @@ import {
   listVideosController,
   renderVideoController,
   rerenderVideoController,
+  reviewFinalScriptController,
   saveStoryboardController,
   updateVideoTitleController,
   uploadSceneImageController,
@@ -31,6 +32,10 @@ videoRoutes.post(
 videoRoutes.post(
   '/videos/:id/generate-scene-prompt',
   generateScenePromptController
+);
+videoRoutes.post(
+  '/videos/:id/review-final-script',
+  reviewFinalScriptController
 );
 videoRoutes.post('/videos/:id/generate-scene-sfx', generateSceneSfxController);
 videoRoutes.post(

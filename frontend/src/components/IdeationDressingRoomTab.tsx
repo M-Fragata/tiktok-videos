@@ -208,6 +208,7 @@ export const IdeationDressingRoomTab: React.FC<
           speaker: item.scene.speaker,
           theme: finalScriptTitle || theme,
           avatarConfig,
+          visual_description: item.scene.visual_description,
         }),
       });
 
@@ -1385,7 +1386,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                 {isApprovingScript ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-                    <span>Consolidando Roteiro & Avatar...</span>
+                    <span>O Roteirista está analisando e gerando os prompts...</span>
                   </>
                 ) : (
                   <>
