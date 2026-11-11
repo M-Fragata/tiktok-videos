@@ -519,21 +519,24 @@ export const IdeationDressingRoomTab: React.FC<
   const handleUpdateDialogue = (
     sceneId: string,
     dialogueId: string,
-    field: 'speaker' | 'text',
+    field: 'speaker' | 'text' | 'voiceId' | 'characterName',
     value: string
   ) => {
     setFinalMixScenes((prev) =>
       prev.map((item) => {
         if (item.uid !== sceneId && item.scene.id !== sceneId) return item;
         const currentDialogues = getSceneDialogues(item.scene);
-        const updatedDialogues = currentDialogues.map((d) =>
-          d.id === dialogueId
-            ? {
-                ...d,
-                [field]: field === 'speaker' ? (value as SpeakerType) : value,
-              }
-            : d
-        );
+        const updatedDialogues = currentDialogues.map((d) => {
+          if (d.id !== dialogueId) return d;
+          const next = {
+            ...d,
+            [field]: field === 'speaker' ? (value as SpeakerType) : value,
+          };
+          if (field === 'speaker' && value === 'character' && !next.voiceId) {
+            next.voiceId = 'N2lVS1w4EtoT3dr4eOWO';
+          }
+          return next;
+        });
         return {
           ...item,
           scene: {

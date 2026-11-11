@@ -2,25 +2,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ffmpeg from 'fluent-ffmpeg';
 import type { ScriptScene, SpeakerType } from './gemini.service.ts';
+import {
+  getNarratorVoice,
+  getProtagonistVoice,
+  getCharacterVoices,
+} from './voice-catalog.service.ts';
 
 const FPS = 30;
 const WORDS_PER_SUBTITLE_CHUNK = 4; // Agrupamento de 3 a 5 palavras por tela
 
 /**
- * Dicionário Multi-Voz mapeando cada tipo de personagem (SpeakerType)
- * para um voiceId distinto da ElevenLabs (compatíveis com Premade/Free Tier
- * e customizáveis via variáveis de ambiente no .env).
+ * Mapeamento padrão de vozes a partir do catálogo central (backend/src/config/voices.json).
+ * - Protagonista (Harry): Jovem, enérgico e expressivo para o viajante atrapalhado
+ * - Personagem padrão (Callum): Rouco e cômico (caso a fala não especifique um voiceId próprio)
+ * - Narrador (Liam): Locutor moderno de ritmo acelerado
  */
 export const SPEAKER_VOICE_MAP: Record<SpeakerType, string> = {
-  // Protagonista (Viajante moderno): Liam - voz jovem, rápida e energética de criador
-  protagonist:
-    process.env.ELEVENLABS_VOICE_PROTAGONIST || 'TX3LPaxmHKxFdv7VOQHJ',
-  // Personagem Histórico (Stick Figure): Callum - voz secundária marcante/característica
-  character:
-    process.env.ELEVENLABS_VOICE_CHARACTER || 'N2lVS1w4EtoT3dr4eOWO',
-  // Narrador (Documentário épico): George - voz profunda e imponente de contador de histórias
-  narrator:
-    process.env.ELEVENLABS_VOICE_NARRATOR || 'JBFqnCBsd6RMkjVDRZzb',
+  protagonist: getProtagonistVoice().id,
+  character: getCharacterVoices()[0]?.id || 'N2lVS1w4EtoT3dr4eOWO',
+  narrator: getNarratorVoice().id,
 };
 
 const FALLBACK_FREE_VOICE_ID = 'IKne3meq5aSn9XLyUdCD'; // Charlie (Premade fallback)
@@ -297,10 +297,12 @@ async function synthesizeSceneChunk(
   text: string,
   speaker: SpeakerType,
   apiKey: string,
-  options?: { previous_text?: string; next_text?: string }
+  options?: { previous_text?: string; next_text?: string; voiceId?: string }
 ): Promise<ElevenLabsWithTimestampsResponse> {
   const targetVoiceId =
-    SPEAKER_VOICE_MAP[speaker] || SPEAKER_VOICE_MAP.protagonist;
+    options?.voiceId ||
+    SPEAKER_VOICE_MAP[speaker] ||
+    SPEAKER_VOICE_MAP.protagonist;
 
   async function requestTts(voiceIdToUse: string) {
     const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${voiceIdToUse}/with-timestamps`;
@@ -469,7 +471,7 @@ export async function generateNarrationWithTimestamps(
       const dialogue = dialoguesToSynthesize[dIdx];
       const chunkId = chunkCounter++;
       console.log(
-        `[ElevenLabs] Gerando chunk #${chunkId} (cena #${index + 1}, fala #${dIdx + 1}, speaker: "${dialogue.speaker}")...`
+        `[ElevenLabs] Gerando chunk #${chunkId} (cena #${index + 1}, fala #${dIdx + 1}, speaker: "${dialogue.speaker}", voiceId: "${dialogue.voiceId || 'default'}", character: "${dialogue.characterName || 'N/A'}")...`
       );
 
       const prevText =
@@ -489,7 +491,11 @@ export async function generateNarrationWithTimestamps(
         dialogue.text,
         dialogue.speaker,
         apiKey,
-        { previous_text: prevText, next_text: nextText }
+        {
+          previous_text: prevText,
+          next_text: nextText,
+          voiceId: dialogue.voiceId,
+        }
       );
 
       const chunkFilePath = path.join(chunksDir, `chunk_${chunkId}.mp3`);

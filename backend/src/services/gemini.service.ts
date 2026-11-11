@@ -1,4 +1,5 @@
 import { listAllSfxOptions, type SfxOption } from './sfx-library.service.ts';
+import { getCharacterVoicesPromptPart } from './voice-catalog.service.ts';
 
 export const VALID_AVATAR_SPRITES = [
   'avatars/avatar_greeting.png',
@@ -53,6 +54,8 @@ export interface AvatarConfigInput {
 export interface DialogueItem {
   id: string;
   speaker: SpeakerType;
+  characterName?: string;
+  voiceId?: string;
   text: string;
 }
 
@@ -276,6 +279,8 @@ Regras de Roteiro:
    - MÚLTIPLOS DIÁLOGOS POR CENA: Cada cena pode conter de 1 a 3 falas sequenciais curtas em estilo bate-bola ágil no array "dialogues" (ex: Narrador expõe o fato e Protagonista reage com espanto/sarcasmo). Sempre que houver diálogo entre personagens na mesma cena, o "imagePrompt" DEVE retratar visualmente a interação física de ambos.
 3. CLIFFHANGER / FECHO IMPACTANTE: A última cena termina no ápice visual ou dramático do evento histórico.
 
+${getCharacterVoicesPromptPart()}
+
 ${systemPromptPart}
 
 Regras de Saída (JSON Estrito):
@@ -328,6 +333,16 @@ Retorne APENAS um objeto JSON válido neste formato exato:
                   speaker: {
                     type: 'STRING',
                     enum: VALID_SPEAKERS,
+                  },
+                  characterName: {
+                    type: 'STRING',
+                    description:
+                      'Nome da figura histórica ou papel (ex: Cleópatra, Napoleão) quando speaker for character.',
+                  },
+                  voiceId: {
+                    type: 'STRING',
+                    description:
+                      'ID da voz escolhida no catálogo de personagens quando speaker for character.',
                   },
                   text: {
                     type: 'STRING',
@@ -518,6 +533,8 @@ DINÂMICA EM DUPLA (NARRADOR SÉRIO x PROTAGONISTA ATRAPALHADO):
    - Exemplo de bate-bola ágil:
      * Fala 1 [narrator]: "Em 1798, tropas francesas marcharam em Gizé..."
      * Fala 2 [protagonist]: "E aí alguém achou uma boa ideia mirar um canhão no monumento?!"
+
+${getCharacterVoicesPromptPart()}
 
 TÉCNICA MANDATÓRIA: LOOP PERFEITO (SEAMLESS LOOP / NARRATIVA CIRCULAR):
 Cada uma das 4 opções DEVE possuir um loop 100% contínuo e imperceptível quando o player do TikTok/Shorts reiniciar do fim para o começo!
@@ -746,6 +763,16 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
             speaker: {
               type: 'STRING',
               enum: VALID_SPEAKERS,
+            },
+            characterName: {
+              type: 'STRING',
+              description:
+                'Nome da figura histórica ou papel (ex: Cleópatra, Napoleão) quando speaker for character.',
+            },
+            voiceId: {
+              type: 'STRING',
+              description:
+                'ID da voz escolhida no catálogo de personagens quando speaker for character.',
             },
             text: {
               type: 'STRING',
@@ -1246,7 +1273,10 @@ ${systemPromptPart}
    - A última fala deve atuar como conector sintático natural em direção ao gancho de abertura da Cena 1.
 10. ESTILO DO PROTAGONISTA (BILLY) E DINÂMICA EM DUPLA:
    - O protagonista ("protagonist" / Billy) expressa-se em português coloquial brasileiro, com reações viscerais ("Peraí...", "O quê?!", "Caramba...", "deu ruim"), contrações ("pra", "tá", "né") e zero afetação de professor.
-   - O narrador ("narrator") mantém a postura documental e sóbria dos fatos, contracenando em bate-bola com o protagonista.`;
+   - O narrador ("narrator") mantém a postura documental e sóbria dos fatos, contracenando em bate-bola com o protagonista.
+11. VOZES E NOMES DE PERSONAGENS SECUNDÁRIOS:
+${getCharacterVoicesPromptPart()}
+   - Se a cena contiver fala de personagem ("character"), preserve ou defina o "characterName" e o "voiceId" correspondente.`;
 
   const responseSchema = {
     type: 'OBJECT',
@@ -1270,6 +1300,16 @@ ${systemPromptPart}
                   speaker: {
                     type: 'STRING',
                     enum: ['protagonist', 'character', 'narrator'],
+                  },
+                  characterName: {
+                    type: 'STRING',
+                    description:
+                      'Nome da figura histórica ou papel (ex: Cleópatra, Napoleão) quando speaker for character.',
+                  },
+                  voiceId: {
+                    type: 'STRING',
+                    description:
+                      'ID da voz de personagem escolhida no catálogo quando speaker for character.',
                   },
                   text: { type: 'STRING' },
                 },
@@ -1351,6 +1391,12 @@ ${systemPromptPart}
                       originalInput?.dialogues?.[dIdx]?.id ||
                       `dlg_${sIdx}_${dIdx}`,
                     speaker: d.speaker || 'protagonist',
+                    characterName:
+                      d.characterName ||
+                      originalInput?.dialogues?.[dIdx]?.characterName,
+                    voiceId:
+                      d.voiceId ||
+                      originalInput?.dialogues?.[dIdx]?.voiceId,
                     text: d.text || '',
                   }))
                 : originalInput?.dialogues && originalInput.dialogues.length > 0
@@ -1362,6 +1408,8 @@ ${systemPromptPart}
                           reviewedScene.speaker ||
                           originalInput?.speaker ||
                           'protagonist',
+                        characterName: originalInput?.dialogues?.[0]?.characterName,
+                        voiceId: originalInput?.dialogues?.[0]?.voiceId,
                         text: reviewedScene.text || originalInput?.text || '',
                       },
                     ];

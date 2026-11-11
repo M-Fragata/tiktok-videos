@@ -30,7 +30,13 @@ import {
   SubtitleStyleConfig,
   TimeMachineVideoProps,
   VideoRecord,
+  VoiceCatalog,
 } from '../remotion/types';
+import {
+  fetchVoiceCatalog,
+  getCachedVoiceCatalog,
+} from '../services/voiceCatalog';
+import { VoicePreviewButton } from '../components/VoicePreviewButton';
 import {
   IdeationDressingRoomTab,
   SelectedFinalSceneItem,
@@ -239,6 +245,9 @@ export const Studio: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>('');
   const [isDeletingVideo, setIsDeletingVideo] = useState<boolean>(false);
+  const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog>(
+    getCachedVoiceCatalog()
+  );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const pendingAutoDownloadRef = useRef<boolean>(false);
@@ -250,6 +259,10 @@ export const Studio: React.FC = () => {
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const videoCanvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void fetchVoiceCatalog().then(setVoiceCatalog);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -774,21 +787,25 @@ export const Studio: React.FC = () => {
   const handleUpdateDialogueInStudio = (
     sceneIndex: number,
     dialogueId: string,
-    field: 'speaker' | 'text',
+    field: 'speaker' | 'text' | 'voiceId' | 'characterName',
     value: string
   ) => {
     setScenes((prev) =>
       prev.map((scene, idx) => {
         if (idx !== sceneIndex) return scene;
         const currentDialogues = getSceneDialogues(scene);
-        const updatedDialogues = currentDialogues.map((d) =>
-          d.id === dialogueId
-            ? {
-                ...d,
-                [field]: field === 'speaker' ? (value as SpeakerType) : value,
-              }
-            : d
-        );
+        const updatedDialogues = currentDialogues.map((d) => {
+          if (d.id !== dialogueId) return d;
+          const next = {
+            ...d,
+            [field]: field === 'speaker' ? (value as SpeakerType) : value,
+          };
+          if (field === 'speaker' && value === 'character' && !next.voiceId) {
+            next.voiceId =
+              voiceCatalog.characters[0]?.id || 'N2lVS1w4EtoT3dr4eOWO';
+          }
+          return next;
+        });
         return {
           ...scene,
           dialogues: updatedDialogues,
@@ -2407,68 +2424,159 @@ export const Studio: React.FC = () => {
                                   Falas / Diálogos da Cena
                                 </label>
                                 {getSceneDialogues(scene).map(
-                                  (dialogue, dIdx, arr) => (
-                                    <div
-                                      key={dialogue.id || `dlg_${dIdx}`}
-                                      className="flex items-start gap-2 rounded-lg border border-[#272730] bg-[#141418] p-2"
-                                    >
-                                      <div className="w-36 shrink-0">
-                                        <select
-                                          value={dialogue.speaker}
-                                          onChange={(e) =>
-                                            handleUpdateDialogueInStudio(
-                                              index,
-                                              dialogue.id,
-                                              'speaker',
-                                              e.target.value
-                                            )
-                                          }
-                                          className="w-full rounded-md border border-[#30303c] bg-[#202028] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
-                                        >
-                                          <option value="protagonist">
-                                            🧑 Protagonista
-                                          </option>
-                                          <option value="character">
-                                            🎭 Personagem
-                                          </option>
-                                          <option value="narrator">
-                                            🎙️ Narrador
-                                          </option>
-                                        </select>
+                                  (dialogue, dIdx, arr) => {
+                                    const isCharacter =
+                                      dialogue.speaker === 'character';
+                                    const currentCharVoice =
+                                      voiceCatalog.characters.find(
+                                        (v) => v.id === dialogue.voiceId
+                                      ) || voiceCatalog.characters[0];
+                                    const rolePreviewUrl =
+                                      dialogue.speaker === 'protagonist'
+                                        ? voiceCatalog.protagonist.preview_url
+                                        : dialogue.speaker === 'narrator'
+                                          ? voiceCatalog.narrator.preview_url
+                                          : currentCharVoice?.preview_url;
+                                    const roleVoiceName =
+                                      dialogue.speaker === 'protagonist'
+                                        ? voiceCatalog.protagonist.name
+                                        : dialogue.speaker === 'narrator'
+                                          ? voiceCatalog.narrator.name
+                                          : currentCharVoice?.name;
+
+                                    return (
+                                      <div
+                                        key={dialogue.id || `dlg_${dIdx}`}
+                                        className="flex flex-col sm:flex-row items-start gap-2.5 rounded-lg border border-[#272730] bg-[#141418] p-2.5 transition hover:border-[#383844]"
+                                      >
+                                        <div className="w-full sm:w-44 shrink-0 space-y-1.5">
+                                          {/* Seletor de Papel + Preview de Áudio */}
+                                          <div className="flex items-center gap-1.5">
+                                            <select
+                                              value={dialogue.speaker}
+                                              onChange={(e) =>
+                                                handleUpdateDialogueInStudio(
+                                                  index,
+                                                  dialogue.id,
+                                                  'speaker',
+                                                  e.target.value
+                                                )
+                                              }
+                                              className="flex-1 rounded-md border border-[#30303c] bg-[#202028] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
+                                            >
+                                              <option value="protagonist">
+                                                🧑 Protagonista
+                                              </option>
+                                              <option value="character">
+                                                🎭 Personagem
+                                              </option>
+                                              <option value="narrator">
+                                                🎙️ Narrador
+                                              </option>
+                                            </select>
+                                            <VoicePreviewButton
+                                              previewUrl={rolePreviewUrl}
+                                              voiceName={roleVoiceName}
+                                            />
+                                          </div>
+
+                                          {/* Configurações específicas quando for Personagem Secundário */}
+                                          {isCharacter && (
+                                            <div className="space-y-1 rounded bg-[#1a1a22] p-1.5 border border-[#2a2a36]">
+                                              {/* Seletor de Voz de Personagem */}
+                                              <div className="flex items-center gap-1">
+                                                <select
+                                                  value={
+                                                    dialogue.voiceId ||
+                                                    currentCharVoice?.id
+                                                  }
+                                                  onChange={(e) =>
+                                                    handleUpdateDialogueInStudio(
+                                                      index,
+                                                      dialogue.id,
+                                                      'voiceId',
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  title="Voz do Personagem (ElevenLabs)"
+                                                  className="w-full rounded border border-[#323242] bg-[#22222d] px-1.5 py-1 text-[10px] font-semibold text-slate-200 focus:border-amber-500 focus:outline-none"
+                                                >
+                                                  {voiceCatalog.characters.map(
+                                                    (v) => (
+                                                      <option
+                                                        key={v.id}
+                                                        value={v.id}
+                                                      >
+                                                        {v.gender === 'female'
+                                                          ? '👩'
+                                                          : '👨'}{' '}
+                                                        {v.name} (
+                                                        {v.gender === 'female'
+                                                          ? 'Fem'
+                                                          : 'Masc'}
+                                                        )
+                                                      </option>
+                                                    )
+                                                  )}
+                                                </select>
+                                              </div>
+
+                                              {/* Nome do Personagem */}
+                                              <input
+                                                type="text"
+                                                value={
+                                                  dialogue.characterName || ''
+                                                }
+                                                onChange={(e) =>
+                                                  handleUpdateDialogueInStudio(
+                                                    index,
+                                                    dialogue.id,
+                                                    'characterName',
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder="Nome (ex: Cleópatra)"
+                                                className="w-full rounded border border-[#323242] bg-[#16161e] px-1.5 py-0.5 text-[10px] text-amber-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <div className="flex-1 w-full flex items-start gap-1.5">
+                                          <textarea
+                                            rows={isCharacter ? 3 : 2}
+                                            value={dialogue.text}
+                                            onChange={(e) =>
+                                              handleUpdateDialogueInStudio(
+                                                index,
+                                                dialogue.id,
+                                                'text',
+                                                e.target.value
+                                              )
+                                            }
+                                            placeholder={`Fala #${dIdx + 1} / Legenda...`}
+                                            className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 font-medium leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
+                                          />
+
+                                          {arr.length > 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleRemoveDialogueInStudio(
+                                                  index,
+                                                  dialogue.id
+                                                )
+                                              }
+                                              title="Remover esta fala"
+                                              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-rose-500/30 bg-rose-500/10 text-xs font-bold text-rose-300 transition hover:bg-rose-500/25 hover:text-rose-200"
+                                            >
+                                              ×
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
-
-                                      <textarea
-                                        rows={2}
-                                        value={dialogue.text}
-                                        onChange={(e) =>
-                                          handleUpdateDialogueInStudio(
-                                            index,
-                                            dialogue.id,
-                                            'text',
-                                            e.target.value
-                                          )
-                                        }
-                                        placeholder={`Fala #${dIdx + 1} / Legenda...`}
-                                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] p-2 text-xs text-slate-100 font-medium leading-relaxed focus:border-amber-500 focus:outline-none transition resize-none"
-                                      />
-
-                                      {arr.length > 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handleRemoveDialogueInStudio(
-                                              index,
-                                              dialogue.id
-                                            )
-                                          }
-                                          title="Remover esta fala"
-                                          className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-rose-500/30 bg-rose-500/10 text-xs font-bold text-rose-300 transition hover:bg-rose-500/25 hover:text-rose-200"
-                                        >
-                                          ×
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
+                                    );
+                                  }
                                 )}
 
                                 <div className="flex justify-end pt-0.5">

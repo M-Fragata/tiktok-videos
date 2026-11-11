@@ -116,6 +116,8 @@ export const avatarConfigSchema = z.object({
 export const dialogueItemSchema = z.object({
   id: z.string().min(1),
   speaker: speakerTypeSchema,
+  characterName: z.string().optional(),
+  voiceId: z.string().optional(),
   text: z.string().default(''),
 });
 

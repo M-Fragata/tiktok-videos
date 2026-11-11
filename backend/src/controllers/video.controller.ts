@@ -42,6 +42,7 @@ import {
   listAllSfxOptions,
   promoteSceneSfxToLibrary,
 } from '../services/sfx-library.service.ts';
+import { loadVoiceCatalog } from '../services/voice-catalog.service.ts';
 
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
@@ -1303,5 +1304,25 @@ export async function deleteCustomSfxController(
           ? err.message
           : 'Erro ao excluir efeito sonoro da biblioteca.',
     });
+  }
+}
+
+/**
+ * GET /api/voices
+ * Retorna o catálogo central de vozes ElevenLabs (narrador, protagonista, personagens)
+ * com seus metadados, gênero e links públicos de preview de áudio.
+ */
+export async function listVoicesController(
+  _req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const catalog = loadVoiceCatalog();
+    res.status(200).json(catalog);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res
+      .status(500)
+      .json({ error: 'Erro ao carregar catálogo de vozes.', details: msg });
   }
 }

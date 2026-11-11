@@ -380,7 +380,25 @@ export interface SceneFrameTiming {
 export interface DialogueItem {
   id: string;
   speaker: SpeakerType;
+  characterName?: string;
+  voiceId?: string;
   text: string;
+}
+
+export interface VoiceDefinition {
+  id: string;
+  name: string;
+  gender: 'male' | 'female' | 'neutral';
+  age?: string;
+  style?: string;
+  description: string;
+  preview_url?: string;
+}
+
+export interface VoiceCatalog {
+  narrator: VoiceDefinition;
+  protagonist: VoiceDefinition;
+  characters: VoiceDefinition[];
 }
 
 export interface StoryboardScene {
