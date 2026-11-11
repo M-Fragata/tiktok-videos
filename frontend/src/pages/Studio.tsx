@@ -19,6 +19,7 @@ import {
   injectAvatarConfigIntoPrompt,
   resolveAssetSrc,
   SceneFrameTiming,
+  SfxOption,
   SFX_OPTIONS,
   SpeakerType,
   splitSceneTextIntoSubtitleChunks,
@@ -199,6 +200,13 @@ export const Studio: React.FC = () => {
     DEFAULT_SUBTITLE_STYLE
   );
   const [avatarTimeline, setAvatarTimeline] = useState<AvatarSegment[]>([]);
+
+  // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
+  const [sfxLibraryOptions, setSfxLibraryOptions] =
+    useState<SfxOption[]>(SFX_OPTIONS);
+  const [promotingSfxSceneIndex, setPromotingSfxSceneIndex] = useState<
+    number | null
+  >(null);
 
   // Estado de Reprodução do Player & Agulha da Timeline
   const [currentFrame, setCurrentFrame] = useState<number>(0);
@@ -413,8 +421,69 @@ export const Studio: React.FC = () => {
     }
   };
 
+  const loadSfxLibrary = async () => {
+    try {
+      const res = await fetch('/api/sfx-library');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.options) && data.options.length > 0) {
+          setSfxLibraryOptions(data.options);
+        }
+      }
+    } catch (err) {
+      console.warn('Aviso ao carregar biblioteca de SFX:', err);
+    }
+  };
+
+  const handlePromoteStoryboardSceneSfx = async (sceneIndex: number) => {
+    if (!id) return;
+    const scene = scenes[sceneIndex];
+    if (!scene?.custom_sfx_url) return;
+
+    setPromotingSfxSceneIndex(sceneIndex);
+    try {
+      const res = await fetch('/api/sfx-library/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: id,
+          sceneIndex,
+          customSfxUrl: scene.custom_sfx_url,
+          sfxPrompt: scene.sfx_prompt || '',
+          sfxLabel: scene.sfx_label || '',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao salvar som na biblioteca.');
+      }
+
+      handleSceneFieldChange(sceneIndex, 'sfx_suggestion', data.slug);
+      handleSceneFieldChange(
+        sceneIndex,
+        'sfx_label',
+        data.label || scene.sfx_label || ''
+      );
+      handleSceneFieldChange(sceneIndex, 'custom_sfx_url', null);
+
+      await loadSfxLibrary();
+      setSuccessMsg('Efeito sonoro salvo na biblioteca global com sucesso!');
+    } catch (err) {
+      console.error('[Promote SFX Error]', err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao salvar efeito sonoro na biblioteca.'
+      );
+    } finally {
+      setPromotingSfxSceneIndex(null);
+    }
+  };
+
   useEffect(() => {
     void fetchVideoData();
+    void loadSfxLibrary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -2244,6 +2313,8 @@ export const Studio: React.FC = () => {
                 onApproveFinalScript={(approvedTitle) =>
                   void handleApproveFinalScript(approvedTitle)
                 }
+                sfxOptions={sfxLibraryOptions}
+                onReloadSfxLibrary={loadSfxLibrary}
               />
             )}
 
@@ -2502,16 +2573,56 @@ export const Studio: React.FC = () => {
                                     <span>🎧 Design de Som (SFX)</span>
                                   </label>
                                   {scene.custom_sfx_url && (
-                                    <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                                      ✨ ElevenLabs IA Ativo
-                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                                        ✨ ElevenLabs IA Ativo
+                                      </span>
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          promotingSfxSceneIndex === index
+                                        }
+                                        title="Salvar este áudio na Biblioteca Global para reutilizar em futuros roteiros a custo zero"
+                                        onClick={() =>
+                                          void handlePromoteStoryboardSceneSfx(
+                                            index
+                                          )
+                                        }
+                                        className="flex items-center gap-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-teal-200 transition disabled:opacity-50"
+                                      >
+                                        {promotingSfxSceneIndex === index ? (
+                                          <span className="h-2 w-2 animate-spin rounded-full border border-teal-200 border-t-transparent" />
+                                        ) : (
+                                          <span>💾 Salvar</span>
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        title="Remover áudio customizado e voltar ao som da biblioteca"
+                                        onClick={() =>
+                                          handleSceneFieldChange(
+                                            index,
+                                            'custom_sfx_url',
+                                            null
+                                          )
+                                        }
+                                        className="text-slate-400 hover:text-rose-400 transition text-[10px] ml-0.5"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <div>
-                                    <label className="block text-[10px] text-slate-400 mb-1">
-                                      Efeito da Biblioteca
+                                    <label className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
+                                      <span>Efeito da Biblioteca</span>
+                                      {scene.sfx_label && (
+                                        <span className="text-[9px] text-teal-300/80 font-normal">
+                                          ({scene.sfx_label})
+                                        </span>
+                                      )}
                                     </label>
                                     <select
                                       value={scene.sfx_suggestion || 'whoosh'}
@@ -2524,7 +2635,7 @@ export const Studio: React.FC = () => {
                                       }
                                       className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
                                     >
-                                      {SFX_OPTIONS.map((opt) => (
+                                      {sfxLibraryOptions.map((opt) => (
                                         <option key={opt.value} value={opt.value}>
                                           {opt.label}
                                         </option>

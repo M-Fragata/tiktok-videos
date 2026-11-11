@@ -71,8 +71,7 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
               );
             }
             if (!sfxKey || sfxKey === 'none' || sfxKey === 'whoosh') return null;
-            const file = sfxMap.get(sfxKey);
-            if (!file) return null;
+            const file = sfxMap.get(sfxKey) || `bgm/effects/${sfxKey}.mp3`;
             return (
               <Sequence
                 key={`sfx_intro_0`}
@@ -104,9 +103,10 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
           // 2. Se for "none", não toca nada
           if (sfxKey === 'none') return null;
 
-          // 3. Efeito da biblioteca local (com fallback para whoosh)
+          // 3. Efeito da biblioteca (padrão ou CustomSfx promovido, com fallback para whoosh)
           const sfxFile =
-            (sfxKey && sfxMap.get(sfxKey)) || 'bgm/effects/whoosh.mp3';
+            (sfxKey && (sfxMap.get(sfxKey) || `bgm/effects/${sfxKey}.mp3`)) ||
+            'bgm/effects/whoosh.mp3';
 
           return (
             <Sequence

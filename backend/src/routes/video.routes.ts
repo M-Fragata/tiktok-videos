@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createDraftVideoController,
+  deleteCustomSfxController,
   deleteVideoController,
   generateAudioController,
   generateSceneImagesController,
@@ -9,7 +10,9 @@ import {
   generateScriptController,
   generateVideoController,
   getVideoByIdController,
+  listSfxLibraryController,
   listVideosController,
+  promoteSfxController,
   renderVideoController,
   rerenderVideoController,
   reviewFinalScriptController,
@@ -46,6 +49,11 @@ videoRoutes.post('/videos/:id/generate-audio', generateAudioController);
 videoRoutes.put('/videos/:id/storyboard', saveStoryboardController);
 videoRoutes.patch('/videos/:id/title', updateVideoTitleController);
 videoRoutes.delete('/videos/:id', deleteVideoController);
+
+// Biblioteca Global de SFX (Padrões + CustomSfx)
+videoRoutes.get('/sfx-library', listSfxLibraryController);
+videoRoutes.post('/sfx-library/promote', promoteSfxController);
+videoRoutes.delete('/sfx-library/:slug', deleteCustomSfxController);
 
 // Renderização MP4 e consulta
 videoRoutes.post('/videos/:id/rerender', rerenderVideoController);

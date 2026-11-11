@@ -17,3 +17,14 @@ model Video {
 
   @@map("videos")
 }
+
+model CustomSfx {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  label     String
+  prompt    String
+  filePath  String
+  createdAt DateTime @default(now())
+
+  @@map("custom_sfx")
+}

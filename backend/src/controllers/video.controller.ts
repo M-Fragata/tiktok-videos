@@ -10,6 +10,7 @@ import {
   generateSceneSfxSchema,
   generateScriptSchema,
   generateVideoSchema,
+  promoteSfxSchema,
   renderVideoSchema,
   reviewFinalScriptSchema,
   updateVideoTitleSchema,
@@ -36,6 +37,11 @@ import {
   generateAllSceneBackgrounds,
   generateSceneBrollImages,
 } from '../services/imagen.service.ts';
+import {
+  deleteCustomSfxFromLibrary,
+  listAllSfxOptions,
+  promoteSceneSfxToLibrary,
+} from '../services/sfx-library.service.ts';
 
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
@@ -1208,6 +1214,94 @@ export async function reviewFinalScriptController(
         err instanceof Error
           ? err.message
           : 'Erro interno ao revisar roteiro final com o Gemini.',
+    });
+  }
+}
+
+/**
+ * GET /api/sfx-library
+ * Lista todas as opções de efeitos sonoros disponíveis (15 padrões + customizados salvos)
+ */
+export async function listSfxLibraryController(
+  _req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const options = await listAllSfxOptions();
+    res.status(200).json({ options });
+  } catch (err) {
+    console.error('[SFX Library] Erro ao listar biblioteca de efeitos sonoros:', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro ao listar biblioteca de efeitos sonoros.',
+    });
+  }
+}
+
+/**
+ * POST /api/sfx-library/promote
+ * Salva um efeito sonoro gerado pela ElevenLabs na biblioteca permanente (frontend/public/bgm/effects)
+ * e o registra na tabela CustomSfx do banco de dados.
+ */
+export async function promoteSfxController(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const parsedBody = promoteSfxSchema.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para salvar efeito sonoro na biblioteca.',
+      details: parsedBody.error.format(),
+    });
+    return;
+  }
+
+  try {
+    const result = await promoteSceneSfxToLibrary(parsedBody.data);
+    res.status(200).json({
+      message: 'Efeito sonoro salvo na biblioteca global com sucesso!',
+      ...result,
+    });
+  } catch (err) {
+    console.error('[SFX Library] Erro ao salvar efeito sonoro:', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro interno ao salvar efeito sonoro na biblioteca.',
+    });
+  }
+}
+
+/**
+ * DELETE /api/sfx-library/:slug
+ * Exclui um efeito sonoro customizado da biblioteca e do disco
+ */
+export async function deleteCustomSfxController(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const { slug } = req.params;
+  if (!slug) {
+    res.status(400).json({ error: 'Slug do efeito sonoro não fornecido.' });
+    return;
+  }
+
+  try {
+    const result = await deleteCustomSfxFromLibrary(slug);
+    res.status(200).json({
+      message: 'Efeito sonoro excluído da biblioteca com sucesso.',
+      ...result,
+    });
+  } catch (err) {
+    console.error('[SFX Library] Erro ao excluir efeito sonoro:', err);
+    res.status(500).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Erro ao excluir efeito sonoro da biblioteca.',
     });
   }
 }

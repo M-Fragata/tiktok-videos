@@ -98,11 +98,15 @@ export const BRIEFING_BGM_OPTIONS: Array<{
   })),
 ];
 
-export const SFX_OPTIONS: Array<{
+export interface SfxOption {
   value: string;
   label: string;
   file: string | null;
-}> = [
+  prompt?: string;
+  isCustom?: boolean;
+}
+
+export const SFX_OPTIONS: SfxOption[] = [
   {
     value: 'whoosh',
     label: '💨 Whoosh (Transição Padrão)',
@@ -389,6 +393,7 @@ export interface StoryboardScene {
   imagePrompt: string;
   sfx_suggestion?: string;
   sfx_prompt?: string;
+  sfx_label?: string;
   custom_sfx_url?: string | null;
   candidateImages: string[];
   selectedImage: string | null;

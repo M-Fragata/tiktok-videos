@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DialogueItem, SpeakerType, StoryboardScene } from '../remotion/types';
+import type { DialogueItem, SfxOption, SpeakerType, StoryboardScene } from '../remotion/types';
 import { getSceneDialogues, SFX_OPTIONS } from '../remotion/types';
 
 export interface SceneCardProps {
@@ -32,9 +32,12 @@ export interface SceneCardProps {
   onGenerateVisualPrompt?: () => void;
   isGeneratingVisualPrompt?: boolean;
   // SFX generation & audio preview
+  sfxOptions?: SfxOption[];
   onGenerateSfx?: (prompt: string) => void;
   isGeneratingSfx?: boolean;
   onPlayAudioPreview?: (url: string) => void;
+  onPromoteSfx?: () => void;
+  isPromotingSfx?: boolean;
 }
 
 export const SceneCard: React.FC<SceneCardProps> = ({
@@ -58,9 +61,12 @@ export const SceneCard: React.FC<SceneCardProps> = ({
   onRemoveDialogue,
   onGenerateVisualPrompt,
   isGeneratingVisualPrompt = false,
+  sfxOptions,
   onGenerateSfx,
   isGeneratingSfx = false,
   onPlayAudioPreview,
+  onPromoteSfx,
+  isPromotingSfx = false,
 }) => {
   const dialogues: DialogueItem[] = getSceneDialogues(scene);
 
@@ -259,13 +265,18 @@ export const SceneCard: React.FC<SceneCardProps> = ({
           <div className="flex items-center gap-1.5 text-[11px]">
             <span className="font-semibold text-teal-400 flex items-center gap-1">
               <span>🔊 Som Escolhido:</span>
+              {scene.sfx_label && (
+                <span className="text-[10px] text-teal-300/80 font-normal">
+                  ({scene.sfx_label})
+                </span>
+              )}
             </span>
             <select
               value={scene.sfx_suggestion || 'whoosh'}
               onChange={(e) => onUpdateField('sfx_suggestion', e.target.value)}
               className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none max-w-[220px]"
             >
-              {SFX_OPTIONS.map((sfx) => (
+              {(sfxOptions || SFX_OPTIONS).map((sfx) => (
                 <option key={sfx.value} value={sfx.value}>
                   {sfx.label}
                 </option>
@@ -284,6 +295,21 @@ export const SceneCard: React.FC<SceneCardProps> = ({
                   className="hover:scale-110 transition"
                 >
                   ▶️
+                </button>
+              )}
+              {onPromoteSfx && (
+                <button
+                  type="button"
+                  disabled={isPromotingSfx}
+                  title="Salvar este áudio na Biblioteca Global para reutilizar em futuros roteiros a custo zero"
+                  onClick={onPromoteSfx}
+                  className="flex items-center gap-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-teal-200 transition disabled:opacity-50"
+                >
+                  {isPromotingSfx ? (
+                    <span className="h-2 w-2 animate-spin rounded-full border border-teal-200 border-t-transparent" />
+                  ) : (
+                    <span>💾 Salvar</span>
+                  )}
                 </button>
               )}
               <button

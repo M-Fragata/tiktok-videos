@@ -18,6 +18,7 @@ import {
   getSceneFullText,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
+  SfxOption,
   SpeakerType,
   StoryboardScene,
 } from '../remotion/types';
@@ -51,6 +52,8 @@ interface IdeationDressingRoomTabProps {
   >;
   isApprovingScript: boolean;
   onApproveFinalScript: (approvedTitle?: string) => void;
+  sfxOptions?: SfxOption[];
+  onReloadSfxLibrary?: () => Promise<void>;
 }
 
 const HAIR_STYLE_OPTIONS: Array<{ value: AvatarHairStyle; label: string }> = [
@@ -115,6 +118,8 @@ export const IdeationDressingRoomTab: React.FC<
   setFinalMixScenes,
   isApprovingScript,
   onApproveFinalScript,
+  sfxOptions,
+  onReloadSfxLibrary,
 }) => {
   // Controlo de abertura dos 4 Accordions de Ideação + 5º Accordion do Roteiro Final
   const [isAvatarOpen, setIsAvatarOpen] = useState<boolean>(true);
@@ -134,6 +139,9 @@ export const IdeationDressingRoomTab: React.FC<
     null
   );
   const [generatingSfxIndex, setGeneratingSfxIndex] = useState<number | null>(
+    null
+  );
+  const [promotingSfxIndex, setPromotingSfxIndex] = useState<number | null>(
     null
   );
   const [generatingPromptIndex, setGeneratingPromptIndex] = useState<
@@ -227,6 +235,53 @@ export const IdeationDressingRoomTab: React.FC<
     }
   };
 
+  const handlePromoteFinalSceneSfx = async (index: number) => {
+    if (!videoId) return;
+    const item = finalMixScenes[index];
+    if (!item?.scene?.custom_sfx_url) return;
+
+    setPromotingSfxIndex(index);
+    try {
+      const res = await fetch('/api/sfx-library/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          sceneIndex: index,
+          customSfxUrl: item.scene.custom_sfx_url,
+          sfxPrompt: item.scene.sfx_prompt || '',
+          sfxLabel: item.scene.sfx_label || '',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao salvar som na biblioteca.');
+      }
+
+      handleUpdateFinalSceneField(index, 'sfx_suggestion', data.slug);
+      handleUpdateFinalSceneField(
+        index,
+        'sfx_label',
+        data.label || item.scene.sfx_label || ''
+      );
+      handleUpdateFinalSceneField(index, 'custom_sfx_url', null);
+
+      if (onReloadSfxLibrary) {
+        await onReloadSfxLibrary();
+      }
+    } catch (err) {
+      console.error('[Promote SFX Error]', err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao salvar som na biblioteca global.'
+      );
+    } finally {
+      setPromotingSfxIndex(null);
+    }
+  };
+
   const handleGenerateScenePrompt = async (index: number) => {
     if (!videoId) return;
     const item = finalMixScenes[index];
@@ -266,6 +321,7 @@ export const IdeationDressingRoomTab: React.FC<
                   sfx_suggestion:
                     data.sfx_suggestion || it.scene.sfx_suggestion,
                   sfx_prompt: data.sfx_prompt || it.scene.sfx_prompt,
+                  sfx_label: data.sfx_label || it.scene.sfx_label,
                   avatarSprite: data.avatarSprite || it.scene.avatarSprite,
                 },
               }
@@ -1360,9 +1416,12 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                         void handleGenerateScenePrompt(idx)
                       }
                       isGeneratingVisualPrompt={generatingPromptIndex === idx}
+                      sfxOptions={sfxOptions}
                       onGenerateSfx={() => void handleGenerateCustomSfx(idx)}
                       isGeneratingSfx={generatingSfxIndex === idx}
                       onPlayAudioPreview={playAudioPreview}
+                      onPromoteSfx={() => void handlePromoteFinalSceneSfx(idx)}
+                      isPromotingSfx={promotingSfxIndex === idx}
                     />
                   ))}
                 </div>

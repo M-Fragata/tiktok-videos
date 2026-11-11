@@ -129,6 +129,7 @@ export const storyboardSceneSchema = z.object({
   imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),
+  sfx_label: z.string().optional().default(''),
   custom_sfx_url: z.string().nullable().optional().default(null),
   candidateImages: z.array(z.string()).optional().default([]),
   selectedImage: z.string().nullable().optional().default(null),
@@ -305,8 +306,18 @@ export const reviewFinalScriptSceneSchema = z.object({
   imagePrompt: z.string().optional().default(''),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),
+  sfx_label: z.string().optional().default(''),
   isCustom: z.boolean().optional().default(false),
 });
+
+export const promoteSfxSchema = z.object({
+  videoId: z.string().min(1, 'ID do vídeo obrigatório'),
+  sceneIndex: z.number().int().min(0),
+  customSfxUrl: z.string().min(1, 'URL do áudio SFX obrigatória'),
+  sfxPrompt: z.string().optional().default(''),
+  sfxLabel: z.string().optional().default(''),
+});
+export type PromoteSfxInput = z.infer<typeof promoteSfxSchema>;
 
 export const reviewFinalScriptSchema = z.object({
   theme: z.string().optional().default('Viagem no Tempo'),

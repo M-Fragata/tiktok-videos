@@ -1,3 +1,5 @@
+import { listAllSfxOptions, type SfxOption } from './sfx-library.service.ts';
+
 export const VALID_AVATAR_SPRITES = [
   'avatars/avatar_greeting.png',
   'avatars/avatar_neutral.png',
@@ -64,6 +66,7 @@ export interface ScriptScene {
   imagePrompt: string;
   sfx_suggestion?: string;
   sfx_prompt?: string;
+  sfx_label?: string;
   custom_sfx_url?: string | null;
 }
 
@@ -189,6 +192,36 @@ const DURATION_RULES: Record<
   },
 };
 
+function formatSfxInstructions(availableSfx: SfxOption[]): {
+  systemPromptPart: string;
+  enumSlugs: string[];
+} {
+  const optionsWithoutNone = availableSfx.filter((o) => o.value !== 'none');
+  const itemsText = optionsWithoutNone
+    .map(
+      (o) =>
+        `   - "${o.value}": ${o.label}${o.prompt ? ` (${o.prompt})` : ''}${o.isCustom ? ' [Efeito Sonoro Salvo na Biblioteca]' : ''}`
+    )
+    .join('\n');
+
+  const systemPromptPart = `2. EFEITOS SONOROS POR CENA ("sfx_suggestion"):
+   A nossa biblioteca de áudio possui efeitos cirúrgicos. Para CADA cena, escolhe ESTRITAMENTE um dos seguintes identificadores (ou "none"):
+${itemsText}
+   - "none": Se a cena não precisa de efeito sonoro no corte.
+
+3. PROMPT DE DESIGN DE SOM TEXT-TO-SFX ("sfx_prompt"):
+   Para CADA cena, deves escrever um prompt acústico descritivo e expressivo em INGLÊS no campo "sfx_prompt" (1 a 2 frases curtas) pronto para a API de Sound Effects da ElevenLabs. Descreva o timbre, reverberação, distância e ação física do som.
+
+4. TÍTULO CURTO DO EFEITO SONORO EM PORTUGUÊS COM EMOJI ("sfx_label"):
+   Para CADA cena, gera um título curto e expressivo em português com 1 emoji inicial relevante descrevendo o som (ex: "🏃 Corrida na Areia", "🪵 Porta Antiga Rangendo", "⚔️ Espada Cortando o Ar"). Se usares um som prévio da biblioteca, podes usar o próprio rótulo dele.`;
+
+  const enumSlugs = Array.from(
+    new Set([...availableSfx.map((o) => o.value), 'none'])
+  );
+
+  return { systemPromptPart, enumSlugs };
+}
+
 const VIRAL_PACING_INSTRUCTION = `DIRETRIZES DE MONTAGEM CINEMATOGRÁFICA E RITMO VIRAL (RETENÇÃO ALTA):
 Na nossa arquitetura, cada cena gera um corte visual de câmara (B-Roll) + efeito sonoro de transição. Portanto, a DURAÇÃO e o COMPRIMENTO de cada fala ("text") determinam o tempo de tela daquela cena!
 Para preencher adequadamente o tempo total do vídeo SEM silêncios mortos:
@@ -211,6 +244,8 @@ export async function generateTimeMachineScript(
   }
 
   const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
+  const availableSfx = await listAllSfxOptions();
+  const { systemPromptPart, enumSlugs } = formatSfxInstructions(availableSfx);
 
   const systemInstruction = `És um roteirista sénior e Diretor de Arte especialista em Mídia Mista (Mixed Media 2D/3D) para o Fragata Shorts, gerando vídeos virais curtos no nicho "Máquina do Tempo / História".
 O formato é uma narrativa histórica dinâmica e imersiva onde personagens em estilo "2D Stickman / Doodle" vivem e interagem fisicamente dentro de mundos históricos 3D cinematográficos e hiper-detalhados.
@@ -241,6 +276,8 @@ Regras de Roteiro:
    - MÚLTIPLOS DIÁLOGOS POR CENA: Cada cena pode conter de 1 a 3 falas sequenciais curtas em estilo bate-bola ágil no array "dialogues" (ex: Narrador expõe o fato e Protagonista reage com espanto/sarcasmo). Sempre que houver diálogo entre personagens na mesma cena, o "imagePrompt" DEVE retratar visualmente a interação física de ambos.
 3. CLIFFHANGER / FECHO IMPACTANTE: A última cena termina no ápice visual ou dramático do evento histórico.
 
+${systemPromptPart}
+
 Regras de Saída (JSON Estrito):
 O campo "avatarSprite" dita a expressão associada à cena. Deve ser ESTRITAMENTE UMA destas strings:
 ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}
@@ -259,7 +296,9 @@ Retorne APENAS um objeto JSON válido neste formato exato:
       ],
       "avatarSprite": "avatars/avatar_shocked.png", 
       "imagePrompt": "Mixed media 2D/3D illustration, a 2D cartoon stickman character with a smooth round white head, expressive simple black ink facial features, round glasses, and thin black stick-figure limbs, integrated seamlessly into a realistic 3D cinematic environment. The stickman is wearing an olive green explorer vest in a dusty candlelit study, holding a realistic brass magnifying glass inspecting an ancient 3D skull on a wooden desk. Warm sunlight streams through a window with floating dust motes. Stylized 2D white doodle head, no realistic human skin, integrated perfectly into the 3D scene, illuminated by warm volumetric rim lighting, casting realistic 3D shadows onto the desk, shallow depth of field, 9:16 vertical composition.",
-      "sfx_suggestion": "low ominous rumble and rustling papers"
+      "sfx_suggestion": "whoosh",
+      "sfx_label": "💨 Transição Rápida",
+      "sfx_prompt": "Low ominous rumble and rustling papers in an ancient wooden room"
     }
   ]
 }`;
@@ -306,6 +345,13 @@ Retorne APENAS um objeto JSON válido neste formato exato:
             },
             sfx_suggestion: {
               type: 'STRING',
+              enum: enumSlugs,
+            },
+            sfx_label: {
+              type: 'STRING',
+            },
+            sfx_prompt: {
+              type: 'STRING',
             },
           },
           required: [
@@ -314,6 +360,9 @@ Retorne APENAS um objeto JSON válido neste formato exato:
             'dialogues',
             'avatarSprite',
             'imagePrompt',
+            'sfx_suggestion',
+            'sfx_label',
+            'sfx_prompt',
           ],
         },
       },
@@ -424,6 +473,8 @@ export async function generateTimeMachineIdeation(
 
   const rule = DURATION_RULES[durationPreset] || DURATION_RULES.short;
   const avatarDescriptor = buildAvatarPromptDescriptor(avatarConfig);
+  const availableSfx = await listAllSfxOptions();
+  const { systemPromptPart, enumSlugs } = formatSfxInstructions(availableSfx);
 
   const toneModifier =
     selectedBgmVibe && selectedBgmVibe !== 'auto'
@@ -544,6 +595,7 @@ EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA OPÇÃO (BATE-BOLA BILLY x NARRADOR):
       "visual_description": "Gizé sob sol escaldante: o protagonista no topo da Esfinge apontando chocado para gravuras antigas.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
       "sfx_suggestion": "record-scratch",
+      "sfx_label": "🛑 Quebra de 4ª Parede",
       "sfx_prompt": "Abrupt comedic vinyl record scratch sudden stop..."
     },
     {
@@ -557,6 +609,7 @@ EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA OPÇÃO (BATE-BOLA BILLY x NARRADOR):
       "visual_description": "O protagonista coça a cabeça confuso enquanto tropas napoleônicas marcham ao fundo.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
       "sfx_suggestion": "cartoon-blink",
+      "sfx_label": "👀 Efeito Cômico",
       "sfx_prompt": "Playful cartoon eye blink sound effect..."
     },
     {
@@ -570,6 +623,7 @@ EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA OPÇÃO (BATE-BOLA BILLY x NARRADOR):
       "visual_description": "O protagonista desenrola um pergaminho antigo de 1737 mostrando a Esfinge sem o nariz no deserto.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
       "sfx_suggestion": "footsteps-stone",
+      "sfx_label": "👣 Passos em Pedra",
       "sfx_prompt": "Ancient paper unfurling sound effect with soft desert wind..."
     }
   ]
@@ -645,30 +699,7 @@ DIRETRIZES DE TRILHA SONORA (BGM) E DESIGN DE SOM (SFX):
    - "epic": Batalhas lendárias e monumentos grandiosos (bgm/music/epic.mp3)
    - "none": Sem música de fundo (foco total na voz/efeitos)
 
-2. EFEITOS SONOROS POR CENA ("sfx_suggestion"):
-   A nossa biblioteca de áudio possui efeitos cirúrgicos. Para CADA cena, escolhe ESTRITAMENTE um dos seguintes identificadores (ou "none"):
-   - "cannon-artillery": Tiros de canhão, artilharia militar, bombas, explosões ou batalhas bélicas (ex: quando o roteiro cita as tropas de Napoleão atirando).
-   - "record-scratch": Parada brusca de som / quebra de 4ª parede, quando o viajante desmente um mito histórico ou confessa a sua culpa olhando para a câmara.
-   - "cartoon-blink": Momento cômico, piscada de olhos, confusão engraçada do viajante, cara de bobo.
-   - "riser-hit": Gancho tenso inicial (Cena 1), revelação chocante que prende o espectador.
-   - "heartbeat": Tensão máxima, batimentos cardíacos acelerados, suspense antes de um desastre.
-   - "metal-hits": Ferramentas quebrando pedra, marretadas, impacto mecânico ou armaduras.
-   - "sword-clash": Choque de espadas em duelo ou combate medieval.
-   - "sword-draw": Desembainhar lâmina ou preparação para confronto.
-   - "footsteps-stone": Passos cautelosos em tumbas egípcias, pirâmides ou corredores de pedra.
-   - "piano-flourish": Floreio de piano elegante, ironia sutil ou conclusão refinada.
-   - "trex-roar" ou "trex-roar-fight": Feras perigosas, dinossauros ou criaturas monstruosas.
-   - "whoosh" ou "swoosh": Transição rápida de cena ou movimento dinâmico.
-   - "none": Se a cena não precisa de efeito sonoro no corte.
-
-3. PROMPT DE DESIGN DE SOM TEXT-TO-SFX ("sfx_prompt"):
-   Para CADA cena, deves escrever um prompt acústico descritivo e expressivo em INGLÊS no campo "sfx_prompt" (1 a 2 frases curtas) pronto para a API de Sound Effects da ElevenLabs. Descreva o timbre, reverberação, distância e ação física do som.
-   Exemplos:
-   - "Loud explosive blast of an 18th-century military cannon in a sandy desert, deep thunderous echoing rumble with falling sand debris."
-   - "Abrupt comedic vinyl record scratch sudden stop, followed by awkward silence and a tiny cartoon pop."
-   - "Playful cartoon eye blink sound effect with a gentle spring boing and cheeky comic chime."
-   - "Tense cinematic riser crescendo building into a deep dramatic impact hit with sub bass."
-   - "Eerie stone footsteps echoing in an ancient Egyptian tomb corridor with subtle whispering wind."
+${systemPromptPart}
 
 DIRETRIZES DE DIÁLOGOS E INTERAÇÃO MULTI-VOZ POR CENA ("dialogues"):
 Na nossa arquitetura, cada cena pode conter UMA FALA DIRETA ou UMA INTERAÇÃO ENTRE PERSONAGENS (1 a 3 falas sequenciais no array "dialogues").
@@ -737,23 +768,12 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
       },
       sfx_suggestion: {
         type: 'STRING',
-        enum: [
-          'cannon-artillery',
-          'record-scratch',
-          'cartoon-blink',
-          'riser-hit',
-          'heartbeat',
-          'metal-hits',
-          'sword-clash',
-          'sword-draw',
-          'footsteps-stone',
-          'piano-flourish',
-          'trex-roar',
-          'trex-roar-fight',
-          'whoosh',
-          'swoosh',
-          'none',
-        ],
+        enum: enumSlugs,
+      },
+      sfx_label: {
+        type: 'STRING',
+        description:
+          'Título curto em português com 1 emoji descrevendo o efeito sonoro (ex: "🏃 Corrida na Areia").',
       },
       sfx_prompt: {
         type: 'STRING',
@@ -769,6 +789,7 @@ ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}`;
       'visual_description',
       'imagePrompt',
       'sfx_suggestion',
+      'sfx_label',
       'sfx_prompt',
     ],
   };
@@ -1033,6 +1054,7 @@ export async function generateSingleScenePrompt(params: {
   imagePrompt: string;
   visual_description: string;
   sfx_suggestion: string;
+  sfx_label: string;
   sfx_prompt: string;
   avatarSprite: AvatarSprite;
 }> {
@@ -1042,6 +1064,8 @@ export async function generateSingleScenePrompt(params: {
   }
 
   const avatarDescriptor = buildAvatarPromptDescriptor(params.avatarConfig);
+  const availableSfx = await listAllSfxOptions();
+  const { systemPromptPart, enumSlugs } = formatSfxInstructions(availableSfx);
 
   const visualHint = params.visualDescription?.trim()
     ? `\nDescrição do Cenário fornecida pelo Utilizador: "${params.visualDescription}"\nIMPORTANTE: Deves basear a ação, pose e elementos do "imagePrompt" estritamente nas orientações fornecidas pelo utilizador nesta descrição do cenário!`
@@ -1068,8 +1092,7 @@ DIRETRIZES DE DESCRIÇÃO VISUAL EM PORTUGUÊS ("visual_description"):
 - Se o utilizador já forneceu uma descrição, preserva-a ou aprimora-a em uma frase cinematográfica concisa em PORTUGUÊS resumindo a ação visual para o criador.
 
 DIRETRIZES DE DESIGN DE SOM:
-- "sfx_suggestion": Escolha o som ideal da biblioteca local condizente com a ação: "cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none".
-- "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs condizente com o cenário.
+${systemPromptPart}
 
 AVATAR SPRITE:
 - "avatarSprite": Uma destas opções: ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}.`;
@@ -1079,7 +1102,8 @@ AVATAR SPRITE:
     properties: {
       imagePrompt: { type: 'STRING' },
       visual_description: { type: 'STRING' },
-      sfx_suggestion: { type: 'STRING' },
+      sfx_suggestion: { type: 'STRING', enum: enumSlugs },
+      sfx_label: { type: 'STRING' },
       sfx_prompt: { type: 'STRING' },
       avatarSprite: { type: 'STRING', enum: [...VALID_AVATAR_SPRITES] },
     },
@@ -1087,6 +1111,7 @@ AVATAR SPRITE:
       'imagePrompt',
       'visual_description',
       'sfx_suggestion',
+      'sfx_label',
       'sfx_prompt',
       'avatarSprite',
     ],
@@ -1136,6 +1161,8 @@ export interface FinalScriptSceneInput {
   imagePrompt?: string;
   sfx_suggestion?: string;
   sfx_prompt?: string;
+  sfx_label?: string;
+  custom_sfx_url?: string | null;
   isCustom?: boolean;
 }
 
@@ -1155,6 +1182,8 @@ export async function reviewAndEnrichFinalScript(params: {
   }
 
   const avatarDescriptor = buildAvatarPromptDescriptor(params.avatarConfig);
+  const availableSfx = await listAllSfxOptions();
+  const { systemPromptPart, enumSlugs } = formatSfxInstructions(availableSfx);
 
   const formattedScenesText = params.scenes
     .map((s, idx) => {
@@ -1208,8 +1237,7 @@ A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
 6. DESCRIÇÃO VISUAL EM PORTUGUÊS ("visual_description"):
    - Preenche ou aprimora a descrição em português com uma frase cinematográfica clara resumindo a cena para o criador.
 7. DESIGN DE SOM:
-   - "sfx_suggestion": Escolhe o som ideal da biblioteca local condizente com a ação ("cannon-artillery", "record-scratch", "cartoon-blink", "riser-hit", "heartbeat", "metal-hits", "sword-clash", "sword-draw", "footsteps-stone", "piano-flourish", "trex-roar", "whoosh", "none").
-   - "sfx_prompt": Prompt acústico descritivo em inglês para a API ElevenLabs condizente com o cenário.
+${systemPromptPart}
 8. EXPRESSÃO DO AVATAR ("avatarSprite"):
    - Escolha o sprite mais adequado para a emoção da fala entre: ${VALID_AVATAR_SPRITES.map((s) => `"${s}"`).join(', ')}.
 9. LOOP PERFEITO / SEAMLESS LOOP NO ROTEIRO FINAL:
@@ -1254,7 +1282,8 @@ A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
             },
             visual_description: { type: 'STRING' },
             imagePrompt: { type: 'STRING' },
-            sfx_suggestion: { type: 'STRING' },
+            sfx_suggestion: { type: 'STRING', enum: enumSlugs },
+            sfx_label: { type: 'STRING' },
             sfx_prompt: { type: 'STRING' },
           },
           required: [
@@ -1265,6 +1294,7 @@ A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
             'visual_description',
             'imagePrompt',
             'sfx_suggestion',
+            'sfx_label',
             'sfx_prompt',
           ],
         },
@@ -1347,6 +1377,10 @@ A TUA MISSÃO AO REVISAR E APROVAR O ROTEIRO:
                 incomingDialogues.map((d) => d.text).join(' ') ||
                 reviewedScene.text ||
                 '',
+              sfx_label:
+                reviewedScene.sfx_label || originalInput?.sfx_label || '',
+              custom_sfx_url:
+                originalInput?.custom_sfx_url ?? null,
             };
           });
 
