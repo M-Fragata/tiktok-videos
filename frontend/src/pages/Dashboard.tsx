@@ -79,9 +79,8 @@ interface TikTokDashboardPayload {
 }
 
 /**
- * Formata o tempo decorrido desde a última sincronização.
- * Requisito estrito do usuário:
- * "com um texto simples de 2 palavras maximo, numero + 1 palavra" (ex: "Agora", "1 minuto", "5 minutos", "2 horas", "1 dia")
+ * Formata o tempo decorrido desde a última sincronização de forma curta e discreta
+ * (ex: "Agora", "Há 1 min", "Há 5 min", "Há 2 h", "Há 1 d").
  */
 function formatSyncTimeAgo(isoDate: string | null | undefined): string {
   if (!isoDate) return 'Nunca';
@@ -95,14 +94,14 @@ function formatSyncTimeAgo(isoDate: string | null | undefined): string {
   }
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) {
-    return `${diffMin} ${diffMin === 1 ? 'minuto' : 'minutos'}`;
+    return `Há ${diffMin} min`;
   }
   const diffHours = Math.floor(diffMin / 60);
   if (diffHours < 24) {
-    return `${diffHours} ${diffHours === 1 ? 'hora' : 'horas'}`;
+    return `Há ${diffHours} h`;
   }
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} ${diffDays === 1 ? 'dia' : 'dias'}`;
+  return `Há ${diffDays} d`;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -502,55 +501,14 @@ export const Dashboard: React.FC = () => {
 
       {/* ─── CONTEÚDO PRINCIPAL ─── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header Superior com Status de Sincronização */}
+        {/* Header Superior */}
         <header className="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur sticky top-0 z-20 px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <span>Painel de Performance</span>
               <span className="text-slate-500">/</span>
-              <span className="text-cyan-400 text-sm font-semibold">TikTok</span>
+              <span className="text-amber-400 text-sm font-semibold">TikTok</span>
             </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Indicador de tempo sincronizado conforme pedido: 2 palavras no máximo (número + 1 palavra) */}
-            <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/90 px-3.5 py-1.5 text-xs shadow-inner">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-slate-400 text-[11px]">Sincronizado há:</span>
-              <span className="font-bold text-slate-100 text-xs">
-                {formatSyncTimeAgo(data?.lastSyncAt)}
-              </span>
-            </div>
-
-            {/* Botão Sincronizar Agora */}
-            <button
-              onClick={handleManualSync}
-              disabled={isSyncing}
-              className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-750 hover:text-white transition disabled:opacity-50 active:scale-95 shadow-sm"
-              title="Buscar métricas mais recentes da API oficial do TikTok"
-            >
-              <svg
-                className={`w-3.5 h-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
-            </button>
-
-            {/* Botão Conectar / Reconectar */}
-            <button
-              onClick={handleConnectTikTok}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
-              title="Renovar autorização OAuth do TikTok"
-            >
-              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-              <span>Reconectar</span>
-            </button>
           </div>
         </header>
 
@@ -589,7 +547,7 @@ export const Dashboard: React.FC = () => {
             </div>
           ) : !data?.connected || !data?.account ? (
             <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-cyan-400 mb-4 border border-slate-700">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-amber-400 mb-4 border border-slate-700">
                 <svg className="w-7 h-7 fill-current" viewBox="0 0 24 24">
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.69 6.34 6.34 0 0 0 9.35 22a6.33 6.33 0 0 0 6.34-6.31V9.47a8.16 8.16 0 0 0 4.9 1.62v-3.5a4.85 4.85 0 0 1-1-.9z" />
                 </svg>
@@ -600,7 +558,7 @@ export const Dashboard: React.FC = () => {
               </p>
               <button
                 onClick={handleConnectTikTok}
-                className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition"
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-orange-400 transition"
               >
                 Conectar TikTok Oficial
               </button>
@@ -609,47 +567,88 @@ export const Dashboard: React.FC = () => {
             <>
               {/* ─── 1. ANÁLISE DO PERFIL & CABEÇALHO DO CRIADOR ─── */}
               <section className="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-900/40 p-6 shadow-xl backdrop-blur">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-800/80">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-800/80">
                   <div className="flex items-center gap-5">
-                    {/* Foto do Perfil */}
-                    <div className="relative">
+                    {/* Foto do Perfil (Link clicável para o TikTok) */}
+                    <a
+                      href={data.account.profileDeepLink || 'https://www.tiktok.com/@billy_aventureiro'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abrir perfil no TikTok"
+                      className="relative group block rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500/70"
+                    >
                       {data.account.avatarUrl ? (
                         <img
                           src={data.account.avatarUrl}
                           alt={data.account.displayName || 'TikTok Creator'}
-                          className="h-20 w-20 rounded-2xl object-cover border-2 border-cyan-500/40 shadow-lg shadow-cyan-500/10"
+                          className="h-20 w-20 rounded-2xl object-cover border-2 border-amber-500/40 group-hover:border-amber-400 shadow-lg shadow-amber-500/10 transition"
                         />
                       ) : (
-                        <div className="h-20 w-20 rounded-2xl bg-slate-800 flex items-center justify-center text-xl font-bold text-slate-400 border border-slate-700">
+                        <div className="h-20 w-20 rounded-2xl bg-slate-800 flex items-center justify-center text-xl font-bold text-slate-400 border border-slate-700 group-hover:border-amber-400 transition">
                           {data.account.displayName?.[0] || 'T'}
                         </div>
                       )}
-                      <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-lg bg-black text-white border border-slate-700 shadow">
-                        <svg className="w-3.5 h-3.5 fill-current text-cyan-400" viewBox="0 0 24 24">
+                      <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-lg bg-black text-amber-400 border border-slate-700 group-hover:border-amber-500/60 shadow transition">
+                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                           <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.69 6.34 6.34 0 0 0 9.35 22a6.33 6.33 0 0 0 6.34-6.31V9.47a8.16 8.16 0 0 0 4.9 1.62v-3.5a4.85 4.85 0 0 1-1-.9z" />
                         </svg>
                       </span>
-                    </div>
+                    </a>
 
                     {/* Dados Básicos & Bio */}
                     <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-xl font-bold text-white tracking-tight">
-                          {data.account.displayName || 'Billy, O aventureiro!'}
-                        </h2>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <a
+                          href={data.account.profileDeepLink || 'https://www.tiktok.com/@billy_aventureiro'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group/name inline-flex items-center gap-1.5 text-xl font-bold text-white tracking-tight hover:text-amber-400 transition-colors"
+                        >
+                          <span>{data.account.displayName || 'Billy, O aventureiro!'}</span>
+                          <svg
+                            className="w-3.5 h-3.5 text-slate-500 group-hover/name:text-amber-400 transition-colors"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </a>
+
                         {data.account.isVerified && (
-                          <span className="text-cyan-400" title="Conta Verificada">
+                          <span className="text-amber-400" title="Conta Verificada">
                             <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                             </svg>
                           </span>
                         )}
-                        <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11px] font-mono text-slate-400 border border-slate-700">
-                          @billy_aventureiro
-                        </span>
-                        <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30">
-                          Sandbox
-                        </span>
+
+                        <a
+                          href={data.account.profileDeepLink || 'https://www.tiktok.com/@billy_aventureiro'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-slate-800/90 px-2 py-0.5 text-[11px] font-mono text-slate-400 border border-slate-700 hover:border-amber-500/50 hover:text-amber-400 transition-colors"
+                        >
+                          <span>@billy_aventureiro</span>
+                          <svg
+                            className="w-2.5 h-2.5 opacity-70"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </a>
                       </div>
 
                       {data.account.bioDescription && (
@@ -660,21 +659,38 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Ações / Links Externos */}
-                  <div className="flex items-center gap-2">
-                    {data.account.profileDeepLink && (
-                      <a
-                        href={data.account.profileDeepLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-750 hover:text-white transition shadow-sm"
+                  {/* Status de Sincronização & Refresh Compacto (Canto Superior Direito do Card) */}
+                  <div className="flex items-center gap-2.5 self-end md:self-start">
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      <span>{formatSyncTimeAgo(data.lastSyncAt)}</span>
+                    </div>
+                    <button
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      title="Sincronizar dados"
+                      aria-label="Sincronizar dados"
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition active:scale-95 disabled:opacity-50 ${
+                        isSyncing
+                          ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                          : 'border-slate-800 bg-slate-900/80 text-slate-400 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-400'
+                      }`}
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                       >
-                        <span>Ver no TikTok</span>
-                        <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    )}
+                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                        <path d="M16 16h5v5" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
