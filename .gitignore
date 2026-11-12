@@ -15,3 +15,5 @@ backend/storage/*
 
 
 backend/temp_ideation_prompt.txt
+
+backend/prisma/dev.db.bak
