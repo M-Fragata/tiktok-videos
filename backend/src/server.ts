@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { prisma } from './lib/prisma.ts';
 import { videoRoutes } from './routes/video.routes.ts';
+import { tiktokRoutes } from './routes/tiktok.routes.ts';
 import {
   RENDERS_OUTPUT_DIR,
   STORAGE_OUTPUT_DIR,
@@ -28,6 +29,7 @@ app.use('/storage', express.static(STORAGE_OUTPUT_DIR));
 
 // Rotas da API
 app.use('/api', videoRoutes);
+app.use('/api/tiktok', tiktokRoutes);
 
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'fragata-shorts-backend' });

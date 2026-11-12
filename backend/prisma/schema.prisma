@@ -8,12 +8,13 @@ datasource db {
 }
 
 model Video {
-  id            String   @id @default(uuid())
+  id            String        @id @default(uuid())
   theme         String
-  status        String   @default("PENDING")
+  status        String        @default("PENDING")
   videoUrl      String?
   remotionProps Json?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime      @default(now())
+  tiktokVideos  TikTokVideo[]
 
   @@map("videos")
 }
@@ -27,4 +28,53 @@ model CustomSfx {
   createdAt DateTime @default(now())
 
   @@map("custom_sfx")
+}
+
+model TikTokAccountSnapshot {
+  id              String   @id @default(uuid())
+  openId          String
+  unionId         String?
+  displayName     String?
+  avatarUrl       String?
+  bioDescription  String?
+  profileDeepLink String?
+  isVerified      Boolean  @default(false)
+  followerCount   Int      @default(0)
+  followingCount  Int      @default(0)
+  likesCount      Int      @default(0)
+  videoCount      Int      @default(0)
+  recordedAt      DateTime @default(now())
+
+  @@map("tiktok_account_snapshots")
+}
+
+model TikTokVideo {
+  id               String                @id
+  createTime       Int?
+  title            String?
+  videoDescription String?
+  duration         Int?
+  coverImageUrl    String?
+  shareUrl         String?
+  embedLink        String?
+  localVideoId     String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  localVideo       Video?                @relation(fields: [localVideoId], references: [id], onDelete: SetNull)
+  snapshots        TikTokVideoSnapshot[]
+
+  @@map("tiktok_videos")
+}
+
+model TikTokVideoSnapshot {
+  id            String      @id @default(uuid())
+  tiktokVideoId String
+  tiktokVideo   TikTokVideo @relation(fields: [tiktokVideoId], references: [id], onDelete: Cascade)
+  viewCount     Int         @default(0)
+  likeCount     Int         @default(0)
+  commentCount  Int         @default(0)
+  shareCount    Int         @default(0)
+  recordedAt    DateTime    @default(now())
+
+  @@map("tiktok_video_snapshots")
 }
