@@ -13,3 +13,5 @@ backend/storage/*
 *.db-journal
 .DS_Store
 
+
+backend/temp_ideation_prompt.txt

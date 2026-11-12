@@ -1,6 +1,7 @@
 import { listAllSfxOptions, type SfxOption } from './sfx-library.service.ts';
 import { getCharacterVoicesPromptPart } from './voice-catalog.service.ts';
 import { ScriptPromptBuilder } from '../prompts/prompt-builder.ts';
+import { saveTempIdeationPrompt } from './script-bible.service.ts';
 import type {
   ContentBalance,
   EpisodeFormat,
@@ -163,6 +164,104 @@ export function buildAvatarPromptDescriptor(
   const neckPhrase = neckAccessory ? `, ${neckAccessory}` : '';
 
   return `2D cartoon stickman protagonist with a smooth round white head, a distinct solid white capsule torso with smooth thickness outlined in clean ${strokeColor} ink (NOT a stick-line torso), thin stick-figure arms and legs, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}`;
+}
+
+const CANDIDATE_GEMINI_MODELS = [
+  'gemini-3.8-flash',
+] as const;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Executa chamada ao Google Gemini com fallback entre modelos e até 3 tentativas por modelo
+ * em erros transitórios (503, 429, timeout ou rede).
+ */
+async function callGeminiWithRetry<T>(params: {
+  apiKey: string;
+  promptText: string;
+  responseSchema: Record<string, unknown>;
+  logPrefix: string;
+  maxAttemptsPerModel?: number;
+  timeoutMs?: number;
+  validate?: (parsed: T) => boolean;
+}): Promise<{ model: string; parsed: T }> {
+  const maxAttempts = params.maxAttemptsPerModel ?? 3;
+  const timeoutMs = params.timeoutMs ?? 60_000;
+
+  for (const model of CANDIDATE_GEMINI_MODELS) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        console.log(
+          `${params.logPrefix} Solicitando ao modelo ${model} (tentativa ${attempt}/${maxAttempts})...`
+        );
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${params.apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(timeoutMs),
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: params.promptText }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseSchema: params.responseSchema,
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          const code = Number(data.error.code || response.status);
+          console.warn(
+            `${params.logPrefix} Modelo ${model} retornou erro (${code}) [tentativa ${attempt}/${maxAttempts}]: ${data.error.message}`
+          );
+          if (code === 400 || code === 403 || code === 404) {
+            break;
+          }
+          if (attempt < maxAttempts) {
+            await sleep(attempt * 1500);
+          }
+          continue;
+        }
+
+        const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawJson) {
+          console.warn(
+            `${params.logPrefix} Modelo ${model} retornou resposta vazia [tentativa ${attempt}/${maxAttempts}].`
+          );
+          if (attempt < maxAttempts) {
+            await sleep(attempt * 1000);
+          }
+          continue;
+        }
+
+        const parsed = JSON.parse(rawJson) as T;
+        if (params.validate && !params.validate(parsed)) {
+          console.warn(
+            `${params.logPrefix} Modelo ${model} retornou estrutura incompleta [tentativa ${attempt}/${maxAttempts}].`
+          );
+          if (attempt < maxAttempts) {
+            await sleep(attempt * 1000);
+          }
+          continue;
+        }
+
+        return { model, parsed };
+      } catch (err) {
+        console.warn(
+          `${params.logPrefix} Falha no modelo ${model} [tentativa ${attempt}/${maxAttempts}]:`,
+          err instanceof Error ? err.message : err
+        );
+        if (attempt < maxAttempts) {
+          await sleep(attempt * 1500);
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    'Falha ao gerar resposta no Google Gemini com os modelos e tentativas disponíveis.'
+  );
 }
 
 const DURATION_RULES: Record<
@@ -392,89 +491,42 @@ Retorne APENAS um objeto JSON válido neste formato exato:
     required: ['scenes'],
   };
 
-  const candidateModels = [
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-  ];
+  const { model, parsed } = await callGeminiWithRetry<GeneratedScript>({
+    apiKey,
+    promptText: `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${theme}`,
+    responseSchema,
+    logPrefix: '[Gemini]',
+    validate: (p) => Array.isArray(p.scenes) && p.scenes.length > 0,
+  });
 
-  for (const model of candidateModels) {
-    try {
-      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
+  parsed.scenes = parsed.scenes.map((s, idx) => {
+    const mappedDialogues =
+      s.dialogues && s.dialogues.length > 0
+        ? s.dialogues.map((d, dIdx) => ({
+            id: d.id || `dlg_${idx}_${dIdx}`,
+            speaker: d.speaker || 'protagonist',
+            text: d.text || '',
+          }))
+        : [
             {
-              parts: [
-                {
-                  text: `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${theme}`,
-                },
-              ],
+              id: `dlg_${idx}_0`,
+              speaker: s.speaker || 'protagonist',
+              text: s.text || '',
             },
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-      });
+          ];
 
-      const data = await response.json();
+    return {
+      ...s,
+      dialogues: mappedDialogues,
+      speaker: mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
+      text: mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
+    };
+  });
 
-      if (data.error) {
-        console.warn(
-          `[Gemini] Modelo ${model} retornou erro (${data.error.code}): ${data.error.message}`
-        );
-        continue;
-      }
-
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) {
-        continue;
-      }
-
-      const parsed = JSON.parse(rawJson) as GeneratedScript;
-      if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
-        parsed.scenes = parsed.scenes.map((s, idx) => {
-          const mappedDialogues =
-            s.dialogues && s.dialogues.length > 0
-              ? s.dialogues.map((d, dIdx) => ({
-                  id: d.id || `dlg_${idx}_${dIdx}`,
-                  speaker: d.speaker || 'protagonist',
-                  text: d.text || '',
-                }))
-              : [
-                  {
-                    id: `dlg_${idx}_0`,
-                    speaker: s.speaker || 'protagonist',
-                    text: s.text || '',
-                  },
-                ];
-
-          return {
-            ...s,
-            dialogues: mappedDialogues,
-            speaker: mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
-            text: mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
-          };
-        });
-
-        console.log(
-          `[Gemini] Roteiro Multi-Voz (${durationPreset}) gerado com sucesso usando ${model} (${parsed.scenes.length} cenas).`
-        );
-        return parsed;
-      }
-    } catch (err) {
-      console.warn(`[Gemini] Falha ao tentar modelo ${model}:`, err);
-    }
-  }
-
-  throw new Error(
-    'Falha ao gerar roteiro no Google Gemini com os modelos disponíveis.'
+  console.log(
+    `[Gemini] Roteiro Multi-Voz (${durationPreset}) gerado com sucesso usando ${model} (${parsed.scenes.length} cenas).`
   );
+  return parsed;
 }
 
 export interface GenerateIdeationParams {
@@ -698,162 +750,121 @@ export async function generateTimeMachineIdeation(
     required: ['options'],
   };
 
-  const candidateModels = [
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-  ];
+  let parsedResult: { model: string; parsed: GeneratedIdeation };
+  const fullPromptText = `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${params.theme}`;
 
-  for (const model of candidateModels) {
-    try {
-      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `${systemInstruction}\n\n=== BRIEFING & FATOS HISTÓRICOS DA VIAGEM FORNECIDOS PELO UTILIZADOR ===\n${params.theme}`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        console.warn(
-          `[Gemini Ideation] Modelo ${model} retornou erro (${data.error.code}): ${data.error.message}`
-        );
-        continue;
-      }
-
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) {
-        continue;
-      }
-
-      const parsed = JSON.parse(rawJson) as GeneratedIdeation;
-      if (Array.isArray(parsed.options) && parsed.options.length > 0) {
-        parsed.options = parsed.options.map((opt) => {
-          // 1. Higieniza o narrative_plan do Seamless Loop se presente
-          let sanitizedPlan = opt.narrative_plan;
-          if (sanitizedPlan) {
-            sanitizedPlan = {
-              ...sanitizedPlan,
-              loop_closing_fragment: (sanitizedPlan.loop_closing_fragment || '')
-                .replace(/[.!?:;…]+$/, '')
-                .trim(),
-              loop_opening_fragment: (
-                sanitizedPlan.loop_opening_fragment || ''
-              ).trim(),
-              bridge_full_sentence: (
-                sanitizedPlan.bridge_full_sentence || ''
-              ).trim(),
-            };
-          }
-
-          // 2. Mapeia diálogos e oradores
-          const mappedScenes = (opt.scenes || []).map((s, sIdx) => {
-            const mappedDialogues =
-              s.dialogues && s.dialogues.length > 0
-                ? s.dialogues.map((d, dIdx) => ({
-                    id: d.id || `dlg_${opt.id}_${sIdx}_${dIdx}`,
-                    speaker: d.speaker || s.speaker || 'protagonist',
-                    text: d.text || '',
-                  }))
-                : [
-                    {
-                      id: `dlg_${opt.id}_${sIdx}_0`,
-                      speaker: s.speaker || 'protagonist',
-                      text: s.text || '',
-                    },
-                  ];
-
-            return {
-              ...s,
-              dialogues: mappedDialogues,
-              speaker:
-                mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
-              text:
-                mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
-            };
-          });
-
-          // 3. Higienização Cirúrgica de Loop: Remove pontuação terminal estritamente
-          // da ÚLTIMA fala do ÚLTIMO diálogo da ÚLTIMA cena para garantir entonação de áudio fluida
-          if (mappedScenes.length > 0) {
-            const lastScene = mappedScenes[mappedScenes.length - 1];
-            if (lastScene.dialogues && lastScene.dialogues.length > 0) {
-              const lastDialogue =
-                lastScene.dialogues[lastScene.dialogues.length - 1];
-              lastDialogue.text = lastDialogue.text
-                .replace(/[.!?:;…]+$/, '')
-                .trim();
-              lastScene.text = lastScene.dialogues
-                .map((d) => d.text)
-                .join(' ');
-            } else if (lastScene.text) {
-              lastScene.text = lastScene.text.replace(/[.!?:;…]+$/, '').trim();
-            }
-          }
-
-          // 4. Validação e Garantia da Regra de bridge_speaker (Mesmo orador no início e fim do loop)
-          if (mappedScenes.length > 0 && sanitizedPlan?.bridge_speaker) {
-            const expectedSpeaker =
-              sanitizedPlan.bridge_speaker === 'narrator'
-                ? 'narrator'
-                : 'protagonist';
-            const firstScene = mappedScenes[0];
-            const lastScene = mappedScenes[mappedScenes.length - 1];
-
-            // Garante que a fala de abertura da cena 1 pertence ao bridge_speaker
-            if (firstScene.dialogues && firstScene.dialogues.length > 0) {
-              firstScene.dialogues[0].speaker = expectedSpeaker;
-              firstScene.speaker = expectedSpeaker;
-            } else {
-              firstScene.speaker = expectedSpeaker;
-            }
-
-            // Garante que a fala final da última cena pertence ao bridge_speaker
-            if (lastScene.dialogues && lastScene.dialogues.length > 0) {
-              const lastDialogue =
-                lastScene.dialogues[lastScene.dialogues.length - 1];
-              lastDialogue.speaker = expectedSpeaker;
-            } else {
-              lastScene.speaker = expectedSpeaker;
-            }
-          }
-
-          return {
-            ...opt,
-            narrative_plan: sanitizedPlan,
-            scenes: mappedScenes,
-          };
-        });
-
-        console.log(
-          `[Gemini Ideation] ${parsed.options.length} opções de roteiro (${duration}) geradas com sucesso usando ${model}.`
-        );
-        return parsed;
-      }
-    } catch (err) {
-      console.warn(`[Gemini Ideation] Falha ao tentar modelo ${model}:`, err);
-    }
+  try {
+    parsedResult = await callGeminiWithRetry<GeneratedIdeation>({
+      apiKey,
+      promptText: fullPromptText,
+      responseSchema,
+      logPrefix: '[Gemini Ideation]',
+      validate: (p) => Array.isArray(p.options) && p.options.length > 0,
+    });
+  } catch (err) {
+    const errorDetails = err instanceof Error ? err.message : String(err);
+    const savedPath = await saveTempIdeationPrompt(fullPromptText, {
+      theme: params.theme,
+    });
+    console.error(
+      `[Gemini Ideation] Todas as tentativas no Gemini falharam (${errorDetails}). Prompt salvo para intervenção do assistente em: ${savedPath}`
+    );
+    throw new Error(
+      `Falha na geração com Gemini (alta demanda/quota). O prompt completo foi salvo em ${savedPath}. Peça ao assistente para gerar a resposta com base nele.`
+    );
   }
 
-  throw new Error(
-    'Falha ao gerar opções de roteiro no Google Gemini com os modelos disponíveis.'
+  const { model, parsed } = parsedResult;
+
+  parsed.options = parsed.options.map((opt) => {
+    // 1. Higieniza o narrative_plan do Seamless Loop se presente
+    let sanitizedPlan = opt.narrative_plan;
+    if (sanitizedPlan) {
+      sanitizedPlan = {
+        ...sanitizedPlan,
+        loop_closing_fragment: (sanitizedPlan.loop_closing_fragment || '')
+          .replace(/[.!?:;…]+$/, '')
+          .trim(),
+        loop_opening_fragment: (
+          sanitizedPlan.loop_opening_fragment || ''
+        ).trim(),
+        bridge_full_sentence: (sanitizedPlan.bridge_full_sentence || '').trim(),
+      };
+    }
+
+    // 2. Mapeia diálogos e oradores
+    const mappedScenes = (opt.scenes || []).map((s, sIdx) => {
+      const mappedDialogues =
+        s.dialogues && s.dialogues.length > 0
+          ? s.dialogues.map((d, dIdx) => ({
+              id: d.id || `dlg_${opt.id}_${sIdx}_${dIdx}`,
+              speaker: d.speaker || s.speaker || 'protagonist',
+              text: d.text || '',
+            }))
+          : [
+              {
+                id: `dlg_${opt.id}_${sIdx}_0`,
+                speaker: s.speaker || 'protagonist',
+                text: s.text || '',
+              },
+            ];
+
+      return {
+        ...s,
+        dialogues: mappedDialogues,
+        speaker: mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
+        text: mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
+      };
+    });
+
+    // 3. Higienização Cirúrgica de Loop: Remove pontuação terminal estritamente
+    // da ÚLTIMA fala do ÚLTIMO diálogo da ÚLTIMA cena para garantir entonação de áudio fluida
+    if (mappedScenes.length > 0) {
+      const lastScene = mappedScenes[mappedScenes.length - 1];
+      if (lastScene.dialogues && lastScene.dialogues.length > 0) {
+        const lastDialogue = lastScene.dialogues[lastScene.dialogues.length - 1];
+        lastDialogue.text = lastDialogue.text.replace(/[.!?:;…]+$/, '').trim();
+        lastScene.text = lastScene.dialogues.map((d) => d.text).join(' ');
+      } else if (lastScene.text) {
+        lastScene.text = lastScene.text.replace(/[.!?:;…]+$/, '').trim();
+      }
+    }
+
+    // 4. Validação e Garantia da Regra de bridge_speaker (Mesmo orador no início e fim do loop)
+    if (mappedScenes.length > 0 && sanitizedPlan?.bridge_speaker) {
+      const expectedSpeaker =
+        sanitizedPlan.bridge_speaker === 'narrator' ? 'narrator' : 'protagonist';
+      const firstScene = mappedScenes[0];
+      const lastScene = mappedScenes[mappedScenes.length - 1];
+
+      // Garante que a fala de abertura da cena 1 pertence ao bridge_speaker
+      if (firstScene.dialogues && firstScene.dialogues.length > 0) {
+        firstScene.dialogues[0].speaker = expectedSpeaker;
+        firstScene.speaker = expectedSpeaker;
+      } else {
+        firstScene.speaker = expectedSpeaker;
+      }
+
+      // Garante que a fala final da última cena pertence ao bridge_speaker
+      if (lastScene.dialogues && lastScene.dialogues.length > 0) {
+        const lastDialogue = lastScene.dialogues[lastScene.dialogues.length - 1];
+        lastDialogue.speaker = expectedSpeaker;
+      } else {
+        lastScene.speaker = expectedSpeaker;
+      }
+    }
+
+    return {
+      ...opt,
+      narrative_plan: sanitizedPlan,
+      scenes: mappedScenes,
+    };
+  });
+
+  console.log(
+    `[Gemini Ideation] ${parsed.options.length} opções de roteiro (${duration}) geradas com sucesso usando ${model}.`
   );
+  return parsed;
 }
 
 /**
@@ -915,39 +926,21 @@ export async function generateSingleScenePrompt(params: {
     ],
   };
 
-  const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-2.5-flash',
-    'gemini-3.1-flash-lite',
-  ];
+  const { parsed } = await callGeminiWithRetry<{
+    imagePrompt: string;
+    visual_description: string;
+    sfx_suggestion: string;
+    sfx_label: string;
+    sfx_prompt: string;
+    avatarSprite: AvatarSprite;
+  }>({
+    apiKey,
+    promptText: systemInstruction,
+    responseSchema,
+    logPrefix: '[Gemini Single Scene Prompt]',
+  });
 
-  for (const model of candidateModels) {
-    try {
-      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemInstruction }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-      });
-
-      const data = await response.json();
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawJson) {
-        return JSON.parse(rawJson);
-      }
-    } catch (e) {
-      console.warn(`[Gemini Single Scene Prompt] Falha no modelo ${model}:`, e);
-    }
-  }
-
-  throw new Error('Falha ao gerar metadados visuais da cena com Gemini.');
+  return parsed;
 }
 
 export interface FinalScriptSceneInput {
@@ -1087,122 +1080,74 @@ export async function reviewAndEnrichFinalScript(params: {
     required: ['scenes'],
   };
 
-  const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-2.5-flash',
-    'gemini-3.1-flash-lite',
-  ];
+  const { model, parsed } = await callGeminiWithRetry<{ scenes: ScriptScene[] }>({
+    apiKey,
+    promptText: `${systemInstruction}\n\n=== SEQUÊNCIA DO ROTEIRO FINAL SUBMETIDO PELO UTILIZADOR ===\n${formattedScenesText}`,
+    responseSchema,
+    logPrefix: '[Gemini Final Script Review]',
+    validate: (p) => Array.isArray(p.scenes) && p.scenes.length > 0,
+  });
 
-  for (const model of candidateModels) {
-    try {
-      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `${systemInstruction}\n\n=== SEQUÊNCIA DO ROTEIRO FINAL SUBMETIDO PELO UTILIZADOR ===\n${formattedScenesText}`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-      });
+  console.log(
+    `[Gemini Final Script Review] Roteiro final de ${parsed.scenes.length} cenas revisado e enriquecido com sucesso usando ${model}.`
+  );
 
-      const data = await response.json();
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawJson) {
-        const parsed = JSON.parse(rawJson);
-        if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
-          console.log(
-            `[Gemini Final Script Review] Roteiro final de ${parsed.scenes.length} cenas revisado e enriquecido com sucesso usando ${model}.`
-          );
-          const finalReviewedScenes = (
-            parsed.scenes as ScriptScene[]
-          ).map((reviewedScene, sIdx) => {
-            const originalInput = params.scenes[sIdx];
-            const incomingDialogues =
-              reviewedScene.dialogues && reviewedScene.dialogues.length > 0
-                ? reviewedScene.dialogues.map((d, dIdx) => ({
-                    id:
-                      originalInput?.dialogues?.[dIdx]?.id ||
-                      `dlg_${sIdx}_${dIdx}`,
-                    speaker: d.speaker || 'protagonist',
-                    characterName:
-                      d.characterName ||
-                      originalInput?.dialogues?.[dIdx]?.characterName,
-                    voiceId:
-                      d.voiceId ||
-                      originalInput?.dialogues?.[dIdx]?.voiceId,
-                    text: d.text || '',
-                  }))
-                : originalInput?.dialogues && originalInput.dialogues.length > 0
-                  ? originalInput.dialogues
-                  : [
-                      {
-                        id: `dlg_${sIdx}_0`,
-                        speaker:
-                          reviewedScene.speaker ||
-                          originalInput?.speaker ||
-                          'protagonist',
-                        characterName: originalInput?.dialogues?.[0]?.characterName,
-                        voiceId: originalInput?.dialogues?.[0]?.voiceId,
-                        text: reviewedScene.text || originalInput?.text || '',
-                      },
-                    ];
+  const finalReviewedScenes = parsed.scenes.map((reviewedScene, sIdx) => {
+    const originalInput = params.scenes[sIdx];
+    const incomingDialogues =
+      reviewedScene.dialogues && reviewedScene.dialogues.length > 0
+        ? reviewedScene.dialogues.map((d, dIdx) => ({
+            id: originalInput?.dialogues?.[dIdx]?.id || `dlg_${sIdx}_${dIdx}`,
+            speaker: d.speaker || 'protagonist',
+            characterName:
+              d.characterName ||
+              originalInput?.dialogues?.[dIdx]?.characterName,
+            voiceId: d.voiceId || originalInput?.dialogues?.[dIdx]?.voiceId,
+            text: d.text || '',
+          }))
+        : originalInput?.dialogues && originalInput.dialogues.length > 0
+          ? originalInput.dialogues
+          : [
+              {
+                id: `dlg_${sIdx}_0`,
+                speaker:
+                  reviewedScene.speaker ||
+                  originalInput?.speaker ||
+                  'protagonist',
+                characterName: originalInput?.dialogues?.[0]?.characterName,
+                voiceId: originalInput?.dialogues?.[0]?.voiceId,
+                text: reviewedScene.text || originalInput?.text || '',
+              },
+            ];
 
-            return {
-              ...reviewedScene,
-              dialogues: incomingDialogues,
-              speaker:
-                incomingDialogues[0]?.speaker ||
-                reviewedScene.speaker ||
-                'protagonist',
-              text:
-                incomingDialogues.map((d) => d.text).join(' ') ||
-                reviewedScene.text ||
-                '',
-              sfx_label:
-                reviewedScene.sfx_label || originalInput?.sfx_label || '',
-              custom_sfx_url:
-                originalInput?.custom_sfx_url ?? null,
-            };
-          });
+    return {
+      ...reviewedScene,
+      dialogues: incomingDialogues,
+      speaker:
+        incomingDialogues[0]?.speaker ||
+        reviewedScene.speaker ||
+        'protagonist',
+      text:
+        incomingDialogues.map((d) => d.text).join(' ') ||
+        reviewedScene.text ||
+        '',
+      sfx_label: reviewedScene.sfx_label || originalInput?.sfx_label || '',
+      custom_sfx_url: originalInput?.custom_sfx_url ?? null,
+    };
+  });
 
-          // Higienização de Seamless Loop: remove pontuação terminal estritamente
-          // da última fala do último orador da última cena
-          if (finalReviewedScenes.length > 0) {
-            const lastScene =
-              finalReviewedScenes[finalReviewedScenes.length - 1];
-            if (lastScene.dialogues && lastScene.dialogues.length > 0) {
-              const lastDialogue =
-                lastScene.dialogues[lastScene.dialogues.length - 1];
-              lastDialogue.text = lastDialogue.text
-                .replace(/[.!?:;…]+$/, '')
-                .trim();
-              lastScene.text = lastScene.dialogues
-                .map((d) => d.text)
-                .join(' ');
-            } else if (lastScene.text) {
-              lastScene.text = lastScene.text.replace(/[.!?:;…]+$/, '').trim();
-            }
-          }
-
-          return finalReviewedScenes;
-        }
-      }
-    } catch (e) {
-      console.warn(`[Gemini Final Script Review] Falha no modelo ${model}:`, e);
+  // Higienização de Seamless Loop: remove pontuação terminal estritamente
+  // da última fala do último orador da última cena
+  if (finalReviewedScenes.length > 0) {
+    const lastScene = finalReviewedScenes[finalReviewedScenes.length - 1];
+    if (lastScene.dialogues && lastScene.dialogues.length > 0) {
+      const lastDialogue = lastScene.dialogues[lastScene.dialogues.length - 1];
+      lastDialogue.text = lastDialogue.text.replace(/[.!?:;…]+$/, '').trim();
+      lastScene.text = lastScene.dialogues.map((d) => d.text).join(' ');
+    } else if (lastScene.text) {
+      lastScene.text = lastScene.text.replace(/[.!?:;…]+$/, '').trim();
     }
   }
 
-  throw new Error('Falha ao revisar roteiro final com Google Gemini.');
+  return finalReviewedScenes;
 }

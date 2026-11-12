@@ -48,6 +48,10 @@ import {
   getSeriesFullHistoryForPrompt,
   listAllSeries,
 } from '../services/series.service.ts';
+import {
+  recordScriptBibleFinalPhase,
+  recordScriptBibleIdeationPhase,
+} from '../services/script-bible.service.ts';
 
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
@@ -282,6 +286,26 @@ export async function generateScriptController(
       },
     });
 
+    // FASE 1: Registra o script-bible.md com o briefing e as 4 opções completas de roteiro
+    try {
+      await recordScriptBibleIdeationPhase({
+        videoId: id,
+        theme,
+        durationPreset,
+        seriesMeta: effectiveSeriesContext
+          ? {
+              seriesId: effectiveSeriesContext.seriesId,
+              seriesTitle: effectiveSeriesContext.seriesTitle,
+              episodeNumber: effectiveSeriesContext.episodeNumber,
+            }
+          : undefined,
+        ideation: { options: formattedOptions as any },
+      });
+      console.log(`[ScriptBible] Fase 1 gravada para o vídeo ${id}`);
+    } catch (bibleErr) {
+      console.warn('[ScriptBible] Erro não-bloqueante ao gravar script-bible.md:', bibleErr);
+    }
+
     res.status(200).json({
       message: '4 opções de roteiro geradas com sucesso.',
       options: formattedOptions,
@@ -381,6 +405,17 @@ export async function generateSceneImagesController(
       },
     });
 
+    // FASE 2: Atualiza o script-bible.md com o Roteiro Final definitivo sincronizado com áudio
+    try {
+      await recordScriptBibleFinalPhase({
+        videoId: id,
+        remotionProps: updatedProps,
+      });
+      console.log(`[ScriptBible] Fase 2 gravada para o vídeo ${id}`);
+    } catch (bibleErr) {
+      console.warn('[ScriptBible] Erro não-bloqueante ao atualizar script-bible.md:', bibleErr);
+    }
+
     res.status(200).json({
       message: `2 variações B-Roll geradas para a cena #${sceneIndex + 1}.`,
       sceneIndex,
@@ -479,6 +514,17 @@ export async function generateAudioController(
         remotionProps: updatedProps,
       },
     });
+
+    // FASE 2: Atualiza o script-bible.md com o Roteiro Final definitivo sincronizado com áudio
+    try {
+      await recordScriptBibleFinalPhase({
+        videoId: id,
+        remotionProps: updatedProps,
+      });
+      console.log(`[ScriptBible] Fase 2 gravada para o vídeo ${id}`);
+    } catch (bibleErr) {
+      console.warn('[ScriptBible] Erro não-bloqueante ao atualizar script-bible.md:', bibleErr);
+    }
 
     res.status(200).json({
       message: 'Narração multi-voz gravada e sincronizada com sucesso.',
@@ -955,6 +1001,17 @@ export async function uploadSceneImageController(
       },
     });
 
+    // FASE 2: Atualiza o script-bible.md com o Roteiro Final definitivo sincronizado com áudio
+    try {
+      await recordScriptBibleFinalPhase({
+        videoId: id,
+        remotionProps: updatedProps,
+      });
+      console.log(`[ScriptBible] Fase 2 gravada para o vídeo ${id}`);
+    } catch (bibleErr) {
+      console.warn('[ScriptBible] Erro não-bloqueante ao atualizar script-bible.md:', bibleErr);
+    }
+
     res.status(200).json({
       message: `Imagem manual adicionada com sucesso à cena #${sceneIndex + 1}.`,
       sceneIndex,
@@ -1149,6 +1206,17 @@ export async function generateSceneSfxController(
         remotionProps: updatedProps,
       },
     });
+
+    // FASE 2: Atualiza o script-bible.md com o Roteiro Final definitivo sincronizado com áudio
+    try {
+      await recordScriptBibleFinalPhase({
+        videoId: id,
+        remotionProps: updatedProps,
+      });
+      console.log(`[ScriptBible] Fase 2 gravada para o vídeo ${id}`);
+    } catch (bibleErr) {
+      console.warn('[ScriptBible] Erro não-bloqueante ao atualizar script-bible.md:', bibleErr);
+    }
 
     res.status(200).json({
       message: 'Efeito sonoro gerado com sucesso via ElevenLabs.',
