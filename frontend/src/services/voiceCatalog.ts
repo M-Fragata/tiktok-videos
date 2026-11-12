@@ -1,4 +1,4 @@
-import type { VoiceCatalog, VoiceDefinition } from '../remotion/types';
+import type { VoiceCatalog } from '../remotion/types';
 
 export const DEFAULT_VOICE_CATALOG: VoiceCatalog = {
   narrator: {

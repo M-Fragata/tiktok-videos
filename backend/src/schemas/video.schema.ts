@@ -80,8 +80,12 @@ export const contentBalanceSchema = z.enum([
 export type ContentBalance = z.infer<typeof contentBalanceSchema>;
 
 export const seriesContextSchema = z.object({
+  isContinuation: z.boolean().optional().default(false),
+  seriesId: z.string().optional(),
+  seriesTitle: z.string().max(150).optional().default(''),
   episodeNumber: z.number().int().min(1).default(1),
-  previousContext: z.string().max(1000).optional().default(''),
+  previousContext: z.string().max(2000).optional().default(''),
+  resolvedHistory: z.string().optional(),
 });
 export type SeriesContext = z.infer<typeof seriesContextSchema>;
 

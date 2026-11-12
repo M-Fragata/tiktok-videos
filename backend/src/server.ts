@@ -35,7 +35,7 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'fragata-shorts-backend' });
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Fragata Shorts Back-end Express em execução em http://localhost:${PORT}`);
   try {
     const recovered = await prisma.video.updateMany({
@@ -51,3 +51,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.warn('[Auto-Recovery] Falha ao verificar vídeos pendentes na inicialização:', err);
   }
 });
+
+// Evita queda de conexão prematura em chamadas longas de IA (roteiros longos 65s, ElevenLabs, Remotion)
+server.requestTimeout = 600_000;
+server.headersTimeout = 610_000;

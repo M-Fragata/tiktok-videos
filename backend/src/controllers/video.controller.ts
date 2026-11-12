@@ -43,6 +43,11 @@ import {
   promoteSceneSfxToLibrary,
 } from '../services/sfx-library.service.ts';
 import { loadVoiceCatalog } from '../services/voice-catalog.service.ts';
+import {
+  ensureSeriesLinkForVideo,
+  getSeriesFullHistoryForPrompt,
+  listAllSeries,
+} from '../services/series.service.ts';
 
 function getPublicBaseUrl(): string {
   const port = Number(process.env.PORT) || 3333;
@@ -123,6 +128,39 @@ export async function generateScriptController(
       return;
     }
 
+    let effectiveSeriesContext = seriesContext;
+    if (episodeFormat === 'series') {
+      const linked = await ensureSeriesLinkForVideo({
+        videoId: id,
+        existingSeriesId: existingVideo.seriesId,
+        theme,
+        seriesContext,
+      });
+
+      let resolvedHistory = '';
+      if (seriesContext?.isContinuation && linked.seriesId) {
+        const historyResult = await getSeriesFullHistoryForPrompt(
+          linked.seriesId,
+          id
+        );
+        if (historyResult?.formattedHistory) {
+          resolvedHistory = historyResult.formattedHistory;
+          console.log(
+            `[Série - Continuação] Contexto histórico carregado (${historyResult.episodeCount} ep(s) anterior(es) da série "${linked.seriesTitle}").`
+          );
+        }
+      }
+
+      effectiveSeriesContext = {
+        isContinuation: Boolean(seriesContext?.isContinuation),
+        seriesId: linked.seriesId,
+        seriesTitle: linked.seriesTitle,
+        episodeNumber: seriesContext?.episodeNumber || 1,
+        previousContext: seriesContext?.previousContext || '',
+        resolvedHistory,
+      };
+    }
+
     console.log(
       `[Ideação - Etapa 1] Gerando 4 opções de roteiro no Gemini para "${theme}" (${durationPreset}) [formato: ${episodeFormat}, agência: ${protagonistAgency}, equilíbrio: ${contentBalance}]...`
     );
@@ -132,7 +170,7 @@ export async function generateScriptController(
       avatarConfig,
       selectedBgmVibe: bgmVibe,
       episodeFormat,
-      seriesContext,
+      seriesContext: effectiveSeriesContext,
       protagonistAgency,
       contentBalance,
     });
@@ -217,7 +255,15 @@ export async function generateScriptController(
         bgmVibe: resolvedBgm,
         episodeFormat:
           episodeFormat || currentStoryboard.episodeFormat || 'single',
-        seriesContext: seriesContext || currentStoryboard.seriesContext,
+        seriesContext: effectiveSeriesContext
+          ? {
+              isContinuation: effectiveSeriesContext.isContinuation,
+              seriesId: effectiveSeriesContext.seriesId,
+              seriesTitle: effectiveSeriesContext.seriesTitle,
+              episodeNumber: effectiveSeriesContext.episodeNumber,
+              previousContext: effectiveSeriesContext.previousContext,
+            }
+          : currentStoryboard.seriesContext,
         protagonistAgency:
           protagonistAgency ||
           currentStoryboard.protagonistAgency ||
@@ -1356,5 +1402,25 @@ export async function listVoicesController(
     res
       .status(500)
       .json({ error: 'Erro ao carregar catálogo de vozes.', details: msg });
+  }
+}
+
+/**
+ * GET /api/series
+ * Lista todas as séries existentes com contagem de episódios e prévia do último gancho.
+ */
+export async function listSeriesController(
+  _req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const series = await listAllSeries();
+    res.status(200).json({ series });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Series] Erro ao listar séries:', err);
+    res
+      .status(500)
+      .json({ error: 'Erro ao listar séries existentes.', details: msg });
   }
 }

@@ -150,11 +150,19 @@ export function formatEpisodeFormatBlock(
 ): string {
   if (format === 'series') {
     const epNum = context?.episodeNumber || 1;
-    const prevContextText = context?.previousContext?.trim()
-      ? `\nCONTEXTO DO EPISÓDIO ANTERIOR: "${context.previousContext.trim()}"\nInicie a narrativa ancorado organicamente nesta situação pendente, mas NUNCA use saudações pedantes ("no episódio anterior...", "continuando..."). O gancho de abertura deve entrar direto na ação!`
+    const seriesTitleLine = context?.seriesTitle?.trim()
+      ? `\nSÉRIE: "${context.seriesTitle.trim()}"`
       : '';
 
-    return `FORMATO DE NARRATIVA: MINI-SÉRIE (EPISÓDIO #${epNum} COM CLIFFHANGER).${prevContextText}
+    const historyBlock = context?.resolvedHistory?.trim()
+      ? `\n\nHISTÓRICO COMPLETO DOS EPISÓDIOS ANTERIORES DESTA SÉRIE (MEMÓRIA OBRIGATÓRIA):\n${context.resolvedHistory.trim()}\n\nDIRETRIZES ESTRITAS DE CONTINUAÇÃO:\n1. Dê continuidade imediata e orgânica a partir do cliffhanger/situação onde o episódio anterior terminou.\n2. NÃO repita os mesmos fatos históricos, piadas ou explicações já contados nos episódios anteriores — avance a trama e revele novos desdobramentos.\n3. NUNCA use frases clichês de recap ("no episódio anterior...", "como vimos na parte 1...", "continuando..."). Entre direto na ação da cena!`
+      : '';
+
+    const notesText = context?.previousContext?.trim()
+      ? `\n${context?.isContinuation ? 'NOTAS / DIREÇÃO EXTRA DO UTILIZADOR PARA ESTE EPISÓDIO' : 'PREMISSA / ARCO GERAL DA SÉRIE'}: "${context.previousContext.trim()}"`
+      : '';
+
+    return `FORMATO DE NARRATIVA: MINI-SÉRIE (EPISÓDIO #${epNum} COM CLIFFHANGER).${seriesTitleLine}${notesText}${historyBlock}
 - ESTRUTURA DO ARCO: O episódio é parte de uma saga contínua.
 - REVELAÇÃO DO CLÍMAX: O desfecho NÃO encerra o mistério completo por definitivo; ele resolve a situação imediata mas descobre uma revelação ainda mais intrigante, perigosa ou inacreditável (cliffhanger narrativo).
 - CONTINUIDADE DO SEAMLESS LOOP: Mesmo sendo episódico, a última fala engata obrigatoriamente na emenda sintática circular para a Cena 1, sem pontuação terminal. É EXPRESSAMENTE PROIBIDO usar CTAs como "curte para a parte seguinte", "veja a parte 2" ou "continua no próximo vídeo".`;

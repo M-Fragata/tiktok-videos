@@ -28,8 +28,23 @@ export type ProtagonistAgency = 'chaos_agent' | 'observer';
 export type ContentBalance = 'balanced' | 'comedy_action' | 'historical_focus';
 
 export interface SeriesContext {
+  isContinuation?: boolean;
+  seriesId?: string;
+  seriesTitle?: string;
   episodeNumber: number;
   previousContext?: string;
+}
+
+export interface SeriesSummary {
+  id: string;
+  title: string;
+  description?: string | null;
+  episodeCount: number;
+  lastEpisodeNumber: number;
+  nextEpisodeNumber: number;
+  lastVideoTheme?: string;
+  lastHookPreview?: string;
+  updatedAt: string;
 }
 
 export const EPISODE_FORMAT_OPTIONS: Array<{
@@ -39,12 +54,12 @@ export const EPISODE_FORMAT_OPTIONS: Array<{
 }> = [
   {
     value: 'single',
-    label: '🎬 Episódio Único',
+    label: '🎬 Único',
     description: 'Arco fechado e completo com mistério revelado',
   },
   {
     value: 'series',
-    label: '📺 Mini-Série',
+    label: '📺 Série',
     description: 'Arco episódico com gancho de suspense para o próximo capítulo',
   },
 ];
@@ -56,7 +71,7 @@ export const PROTAGONIST_AGENCY_OPTIONS: Array<{
 }> = [
   {
     value: 'chaos_agent',
-    label: '💥 Agente do Caos',
+    label: '💥 Caos',
     description: 'Billy toca em tudo, provoca desastres e interage diretamente',
   },
   {
@@ -78,12 +93,12 @@ export const CONTENT_BALANCE_OPTIONS: Array<{
   },
   {
     value: 'comedy_action',
-    label: '🤣 Comédia & Ação',
+    label: '🤣 Comédia',
     description: 'Mais gags visuais, tropeços e efeitos sonoros expressivos',
   },
   {
     value: 'historical_focus',
-    label: '🏛️ Curiosidade Histórica',
+    label: '🏛️ Histórico',
     description: 'Mais fatos reais e datas aprofundadas com humor pontual',
   },
 ];
@@ -155,7 +170,7 @@ export const BRIEFING_BGM_OPTIONS: Array<{
 }> = [
   {
     value: 'auto',
-    label: '🤖 Decisão da IA (Recomendado por Ângulo)',
+    label: '🤖 IA (Recomendado)',
   },
   ...BGM_VIBE_OPTIONS.map((opt) => ({
     value: opt.value as BriefingBgmOption,
@@ -412,7 +427,7 @@ export interface SubtitleStyleConfig {
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   animationType: 'karaoke',
   fontFamily: 'montserrat',
-  fontSize: 55,
+  fontSize: 54,
   primaryColor: '#FFFFFF',
   highlightColor: '#FBBF24',
   hasShadow: true,

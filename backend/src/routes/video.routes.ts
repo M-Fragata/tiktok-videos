@@ -10,6 +10,7 @@ import {
   generateScriptController,
   generateVideoController,
   getVideoByIdController,
+  listSeriesController,
   listSfxLibraryController,
   listVideosController,
   listVoicesController,
@@ -58,6 +59,9 @@ videoRoutes.delete('/sfx-library/:slug', deleteCustomSfxController);
 
 // Catálogo Central Multi-Voz ElevenLabs
 videoRoutes.get('/voices', listVoicesController);
+
+// Mini-Séries & Continuidade Episódica
+videoRoutes.get('/series', listSeriesController);
 
 // Renderização MP4 e consulta
 videoRoutes.post('/videos/:id/rerender', rerenderVideoController);

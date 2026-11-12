@@ -9,6 +9,8 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:3333',
         changeOrigin: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
       },
       '/renders': {
         target: 'http://127.0.0.1:3333',

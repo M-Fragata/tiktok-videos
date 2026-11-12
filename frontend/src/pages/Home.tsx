@@ -5,7 +5,7 @@ import { resolveAssetSrc, VideoRecord } from '../remotion/types';
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const [videos, setVideos] = useState<VideoRecord[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [_, setIsLoading] = useState<boolean>(true);
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -400,6 +400,7 @@ Retorne APENAS um objeto JSON válido neste formato exato:
 
   for (const model of candidateModels) {
     try {
+      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: 'POST',
@@ -705,6 +706,7 @@ export async function generateTimeMachineIdeation(
 
   for (const model of candidateModels) {
     try {
+      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: 'POST',
@@ -921,6 +923,7 @@ export async function generateSingleScenePrompt(params: {
 
   for (const model of candidateModels) {
     try {
+      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: 'POST',
@@ -1092,6 +1095,7 @@ export async function reviewAndEnrichFinalScript(params: {
 
   for (const model of candidateModels) {
     try {
+      console.log(`[Gemini Ideation] Solicitando roteiro ao modelo ${model}...`);
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       const response = await fetch(url, {
         method: 'POST',

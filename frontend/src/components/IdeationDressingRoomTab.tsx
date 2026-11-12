@@ -25,6 +25,7 @@ import {
   PROTAGONIST_AGENCY_OPTIONS,
   ProtagonistAgency,
   SeriesContext,
+  SeriesSummary,
   SfxOption,
   SpeakerType,
   StoryboardScene,
@@ -52,6 +53,7 @@ interface IdeationDressingRoomTabProps {
   setEpisodeFormat?: (value: EpisodeFormat) => void;
   seriesContext?: SeriesContext;
   setSeriesContext?: React.Dispatch<React.SetStateAction<SeriesContext>>;
+  availableSeries?: SeriesSummary[];
   protagonistAgency?: ProtagonistAgency;
   setProtagonistAgency?: (value: ProtagonistAgency) => void;
   contentBalance?: ContentBalance;
@@ -128,6 +130,7 @@ export const IdeationDressingRoomTab: React.FC<
   setEpisodeFormat,
   seriesContext,
   setSeriesContext,
+  availableSeries = [],
   protagonistAgency = 'chaos_agent',
   setProtagonistAgency,
   contentBalance = 'balanced',
@@ -1050,56 +1053,256 @@ Cena 4: Conclusão instigante convidando a comentar.`}
 
             {/* Configuração Contextual de Mini-Série */}
             {episodeFormat === 'series' && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-3 space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-amber-400">📺 Configurações da Série</span>
-                  <span className="text-[10px] text-slate-400">Arco episódico com cliffhanger</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                  <div className="sm:col-span-1">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                      Nº do Episódio
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={seriesContext?.episodeNumber || 1}
-                      onChange={(e) =>
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-amber-400">
+                      Configurações da Série
+                    </span>
+                    
+                  </div>
+
+                  {/* Toggle: Nova Série vs Continuação */}
+                  <div className="inline-flex rounded-lg border border-[#2c2c32] bg-[#121214] p-0.5">
+                    <button
+                      type="button"
+                      disabled={isGeneratingIdeas}
+                      onClick={() =>
                         setSeriesContext?.((prev) => ({
                           ...prev,
-                          episodeNumber: Math.max(1, parseInt(e.target.value, 10) || 1),
+                          isContinuation: false,
+                          seriesId: '',
+                          episodeNumber: 1,
                         }))
                       }
+                      className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+                        !seriesContext?.isContinuation
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      Nova
+                    </button>
+                    <button
+                      type="button"
                       disabled={isGeneratingIdeas}
-                      className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
-                    />
-                  </div>
-                  <div className="sm:col-span-3">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                      Contexto Anterior (Recap curto)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: No ep 1 Billy roubou a tumba e irritou a múmia..."
-                      value={seriesContext?.previousContext || ''}
-                      onChange={(e) =>
+                      onClick={() => {
+                        const firstSeries = availableSeries[0];
                         setSeriesContext?.((prev) => ({
                           ...prev,
-                          previousContext: e.target.value,
-                        }))
-                      }
-                      disabled={isGeneratingIdeas}
-                      className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition"
-                    />
+                          isContinuation: true,
+                          seriesId: prev.seriesId || firstSeries?.id || '',
+                          seriesTitle:
+                            prev.seriesTitle || firstSeries?.title || '',
+                          episodeNumber: prev.seriesId
+                            ? prev.episodeNumber
+                            : firstSeries?.nextEpisodeNumber || 2,
+                        }));
+                      }}
+                      className={`rounded-md px-2 py-1 text-[10px] font-semibold transition ${
+                        seriesContext?.isContinuation
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      Continuação
+                    </button>
                   </div>
                 </div>
+
+                {!seriesContext?.isContinuation ? (
+                  /* MODO NOVA SÉRIE */
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      <div className="sm:col-span-3">
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                          Nome da Série
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Os Mistérios de Gizé"
+                          value={seriesContext?.seriesTitle || ''}
+                          onChange={(e) =>
+                            setSeriesContext?.((prev) => ({
+                              ...prev,
+                              seriesTitle: e.target.value,
+                            }))
+                          }
+                          disabled={isGeneratingIdeas}
+                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition"
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                          Episódio
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={seriesContext?.episodeNumber || 1}
+                          onChange={(e) =>
+                            setSeriesContext?.((prev) => ({
+                              ...prev,
+                              episodeNumber: Math.max(
+                                1,
+                                parseInt(e.target.value, 10) || 1
+                              ),
+                            }))
+                          }
+                          disabled={isGeneratingIdeas}
+                          className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        Premissa / Arco Geral (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Billy investiga segredos das pirâmides em 3 capítulos..."
+                        value={seriesContext?.previousContext || ''}
+                        onChange={(e) =>
+                          setSeriesContext?.((prev) => ({
+                            ...prev,
+                            previousContext: e.target.value,
+                          }))
+                        }
+                        disabled={isGeneratingIdeas}
+                        className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* MODO CONTINUAÇÃO */
+                  <div className="space-y-2.5">
+                    {availableSeries.length === 0 ? (
+                      <div className="rounded-lg border border-amber-500/20 bg-[#121214] px-3 py-2.5 text-[11px] text-slate-400">
+                        Nenhuma série encontrada ainda. Crie primeiro o Episódio 1 em{' '}
+                        <strong className="text-amber-400">🆕 Nova Série</strong>.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                          <div className="sm:col-span-3">
+                            <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                              Continuar qual série?
+                            </label>
+                            <select
+                              value={seriesContext?.seriesId || ''}
+                              onChange={(e) => {
+                                const chosen = availableSeries.find(
+                                  (s) => s.id === e.target.value
+                                );
+                                setSeriesContext?.((prev) => ({
+                                  ...prev,
+                                  seriesId: e.target.value,
+                                  seriesTitle: chosen?.title || '',
+                                  episodeNumber:
+                                    chosen?.nextEpisodeNumber ||
+                                    prev.episodeNumber ||
+                                    2,
+                                }));
+                              }}
+                              disabled={isGeneratingIdeas}
+                              className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                            >
+                              <option value="">Selecione uma série...</option>
+                              {availableSeries.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.title} ({s.episodeCount}{' '}
+                                  {s.episodeCount === 1 ? 'ep' : 'eps'} • Próx:
+                                  Ep {s.nextEpisodeNumber})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="sm:col-span-1">
+                            <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                              Nº do Ep.
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={99}
+                              value={seriesContext?.episodeNumber || 2}
+                              onChange={(e) =>
+                                setSeriesContext?.((prev) => ({
+                                  ...prev,
+                                  episodeNumber: Math.max(
+                                    1,
+                                    parseInt(e.target.value, 10) || 2
+                                  ),
+                                }))
+                              }
+                              disabled={isGeneratingIdeas}
+                              className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                            />
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const selectedSeries = availableSeries.find(
+                            (s) => s.id === seriesContext?.seriesId
+                          );
+                          if (!selectedSeries) return null;
+                          return (
+                            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-2.5 py-2 text-[11px] space-y-1">
+                              <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
+                                <span>✓</span>
+                                <span>
+                                  Histórico de {selectedSeries.episodeCount}{' '}
+                                  {selectedSeries.episodeCount === 1
+                                    ? 'episódio anterior'
+                                    : 'episódios anteriores'}{' '}
+                                  será enviado ao roteirista.
+                                </span>
+                              </div>
+                              {selectedSeries.lastHookPreview && (
+                                <p className="text-[10px] text-slate-400 line-clamp-2">
+                                  Último gancho: {selectedSeries.lastHookPreview}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                            Notas / Direção Extra (Opcional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Agora Billy tenta escapar pela passagem secreta..."
+                            value={seriesContext?.previousContext || ''}
+                            onChange={(e) =>
+                              setSeriesContext?.((prev) => ({
+                                ...prev,
+                                previousContext: e.target.value,
+                              }))
+                            }
+                            disabled={isGeneratingIdeas}
+                            className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={isGeneratingIdeas || !theme.trim()}
+              disabled={
+                isGeneratingIdeas ||
+                !theme.trim() ||
+                (episodeFormat === 'series' &&
+                  Boolean(seriesContext?.isContinuation) &&
+                  !seriesContext?.seriesId)
+              }
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2.5 text-xs font-extrabold text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isGeneratingIdeas ? (
@@ -1355,11 +1558,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
               })}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-[#2c2c32] bg-[#121214]/70 p-4 text-center">
-              <p className="text-xs font-medium text-slate-300">
-                Nenhuma história gerada ainda.
-              </p>
-            </div>
+            <></>
           )}
         </div>
       </section>

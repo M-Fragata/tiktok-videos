@@ -23,6 +23,7 @@ import {
   resolveAssetSrc,
   SceneFrameTiming,
   SeriesContext,
+  SeriesSummary,
   SfxOption,
   SFX_OPTIONS,
   SpeakerType,
@@ -174,9 +175,13 @@ export const Studio: React.FC = () => {
   const effectiveBgmVibe: BgmVibe = bgmVibe === 'auto' ? 'epic' : bgmVibe;
   const [episodeFormat, setEpisodeFormat] = useState<EpisodeFormat>('single');
   const [seriesContext, setSeriesContext] = useState<SeriesContext>({
+    isContinuation: false,
+    seriesId: '',
+    seriesTitle: '',
     episodeNumber: 1,
     previousContext: '',
   });
+  const [availableSeries, setAvailableSeries] = useState<SeriesSummary[]>([]);
   const [protagonistAgency, setProtagonistAgency] =
     useState<ProtagonistAgency>('chaos_agent');
   const [contentBalance, setContentBalance] =
@@ -473,6 +478,20 @@ export const Studio: React.FC = () => {
     }
   };
 
+  const loadSeriesList = async () => {
+    try {
+      const res = await fetch('/api/series');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.series)) {
+          setAvailableSeries(data.series);
+        }
+      }
+    } catch (err) {
+      console.warn('Aviso ao carregar lista de séries:', err);
+    }
+  };
+
   const handlePromoteStoryboardSceneSfx = async (sceneIndex: number) => {
     if (!id) return;
     const scene = scenes[sceneIndex];
@@ -522,6 +541,7 @@ export const Studio: React.FC = () => {
   useEffect(() => {
     void fetchVideoData();
     void loadSfxLibrary();
+    void loadSeriesList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -582,7 +602,23 @@ export const Studio: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: {
+        error?: string;
+        video?: VideoRecord;
+        options?: IdeationOption[];
+        scenes?: StoryboardScene[];
+      } = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        throw new Error(
+          res.ok
+            ? 'Resposta inválida do servidor ao gerar roteiro.'
+            : `Erro HTTP ${res.status} do servidor (verifique os logs do backend).`
+        );
+      }
+
       if (!res.ok) {
         throw new Error(
           data.error || 'Falha ao gerar ideias de roteiro no Gemini'
@@ -591,6 +627,13 @@ export const Studio: React.FC = () => {
 
       if (data.video) {
         setVideoRecord(data.video);
+        const savedSeriesCtx = data.video?.remotionProps?.storyboard?.seriesContext;
+        if (savedSeriesCtx) {
+          setSeriesContext(savedSeriesCtx);
+        }
+      }
+      if (episodeFormat === 'series') {
+        void loadSeriesList();
       }
 
       if (Array.isArray(data.options) && data.options.length > 0) {
@@ -764,6 +807,13 @@ export const Studio: React.FC = () => {
 
       if (data.video) {
         setVideoRecord(data.video);
+        const savedSeriesCtx = data.video?.remotionProps?.storyboard?.seriesContext;
+        if (savedSeriesCtx) {
+          setSeriesContext(savedSeriesCtx);
+        }
+      }
+      if (episodeFormat === 'series') {
+        void loadSeriesList();
       }
 
       setActiveTab('storyboard');
@@ -990,6 +1040,13 @@ export const Studio: React.FC = () => {
 
       if (data.video) {
         setVideoRecord(data.video);
+        const savedSeriesCtx = data.video?.remotionProps?.storyboard?.seriesContext;
+        if (savedSeriesCtx) {
+          setSeriesContext(savedSeriesCtx);
+        }
+      }
+      if (episodeFormat === 'series') {
+        void loadSeriesList();
       }
 
       setSuccessMsg(
@@ -1260,6 +1317,13 @@ export const Studio: React.FC = () => {
 
       if (data.video) {
         setVideoRecord(data.video);
+        const savedSeriesCtx = data.video?.remotionProps?.storyboard?.seriesContext;
+        if (savedSeriesCtx) {
+          setSeriesContext(savedSeriesCtx);
+        }
+      }
+      if (episodeFormat === 'series') {
+        void loadSeriesList();
       }
 
       setSuccessMsg(
@@ -1729,6 +1793,13 @@ export const Studio: React.FC = () => {
       setTheme(cleanTitle);
       if (data.video) {
         setVideoRecord(data.video);
+        const savedSeriesCtx = data.video?.remotionProps?.storyboard?.seriesContext;
+        if (savedSeriesCtx) {
+          setSeriesContext(savedSeriesCtx);
+        }
+      }
+      if (episodeFormat === 'series') {
+        void loadSeriesList();
       }
       setIsEditingTitle(false);
       setSuccessMsg('Título atualizado com sucesso!');
@@ -2368,6 +2439,7 @@ export const Studio: React.FC = () => {
                 setEpisodeFormat={setEpisodeFormat}
                 seriesContext={seriesContext}
                 setSeriesContext={setSeriesContext}
+                availableSeries={availableSeries}
                 protagonistAgency={protagonistAgency}
                 setProtagonistAgency={setProtagonistAgency}
                 contentBalance={contentBalance}
