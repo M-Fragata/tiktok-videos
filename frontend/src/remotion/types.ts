@@ -23,6 +23,71 @@ export type SpeakerType = 'protagonist' | 'character' | 'narrator';
 
 export type DurationPreset = 'short' | 'medium' | 'long';
 
+export type EpisodeFormat = 'single' | 'series';
+export type ProtagonistAgency = 'chaos_agent' | 'observer';
+export type ContentBalance = 'balanced' | 'comedy_action' | 'historical_focus';
+
+export interface SeriesContext {
+  episodeNumber: number;
+  previousContext?: string;
+}
+
+export const EPISODE_FORMAT_OPTIONS: Array<{
+  value: EpisodeFormat;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'single',
+    label: '🎬 Episódio Único',
+    description: 'Arco fechado e completo com mistério revelado',
+  },
+  {
+    value: 'series',
+    label: '📺 Mini-Série',
+    description: 'Arco episódico com gancho de suspense para o próximo capítulo',
+  },
+];
+
+export const PROTAGONIST_AGENCY_OPTIONS: Array<{
+  value: ProtagonistAgency;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'chaos_agent',
+    label: '💥 Agente do Caos',
+    description: 'Billy toca em tudo, provoca desastres e interage diretamente',
+  },
+  {
+    value: 'observer',
+    label: '👁️ Observador',
+    description: 'Billy reage à margem, comenta com ironia sem intervir fisicamente',
+  },
+];
+
+export const CONTENT_BALANCE_OPTIONS: Array<{
+  value: ContentBalance;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'balanced',
+    label: '⚖️ Equilibrado',
+    description: '50% história pelo Narrador, 50% gags e reações do Billy',
+  },
+  {
+    value: 'comedy_action',
+    label: '🤣 Comédia & Ação',
+    description: 'Mais gags visuais, tropeços e efeitos sonoros expressivos',
+  },
+  {
+    value: 'historical_focus',
+    label: '🏛️ Curiosidade Histórica',
+    description: 'Mais fatos reais e datas aprofundadas com humor pontual',
+  },
+];
+
 export type BgmVibe =
   | 'epic'
   | 'dark'
@@ -482,6 +547,10 @@ export interface StoryboardState {
   avatarConfig?: AvatarConfig;
   ideationOptions?: IdeationOption[];
   bgmVibe?: BgmVibe;
+  episodeFormat?: EpisodeFormat;
+  seriesContext?: SeriesContext;
+  protagonistAgency?: ProtagonistAgency;
+  contentBalance?: ContentBalance;
 }
 
 export type TimeMachineVideoProps = {

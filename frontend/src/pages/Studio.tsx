@@ -9,16 +9,20 @@ import {
   BackgroundSegment,
   BgmVibe,
   BriefingBgmOption,
+  ContentBalance,
   DEFAULT_AVATAR_CONFIG,
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
   ensureSubtitleWordTimings,
+  EpisodeFormat,
   getSceneDialogues,
   getSceneFullText,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
+  ProtagonistAgency,
   resolveAssetSrc,
   SceneFrameTiming,
+  SeriesContext,
   SfxOption,
   SFX_OPTIONS,
   SpeakerType,
@@ -168,6 +172,15 @@ export const Studio: React.FC = () => {
     useState<DurationPreset>('short');
   const [bgmVibe, setBgmVibe] = useState<BriefingBgmOption>('auto');
   const effectiveBgmVibe: BgmVibe = bgmVibe === 'auto' ? 'epic' : bgmVibe;
+  const [episodeFormat, setEpisodeFormat] = useState<EpisodeFormat>('single');
+  const [seriesContext, setSeriesContext] = useState<SeriesContext>({
+    episodeNumber: 1,
+    previousContext: '',
+  });
+  const [protagonistAgency, setProtagonistAgency] =
+    useState<ProtagonistAgency>('chaos_agent');
+  const [contentBalance, setContentBalance] =
+    useState<ContentBalance>('balanced');
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(
     DEFAULT_AVATAR_CONFIG
   );
@@ -339,6 +352,18 @@ export const Studio: React.FC = () => {
       setDurationPreset(props.storyboard.durationPreset || 'short');
       if (props.storyboard.bgmVibe) {
         setBgmVibe(props.storyboard.bgmVibe);
+      }
+      if (props.storyboard.episodeFormat) {
+        setEpisodeFormat(props.storyboard.episodeFormat);
+      }
+      if (props.storyboard.seriesContext) {
+        setSeriesContext(props.storyboard.seriesContext);
+      }
+      if (props.storyboard.protagonistAgency) {
+        setProtagonistAgency(props.storyboard.protagonistAgency);
+      }
+      if (props.storyboard.contentBalance) {
+        setContentBalance(props.storyboard.contentBalance);
       }
       if (props.storyboard.avatarConfig) {
         setAvatarConfig({
@@ -550,6 +575,10 @@ export const Studio: React.FC = () => {
           durationPreset,
           avatarConfig,
           bgmVibe,
+          episodeFormat,
+          seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+          protagonistAgency,
+          contentBalance,
         }),
       });
 
@@ -713,6 +742,10 @@ export const Studio: React.FC = () => {
           avatarConfig,
           ideationOptions,
           bgmVibe: effectiveBgmVibe,
+          episodeFormat,
+          seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+          protagonistAgency,
+          contentBalance,
         },
       };
 
@@ -1055,6 +1088,10 @@ export const Studio: React.FC = () => {
             avatarConfig,
             ideationOptions,
             bgmVibe: effectiveBgmVibe,
+            episodeFormat,
+            seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+            protagonistAgency,
+            contentBalance,
           },
         };
 
@@ -1317,6 +1354,10 @@ export const Studio: React.FC = () => {
         avatarConfig,
         ideationOptions,
         bgmVibe: effectiveBgmVibe,
+        episodeFormat,
+        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+        protagonistAgency,
+        contentBalance,
       },
     };
 
@@ -1406,6 +1447,10 @@ export const Studio: React.FC = () => {
         avatarConfig,
         ideationOptions,
         bgmVibe: effectiveBgmVibe,
+        episodeFormat,
+        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+        protagonistAgency,
+        contentBalance,
       },
     };
 
@@ -2319,6 +2364,14 @@ export const Studio: React.FC = () => {
                 durationOptions={DURATION_OPTIONS}
                 bgmVibe={bgmVibe}
                 setBgmVibe={setBgmVibe}
+                episodeFormat={episodeFormat}
+                setEpisodeFormat={setEpisodeFormat}
+                seriesContext={seriesContext}
+                setSeriesContext={setSeriesContext}
+                protagonistAgency={protagonistAgency}
+                setProtagonistAgency={setProtagonistAgency}
+                contentBalance={contentBalance}
+                setContentBalance={setContentBalance}
                 avatarConfig={avatarConfig}
                 setAvatarConfig={setAvatarConfig}
                 ideationOptions={ideationOptions}
@@ -3596,6 +3649,11 @@ export const Studio: React.FC = () => {
                       avatarConfig,
                       ideationOptions,
                       bgmVibe: effectiveBgmVibe,
+                      episodeFormat,
+                      seriesContext:
+                        episodeFormat === 'series' ? seriesContext : undefined,
+                      protagonistAgency,
+                      contentBalance,
                     },
                   }}
                   durationInFrames={effectiveTotalFrames}

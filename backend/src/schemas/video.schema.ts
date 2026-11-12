@@ -66,6 +66,25 @@ export const speakerTypeSchema = z.enum([
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
+export const episodeFormatSchema = z.enum(['single', 'series']);
+export type EpisodeFormat = z.infer<typeof episodeFormatSchema>;
+
+export const protagonistAgencySchema = z.enum(['chaos_agent', 'observer']);
+export type ProtagonistAgency = z.infer<typeof protagonistAgencySchema>;
+
+export const contentBalanceSchema = z.enum([
+  'balanced',
+  'comedy_action',
+  'historical_focus',
+]);
+export type ContentBalance = z.infer<typeof contentBalanceSchema>;
+
+export const seriesContextSchema = z.object({
+  episodeNumber: z.number().int().min(1).default(1),
+  previousContext: z.string().max(1000).optional().default(''),
+});
+export type SeriesContext = z.infer<typeof seriesContextSchema>;
+
 export const bgmVibeSchema = z.enum([
   'auto',
   'epic',
@@ -186,6 +205,10 @@ export const storyboardStateSchema = z.object({
   avatarConfig: avatarConfigSchema.optional(),
   ideationOptions: z.array(ideationOptionSchema).optional(),
   bgmVibe: bgmVibeSchema.optional().default('epic'),
+  episodeFormat: episodeFormatSchema.optional(),
+  seriesContext: seriesContextSchema.optional(),
+  protagonistAgency: protagonistAgencySchema.optional(),
+  contentBalance: contentBalanceSchema.optional(),
 });
 
 /**
@@ -210,6 +233,10 @@ export const generateScriptSchema = z.object({
   durationPreset: durationPresetSchema.optional().default('short'),
   avatarConfig: avatarConfigSchema.optional(),
   bgmVibe: bgmVibeSchema.optional().default('epic'),
+  episodeFormat: episodeFormatSchema.optional().default('single'),
+  seriesContext: seriesContextSchema.optional(),
+  protagonistAgency: protagonistAgencySchema.optional().default('chaos_agent'),
+  contentBalance: contentBalanceSchema.optional().default('balanced'),
 });
 
 /**

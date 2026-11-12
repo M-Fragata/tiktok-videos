@@ -12,12 +12,19 @@ import {
   BRIEFING_BGM_OPTIONS,
   BriefingBgmOption,
   buildClientAvatarPromptDescriptor,
+  CONTENT_BALANCE_OPTIONS,
+  ContentBalance,
   DialogueItem,
   DurationPreset,
+  EPISODE_FORMAT_OPTIONS,
+  EpisodeFormat,
   getSceneDialogues,
   getSceneFullText,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
+  PROTAGONIST_AGENCY_OPTIONS,
+  ProtagonistAgency,
+  SeriesContext,
   SfxOption,
   SpeakerType,
   StoryboardScene,
@@ -41,6 +48,14 @@ interface IdeationDressingRoomTabProps {
   durationOptions: Array<{ value: DurationPreset; label: string }>;
   bgmVibe: BriefingBgmOption;
   setBgmVibe: (value: BriefingBgmOption) => void;
+  episodeFormat?: EpisodeFormat;
+  setEpisodeFormat?: (value: EpisodeFormat) => void;
+  seriesContext?: SeriesContext;
+  setSeriesContext?: React.Dispatch<React.SetStateAction<SeriesContext>>;
+  protagonistAgency?: ProtagonistAgency;
+  setProtagonistAgency?: (value: ProtagonistAgency) => void;
+  contentBalance?: ContentBalance;
+  setContentBalance?: (value: ContentBalance) => void;
   avatarConfig: AvatarConfig;
   setAvatarConfig: React.Dispatch<React.SetStateAction<AvatarConfig>>;
   ideationOptions: IdeationOption[];
@@ -109,6 +124,14 @@ export const IdeationDressingRoomTab: React.FC<
   durationOptions,
   bgmVibe,
   setBgmVibe,
+  episodeFormat = 'single',
+  setEpisodeFormat,
+  seriesContext,
+  setSeriesContext,
+  protagonistAgency = 'chaos_agent',
+  setProtagonistAgency,
+  contentBalance = 'balanced',
+  setContentBalance,
   avatarConfig,
   setAvatarConfig,
   ideationOptions,
@@ -961,6 +984,118 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                 </select>
               </div>
             </div>
+
+            {/* Eixos de Configuração Narrativa Avançada */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Formato do Vídeo
+                </label>
+                <select
+                  value={episodeFormat}
+                  onChange={(e) =>
+                    setEpisodeFormat?.(e.target.value as EpisodeFormat)
+                  }
+                  disabled={isGeneratingIdeas}
+                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                >
+                  {EPISODE_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Papel do Billy
+                </label>
+                <select
+                  value={protagonistAgency}
+                  onChange={(e) =>
+                    setProtagonistAgency?.(e.target.value as ProtagonistAgency)
+                  }
+                  disabled={isGeneratingIdeas}
+                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                >
+                  {PROTAGONIST_AGENCY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Foco do Roteiro
+                </label>
+                <select
+                  value={contentBalance}
+                  onChange={(e) =>
+                    setContentBalance?.(e.target.value as ContentBalance)
+                  }
+                  disabled={isGeneratingIdeas}
+                  className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                >
+                  {CONTENT_BALANCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Configuração Contextual de Mini-Série */}
+            {episodeFormat === 'series' && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.05] p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-amber-400">📺 Configurações da Série</span>
+                  <span className="text-[10px] text-slate-400">Arco episódico com cliffhanger</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <div className="sm:col-span-1">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Nº do Episódio
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={seriesContext?.episodeNumber || 1}
+                      onChange={(e) =>
+                        setSeriesContext?.((prev) => ({
+                          ...prev,
+                          episodeNumber: Math.max(1, parseInt(e.target.value, 10) || 1),
+                        }))
+                      }
+                      disabled={isGeneratingIdeas}
+                      className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none transition"
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      Contexto Anterior (Recap curto)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: No ep 1 Billy roubou a tumba e irritou a múmia..."
+                      value={seriesContext?.previousContext || ''}
+                      onChange={(e) =>
+                        setSeriesContext?.((prev) => ({
+                          ...prev,
+                          previousContext: e.target.value,
+                        }))
+                      }
+                      disabled={isGeneratingIdeas}
+                      className="w-full rounded-lg border border-[#2c2c32] bg-[#121214] px-2.5 py-2 text-xs text-slate-100 placeholder-slate-600 focus:border-amber-500 focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"

@@ -105,7 +105,16 @@ export async function generateScriptController(
     return;
   }
 
-  const { theme, durationPreset, avatarConfig, bgmVibe } = parsedBody.data;
+  const {
+    theme,
+    durationPreset,
+    avatarConfig,
+    bgmVibe,
+    episodeFormat,
+    seriesContext,
+    protagonistAgency,
+    contentBalance,
+  } = parsedBody.data;
 
   try {
     const existingVideo = await prisma.video.findUnique({ where: { id } });
@@ -115,14 +124,18 @@ export async function generateScriptController(
     }
 
     console.log(
-      `[Ideação - Etapa 1] Gerando 4 opções de roteiro no Gemini para "${theme}" (${durationPreset})...`
+      `[Ideação - Etapa 1] Gerando 4 opções de roteiro no Gemini para "${theme}" (${durationPreset}) [formato: ${episodeFormat}, agência: ${protagonistAgency}, equilíbrio: ${contentBalance}]...`
     );
-    const { options } = await generateTimeMachineIdeation(
+    const { options } = await generateTimeMachineIdeation({
       theme,
       durationPreset,
       avatarConfig,
-      bgmVibe
-    );
+      selectedBgmVibe: bgmVibe,
+      episodeFormat,
+      seriesContext,
+      protagonistAgency,
+      contentBalance,
+    });
 
     const formattedOptions = options.map((opt) => ({
       id: opt.id,
@@ -137,6 +150,8 @@ export async function generateScriptController(
             ? scene.dialogues.map((d, dIdx) => ({
                 id: d.id || `dlg_${opt.id}_${sIdx}_${dIdx}`,
                 speaker: d.speaker || scene.speaker || 'protagonist',
+                characterName: d.characterName,
+                voiceId: d.voiceId,
                 text: d.text || '',
               }))
             : [
@@ -164,12 +179,12 @@ export async function generateScriptController(
       }),
     }));
 
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
     const resolvedBgm =
       bgmVibe && bgmVibe !== 'auto'
         ? bgmVibe
         : formattedOptions[0]?.bgmVibe || currentProps.bgmVibe || 'epic';
 
-    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
     const currentStoryboard = currentProps.storyboard || {
       durationPreset,
       scenes: [],
@@ -200,6 +215,15 @@ export async function generateScriptController(
         avatarConfig,
         ideationOptions: formattedOptions,
         bgmVibe: resolvedBgm,
+        episodeFormat:
+          episodeFormat || currentStoryboard.episodeFormat || 'single',
+        seriesContext: seriesContext || currentStoryboard.seriesContext,
+        protagonistAgency:
+          protagonistAgency ||
+          currentStoryboard.protagonistAgency ||
+          'chaos_agent',
+        contentBalance:
+          contentBalance || currentStoryboard.contentBalance || 'balanced',
       },
     };
 
@@ -1135,6 +1159,9 @@ export async function generateScenePromptController(
         : text;
     const effectiveSpeaker = dialogues?.[0]?.speaker || speaker;
 
+    const currentProps = (video.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard;
+
     console.log(
       `[Gemini Scene Prompt] Gerando prompt visual para fala: "${effectiveText.slice(0, 50)}..."`
     );
@@ -1145,6 +1172,7 @@ export async function generateScenePromptController(
       speaker: effectiveSpeaker,
       avatarConfig,
       visualDescription: visual_description,
+      protagonistAgency: currentStoryboard?.protagonistAgency || 'chaos_agent',
     });
 
     res.status(200).json({
@@ -1193,6 +1221,8 @@ export async function reviewFinalScriptController(
     }
 
     const effectiveTheme = theme || video.theme || 'Viagem no Tempo';
+    const currentProps = (video.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard;
 
     console.log(
       `[Gemini Final Script Review] Revisando roteiro final (${scenes.length} cenas) para "${effectiveTheme}"...`
@@ -1202,6 +1232,8 @@ export async function reviewFinalScriptController(
       theme: effectiveTheme,
       scenes,
       avatarConfig,
+      protagonistAgency: currentStoryboard?.protagonistAgency || 'chaos_agent',
+      contentBalance: currentStoryboard?.contentBalance || 'balanced',
     });
 
     res.status(200).json({
