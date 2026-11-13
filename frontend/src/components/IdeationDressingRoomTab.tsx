@@ -147,8 +147,104 @@ export const IdeationDressingRoomTab: React.FC<
   sfxOptions,
   onReloadSfxLibrary,
 }) => {
-  // Controlo de abertura dos 4 Accordions de Ideação + 5º Accordion do Roteiro Final
-  const [isAvatarOpen, setIsAvatarOpen] = useState<boolean>(true);
+  // Controlo de abertura dos 4 Accordions de Ideação + 5º Accordion do Roteiro Final (Padrão: todas recolhidas)
+  const [isAvatarOpen, setIsAvatarOpen] = useState<boolean>(() => {
+    if (!videoId) return false;
+    try {
+      const saved = localStorage.getItem(`ideation_avatar_open_${videoId}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return false;
+  });
+
+  const [isScriptGenerationOpen, setIsScriptGenerationOpen] = useState<boolean>(() => {
+    if (!videoId) return false;
+    try {
+      const saved = localStorage.getItem(`ideation_script_gen_open_${videoId}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return false;
+  });
+
+  const [isFinalScriptOpen, setIsFinalScriptOpen] = useState<boolean>(() => {
+    if (!videoId) return false;
+    try {
+      const saved = localStorage.getItem(`ideation_final_script_open_${videoId}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return false;
+  });
+
+  const toggleAvatarOpen = () => {
+    setIsAvatarOpen((prev) => {
+      const next = !prev;
+      if (videoId) {
+        try {
+          localStorage.setItem(`ideation_avatar_open_${videoId}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleScriptGenerationOpen = () => {
+    setIsScriptGenerationOpen((prev) => {
+      const next = !prev;
+      if (videoId) {
+        try {
+          localStorage.setItem(`ideation_script_gen_open_${videoId}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const openScriptGeneration = () => {
+    setIsScriptGenerationOpen(true);
+    if (videoId) {
+      try {
+        localStorage.setItem(`ideation_script_gen_open_${videoId}`, 'true');
+      } catch {
+        /* ignore storage error */
+      }
+    }
+  };
+
+  const toggleFinalScriptOpen = () => {
+    setIsFinalScriptOpen((prev) => {
+      const next = !prev;
+      if (videoId) {
+        try {
+          localStorage.setItem(`ideation_final_script_open_${videoId}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const openFinalScript = () => {
+    setIsFinalScriptOpen(true);
+    if (videoId) {
+      try {
+        localStorage.setItem(`ideation_final_script_open_${videoId}`, 'true');
+      } catch {
+        /* ignore storage error */
+      }
+    }
+  };
+
   const [openOptionIds, setOpenOptionIds] = useState<Record<string, boolean>>({
     in_media_res: true,
     myth_buster: false,
@@ -159,7 +255,6 @@ export const IdeationDressingRoomTab: React.FC<
     dark: false,
     chaotic: false,
   });
-  const [isFinalScriptOpen, setIsFinalScriptOpen] = useState<boolean>(true);
   const [finalScriptTitle, setFinalScriptTitle] = useState<string>('');
   const [draggedFinalIndex, setDraggedFinalIndex] = useState<number | null>(
     null
@@ -175,7 +270,7 @@ export const IdeationDressingRoomTab: React.FC<
   >(null);
 
   // Diagnóstico do Seamless Loop para o Roteiro Final (Mix & Match)
-  const loopStatus = useMemo(() => {
+  const _loopStatus = useMemo(() => {
     if (finalMixScenes.length < 2) return null;
     const firstItem = finalMixScenes[0];
     const lastItem = finalMixScenes[finalMixScenes.length - 1];
@@ -417,7 +512,7 @@ export const IdeationDressingRoomTab: React.FC<
           scene: clonedScene,
         },
       ]);
-      setIsFinalScriptOpen(true);
+      openFinalScript();
     }
   };
 
@@ -452,7 +547,7 @@ export const IdeationDressingRoomTab: React.FC<
       }
     );
     setFinalMixScenes(mapped);
-    setIsFinalScriptOpen(true);
+    openFinalScript();
   };
 
   // Reordenação por botões Cima / Baixo no Módulo 3
@@ -641,7 +736,7 @@ export const IdeationDressingRoomTab: React.FC<
         scene: newScene,
       },
     ]);
-    setIsFinalScriptOpen(true);
+    openFinalScript();
   };
 
   return (
@@ -652,7 +747,7 @@ export const IdeationDressingRoomTab: React.FC<
       <section className="rounded-2xl border border-[#2c2c32] bg-[#18181c] overflow-hidden shadow-xl transition-all">
         {/* Cabeçalho do Camarim (Acordeão) */}
         <div
-          onClick={() => setIsAvatarOpen((prev) => !prev)}
+          onClick={toggleAvatarOpen}
           className={`flex cursor-pointer items-center justify-between bg-[#141417] px-4 py-3 transition-colors hover:bg-[#1a1a1f] select-none ${
             isAvatarOpen ? 'border-b border-[#2c2c32]/70' : ''
           }`}
@@ -899,8 +994,14 @@ export const IdeationDressingRoomTab: React.FC<
       {/* ====================================================================
           MÓDULO 2: O MOTOR DE IDEAÇÃO (BRAINSTORMING EM ACCORDIONS)
          ==================================================================== */}
-      <section className="rounded-2xl border border-[#2c2c32] bg-[#18181c] overflow-hidden shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#2c2c32]/70 bg-[#141417] px-4 py-3">
+      <section className="rounded-2xl border border-[#2c2c32] bg-[#18181c] overflow-hidden shadow-xl transition-all">
+        {/* Cabeçalho do Motor de Ideação (Acordeão) */}
+        <div
+          onClick={toggleScriptGenerationOpen}
+          className={`flex cursor-pointer items-center justify-between bg-[#141417] px-4 py-3 transition-colors hover:bg-[#1a1a1f] select-none ${
+            isScriptGenerationOpen ? 'border-b border-[#2c2c32]/70' : ''
+          }`}
+        >
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-500/15 text-xs text-teal-400 border border-teal-500/30">
               💡
@@ -910,15 +1011,42 @@ export const IdeationDressingRoomTab: React.FC<
                 Geração de roteiros
               </h2>
               <p className="text-[10px] text-slate-400">
-                Gere histórias e selecione suas cenas favoritas
+                {ideationOptions.length > 0
+                  ? `${ideationOptions.length} opções geradas • Gere histórias e selecione suas cenas`
+                  : 'Gere histórias e selecione suas cenas favoritas'}
               </p>
             </div>
           </div>
+
+          <div className="flex items-center gap-2">
+            <svg
+              className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${
+                isScriptGenerationOpen ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </div>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* Formulário Briefing + Duração + Botão "💡 Gerar Ideias" */}
-          <form onSubmit={onGenerateIdeas} className="space-y-3">
+        {isScriptGenerationOpen && (
+          <div className="p-4 space-y-4">
+            {/* Formulário Briefing + Duração + Botão "💡 Gerar Ideias" */}
+            <form
+              onSubmit={(e) => {
+                openScriptGeneration();
+                onGenerateIdeas(e);
+              }}
+              className="space-y-3"
+            >
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] font-semibold text-slate-300">
@@ -1564,6 +1692,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
             <></>
           )}
         </div>
+        )}
       </section>
 
       {/* ====================================================================
@@ -1572,8 +1701,8 @@ Cena 4: Conclusão instigante convidando a comentar.`}
       <section className="rounded-2xl border-2 border-amber-500/50 bg-[#18181c] overflow-hidden shadow-[0_0_25px_rgba(245,158,11,0.12)]">
         {/* Cabeçalho do 5º Accordion: Roteiro Final */}
         <div
-          onClick={() => setIsFinalScriptOpen((prev) => !prev)}
-          className="flex cursor-pointer items-center justify-between border-b border-[#2c2c32] bg-gradient-to-r from-amber-500/15 via-[#18181c] to-teal-500/10 px-4 py-3.5"
+          onClick={toggleFinalScriptOpen}
+          className="flex cursor-pointer items-center justify-between border-b border-[#2c2c32] bg-gradient-to-r from-amber-500/15 via-[#18181c] to-teal-500/10 px-4 py-3.5 select-none"
         >
           <div className="flex items-center gap-2.5">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-sm text-slate-950 font-bold shadow-md shadow-amber-500/30">
@@ -1625,58 +1754,14 @@ Cena 4: Conclusão instigante convidando a comentar.`}
               </div>
             ) : (
               <>
-                {/* Selo Dinâmico de Integridade do Seamless Loop */}
-                {loopStatus && (
-                  <div
-                    className={`rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border transition ${
-                      loopStatus.isPerfectLoop
-                        ? 'bg-emerald-950/25 border-emerald-500/40 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                        : 'bg-amber-950/20 border-amber-500/35 text-amber-200'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-xl shrink-0 mt-0.5">
-                        {loopStatus.isPerfectLoop ? '🔁' : '⚡'}
-                      </span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold">
-                            {loopStatus.isPerfectLoop
-                              ? `Loop Perfeito Ativo (${loopStatus.sourceBadge})`
-                              : 'Ponte Híbrida / Otimização Automática'}
-                          </span>
-                          <span
-                            className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
-                              loopStatus.isPerfectLoop
-                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                                : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                            }`}
-                          >
-                            {loopStatus.isPerfectLoop
-                              ? '100% Sincronizado'
-                              : 'Auto-Reparo na Aprovação'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-300/90 mt-0.5">
-                          {loopStatus.isPerfectLoop
-                            ? 'A primeira e a última cena pertencem à mesma arquitetura narrativa. O player reiniciará o vídeo sem corte ou emenda audível.'
-                            : 'Você combinou cenas de opções distintas ou manuais. Ao aprovar o roteiro, a IA adaptará o conector sintático da cena final para fechar o ciclo.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* Título Viral + Trilha Sonora Final */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                        🏷️ Título do Vídeo (Gerado por IA)
+                        🏷️ Título do Vídeo
                       </label>
-                      <span className="text-[10px] text-slate-500">
-                        Editável
-                      </span>
                     </div>
                     <input
                       type="text"
@@ -1690,11 +1775,9 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                   <div className="rounded-xl border border-[#2c2c32] bg-[#121214] p-3 shadow-inner">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1">
-                        <span>🎵 Trilha Sonora (BGM)</span>
+                        <span>🎵 Trilha Sonora</span>
                       </label>
-                      <span className="text-[10px] text-slate-500">
-                        Definida pela IA / Ajustável
-                      </span>
+                      
                     </div>
                     <select
                       value={bgmVibe === 'auto' ? 'epic' : bgmVibe}
@@ -1711,9 +1794,6 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
-                  <span>
-                    Arraste ou use as setas (↑/↓) para reordenar as cenas:
-                  </span>
                   <button
                     type="button"
                     onClick={() => setFinalMixScenes([])}

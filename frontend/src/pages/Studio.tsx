@@ -170,13 +170,77 @@ export const Studio: React.FC = () => {
   // Registo principal do banco
   const [videoRecord, setVideoRecord] = useState<VideoRecord | null>(null);
 
-  // Navegação de Abas Horizontais do Painel Esquerdo
-  const [activeTab, setActiveTab] = useState<InspectorTab>('briefing');
+  // Navegação de Abas Horizontais do Painel Esquerdo com Cache por Vídeo
+  const [activeTab, setActiveTabState] = useState<InspectorTab>(() => {
+    if (!id) return 'briefing';
+    try {
+      const cached = localStorage.getItem(`studio_active_tab_${id}`);
+      if (
+        cached &&
+        ['briefing', 'storyboard', 'subtitles', 'audio', 'extra1', 'extra2'].includes(cached)
+      ) {
+        return cached as InspectorTab;
+      }
+    } catch {
+      /* ignore storage error */
+    }
+    return 'briefing';
+  });
 
-  // Controlo de recolhimento (accordion) dos cards de cena e das secções de legendas
+  const setActiveTab = (tab: InspectorTab) => {
+    setActiveTabState(tab);
+    if (id) {
+      try {
+        localStorage.setItem(`studio_active_tab_${id}`, tab);
+      } catch {
+        /* ignore storage error */
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const cached = localStorage.getItem(`studio_active_tab_${id}`);
+      if (
+        cached &&
+        ['briefing', 'storyboard', 'subtitles', 'audio', 'extra1', 'extra2'].includes(cached)
+      ) {
+        setActiveTabState(cached as InspectorTab);
+      }
+    } catch {
+      /* ignore storage error */
+    }
+  }, [id]);
+
+  // Controlo de recolhimento (accordion) dos cards de cena (Padrão: todas recolhidas)
   const [collapsedScenes, setCollapsedScenes] = useState<
     Record<number, boolean>
-  >({});
+  >(() => {
+    if (!id) return {};
+    try {
+      const saved = localStorage.getItem(`studio_collapsed_scenes_${id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      /* ignore storage error */
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const saved = localStorage.getItem(`studio_collapsed_scenes_${id}`);
+      if (saved) {
+        setCollapsedScenes(JSON.parse(saved));
+      } else {
+        setCollapsedScenes({});
+      }
+    } catch {
+      /* ignore storage error */
+    }
+  }, [id]);
+
   const [isSubtitleStyleCollapsed, setIsSubtitleStyleCollapsed] =
     useState<boolean>(true);
   const [isSubtitleBlocksCollapsed, setIsSubtitleBlocksCollapsed] =
@@ -996,10 +1060,21 @@ export const Studio: React.FC = () => {
   };
 
   const toggleSceneCollapse = (sceneIndex: number) => {
-    setCollapsedScenes((prev) => ({
-      ...prev,
-      [sceneIndex]: !prev[sceneIndex],
-    }));
+    setCollapsedScenes((prev) => {
+      const current = prev[sceneIndex] !== undefined ? prev[sceneIndex] : true;
+      const next = {
+        ...prev,
+        [sceneIndex]: !current,
+      };
+      if (id) {
+        try {
+          localStorage.setItem(`studio_collapsed_scenes_${id}`, JSON.stringify(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
   };
 
   const handleRegenerateScenePromptInStudio = async (sceneIndex: number) => {
@@ -2508,7 +2583,7 @@ export const Studio: React.FC = () => {
             {/* ==============================================================
                 ABA 1: SALA DE IDEAÇÃO & CAMARIM 360º (Módulos 1, 2 e 3)
                ============================================================== */}
-            {activeTab === 'briefing' && (
+            <div className={activeTab === 'briefing' ? 'block' : 'hidden'}>
               <IdeationDressingRoomTab
                 videoId={id}
                 theme={theme}
@@ -2542,12 +2617,12 @@ export const Studio: React.FC = () => {
                 sfxOptions={sfxLibraryOptions}
                 onReloadSfxLibrary={loadSfxLibrary}
               />
-            )}
+            </div>
 
             {/* ==============================================================
                 ABA 2: STORYBOARD (Cards de Cena Espaçados + B-Roll 9:16)
                ============================================================== */}
-            {activeTab === 'storyboard' && (
+            <div className={activeTab === 'storyboard' ? 'block' : 'hidden'}>
               <>
                 {!hasScript ? (
                   <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-6 text-center space-y-3">
@@ -2572,7 +2647,10 @@ export const Studio: React.FC = () => {
                       const isGeneratingImg = Boolean(
                         generatingImageForScene[index]
                       );
-                      const isCollapsed = Boolean(collapsedScenes[index]);
+                      const isCollapsed =
+                        collapsedScenes[index] !== undefined
+                          ? collapsedScenes[index]
+                          : true;
                       const spriteUrl = resolveAssetSrc(scene.avatarSprite);
                       const sceneSegment = effectiveBackgroundTimeline[index];
 
@@ -3164,12 +3242,12 @@ export const Studio: React.FC = () => {
                   </div>
                 )}
               </>
-            )}
+            </div>
 
             {/* ==============================================================
                 ABA 3: LEGENDAS (Estilos Customizáveis + Posição + Blocos Sincronizados)
                ============================================================== */}
-            {activeTab === 'subtitles' && (
+            <div className={activeTab === 'subtitles' ? 'block' : 'hidden'}>
               <div className="space-y-3.5">
                 {/* 1. Card Recolhível: Estilo & Animação das Legendas (Padrão: Recolhido) */}
                 <div className="rounded-xl bg-[#202024]/70 border border-white/[0.06] p-4 hover:border-white/[0.1] transition-all">
@@ -3673,12 +3751,12 @@ export const Studio: React.FC = () => {
                   )}
                 </div>
               </div>
-            )}
+            </div>
 
             {/* ==============================================================
                 ABA 4: ÁUDIO & MIXAGEM (Narração + SFX Multiplier + BGM + Auto-Ducking)
                ============================================================== */}
-            {activeTab === 'audio' && (
+            <div className={activeTab === 'audio' ? 'block' : 'hidden'}>
               <div className="space-y-4">
                 {/* Cabeçalho da Seção de Áudio */}
                 <div className="flex items-center justify-between">
@@ -3983,7 +4061,7 @@ export const Studio: React.FC = () => {
                   )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* ==============================================================
