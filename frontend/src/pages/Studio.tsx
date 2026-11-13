@@ -354,6 +354,10 @@ export const Studio: React.FC = () => {
   const [sceneMasterWordMap, setSceneMasterWordMap] = useState<
     Record<number, SubtitleWordTiming[]>
   >({});
+  // Assinatura sincronizada dos blocos de legenda de cada cena
+  const [syncedSceneBlocksMap, setSyncedSceneBlocksMap] = useState<
+    Record<number, string>
+  >({});
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(
     DEFAULT_SUBTITLE_STYLE
   );
@@ -1711,6 +1715,11 @@ export const Studio: React.FC = () => {
           delete next[sceneIndex];
           return next;
         });
+        setSyncedSceneBlocksMap((prev) => {
+          const next = { ...prev };
+          delete next[sceneIndex];
+          return next;
+        });
       }
       if (Array.isArray(data.sceneTimings)) {
         setSceneTimings(data.sceneTimings);
@@ -2134,6 +2143,7 @@ export const Studio: React.FC = () => {
         setDurationInFrames(narration.durationInFrames);
         setSubtitles(narration.subtitles || []);
         setSceneMasterWordMap({});
+        setSyncedSceneBlocksMap({});
         setAvatarTimeline(narration.avatarTimeline || []);
         setSceneTimings(narration.sceneTimings || []);
         setAudioGenerated(true);
@@ -2415,66 +2425,44 @@ export const Studio: React.FC = () => {
       .trim();
   };
 
-  const getMasterWordsForScene = useCallback(
-    (sceneIdx: number): SubtitleWordTiming[] => {
-      if (sceneMasterWordMap[sceneIdx] && sceneMasterWordMap[sceneIdx].length > 0) {
-        return sceneMasterWordMap[sceneIdx];
-      }
-      const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
-      if (!group || group.items.length === 0) return [];
+  const getSceneBlocksSignature = useCallback(
+    (items: Array<{ sub: SubtitleItem }>): string => {
+      return items.map((it) => it.sub.text.trim()).join('|||');
+    },
+    []
+  );
 
-      const collected: SubtitleWordTiming[] = [];
-      for (const item of group.items) {
-        if (item.sub.words && item.sub.words.length > 0) {
-          collected.push(...item.sub.words);
-        } else {
-          collected.push(...ensureSubtitleWordTimings(item.sub));
+  useEffect(() => {
+    if (sceneSubtitleGroups.length === 0) return;
+    setSyncedSceneBlocksMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const group of sceneSubtitleGroups) {
+        if (next[group.sceneIndex] === undefined) {
+          next[group.sceneIndex] = getSceneBlocksSignature(group.items);
+          changed = true;
         }
       }
-
-      if (collected.length > 0) {
-        setSceneMasterWordMap((prev) => ({
-          ...prev,
-          [sceneIdx]: collected,
-        }));
-      }
-
-      return collected;
-    },
-    [sceneMasterWordMap, sceneSubtitleGroups]
-  );
+      return changed ? next : prev;
+    });
+  }, [sceneSubtitleGroups, getSceneBlocksSignature]);
 
   const isSceneSubtitleUnsynced = useCallback(
     (sceneIdx: number): boolean => {
       const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
       if (!group || group.items.length === 0) return false;
 
-      const masterWords = getMasterWordsForScene(sceneIdx);
-      if (masterWords.length === 0) return false;
+      const currentSig = getSceneBlocksSignature(group.items);
+      const syncedSig = syncedSceneBlocksMap[sceneIdx];
 
-      for (const { sub } of group.items) {
-        const textWords = sub.text.trim().split(/\s+/).filter(Boolean);
-        const subWords = sub.words || [];
-
-        // 1. Se a contagem de palavras do texto do bloco for diferente das palavras sincronizadas
-        if (textWords.length !== subWords.length) {
-          return true;
-        }
-
-        // 2. Se qualquer palavra do texto do bloco for diferente da palavra sincronizada
-        for (let i = 0; i < textWords.length; i++) {
-          if (
-            normalizeSubtitleWord(textWords[i]) !==
-            normalizeSubtitleWord(subWords[i]?.word || '')
-          ) {
-            return true;
-          }
-        }
+      // Se a cena ainda não foi inicializada no mapa de sincronização, inicia sincronizada
+      if (syncedSig === undefined) {
+        return false;
       }
 
-      return false;
+      return currentSig !== syncedSig;
     },
-    [sceneSubtitleGroups, getMasterWordsForScene]
+    [sceneSubtitleGroups, syncedSceneBlocksMap, getSceneBlocksSignature]
   );
 
   const performSceneSubtitlesSync = useCallback(
@@ -2645,6 +2633,22 @@ export const Studio: React.FC = () => {
   const handleSynchronizeSceneSubtitles = (sceneIdx: number) => {
     const updated = performSceneSubtitlesSync(sceneIdx);
     setSubtitles(updated);
+
+    const sceneTiming = sceneTimings[sceneIdx];
+    const frameStartThreshold = sceneTiming ? sceneTiming.frameStart : 0;
+    const frameEndThreshold = sceneTiming ? sceneTiming.frameEnd : Infinity;
+    const updatedSceneSubs = updated.filter(
+      (s) =>
+        s.frameStart >= frameStartThreshold && s.frameStart <= frameEndThreshold
+    );
+    const newSig = getSceneBlocksSignature(
+      updatedSceneSubs.map((sub) => ({ sub, globalIndex: 0 }))
+    );
+    setSyncedSceneBlocksMap((prev) => ({
+      ...prev,
+      [sceneIdx]: newSig,
+    }));
+
     setSuccessMsg('Legenda sincronizada com o áudio da cena!');
   };
 
@@ -2754,6 +2758,13 @@ export const Studio: React.FC = () => {
     if (hadAutoSync) {
       setSubtitles(finalSubtitles);
     }
+    setSyncedSceneBlocksMap((prev) => {
+      const next = { ...prev };
+      for (const grp of sceneSubtitleGroups) {
+        next[grp.sceneIndex] = getSceneBlocksSignature(grp.items);
+      }
+      return next;
+    });
 
     const subtitlesToPersist = finalSubtitles.map((sub) => ({
       ...sub,
