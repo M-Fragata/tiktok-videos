@@ -795,7 +795,30 @@ export const Studio: React.FC = () => {
     if (props.backgroundTimeline) {
       setBackgroundTimeline(props.backgroundTimeline);
     }
-    if (props.subtitles) setSubtitles(props.subtitles);
+    if (props.subtitles) {
+      setSubtitles(props.subtitles);
+      if (Array.isArray(props.subtitles)) {
+        const timings = props.storyboard?.sceneTimings || [];
+        const masterMap: Record<number, SubtitleWordTiming[]> = {};
+        props.subtitles.forEach((sub: SubtitleItem) => {
+          if (!sub.words || sub.words.length === 0) return;
+          const mid = (sub.frameStart + sub.frameEnd) / 2;
+          const sIdx = timings.findIndex(
+            (t: SceneFrameTiming) => mid >= t.frameStart - 10 && mid <= t.frameEnd + 10
+          );
+          if (sIdx >= 0) {
+            if (!masterMap[sIdx]) masterMap[sIdx] = [];
+            masterMap[sIdx].push(...sub.words);
+          }
+        });
+        Object.keys(masterMap).forEach((k) => {
+          masterMap[Number(k)].sort((a, b) => a.frameStart - b.frameStart);
+        });
+        if (Object.keys(masterMap).length > 0) {
+          setSceneMasterWordMap(masterMap);
+        }
+      }
+    }
     if (props.subtitleStyle) {
       setSubtitleStyle({
         ...DEFAULT_SUBTITLE_STYLE,
@@ -2478,6 +2501,33 @@ export const Studio: React.FC = () => {
       if (!group) return currentList;
 
       let masterWords = sceneMasterWordMap[sceneIdx];
+      // 1. Tenta recuperar do mapa em memória
+      if (!masterWords || masterWords.length === 0) {
+        // 2. Tenta recuperar das legendas salvas intactas do banco de dados (videoRecord)
+        const savedSubs = videoRecord?.remotionProps?.subtitles;
+        const timing = sceneTimings[sceneIdx];
+        if (savedSubs && Array.isArray(savedSubs) && timing) {
+          const collectedFromRecord: SubtitleWordTiming[] = [];
+          for (const s of savedSubs) {
+            const mid = (s.frameStart + s.frameEnd) / 2;
+            if (mid >= timing.frameStart - 10 && mid <= timing.frameEnd + 10) {
+              if (s.words && s.words.length > 0) {
+                collectedFromRecord.push(...s.words);
+              }
+            }
+          }
+          if (collectedFromRecord.length > 0) {
+            collectedFromRecord.sort((a, b) => a.frameStart - b.frameStart);
+            masterWords = collectedFromRecord;
+            setSceneMasterWordMap((prev) => ({
+              ...prev,
+              [sceneIdx]: collectedFromRecord,
+            }));
+          }
+        }
+      }
+
+      // 3. Fallback final caso ainda não haja
       if (!masterWords || masterWords.length === 0) {
         masterWords = group.items.flatMap((item) =>
           item.sub.words && item.sub.words.length > 0
@@ -2535,8 +2585,8 @@ export const Studio: React.FC = () => {
             }
           }
 
-          // 2. Se não encontrou, busca aproximada (prefixo de pelo menos 3 letras)
-          if (matchedIdx === -1 && normW.length >= 3) {
+          // 2. Se não encontrou, busca aproximada (prefixo de pelo menos 2 letras)
+          if (matchedIdx === -1 && normW.length >= 2) {
             for (let m = masterPointer; m < normalizedMasterWords.length; m++) {
               const mn = normalizedMasterWords[m].norm;
               if (mn.startsWith(normW) || normW.startsWith(mn)) {
@@ -2570,8 +2620,24 @@ export const Studio: React.FC = () => {
           }
         }
 
+        // Se for o último bloco da cena e restaram palavras master no áudio, estende a última palavra até a última masterWord
+        if (
+          bIdx === activeBlocks.length - 1 &&
+          masterPointer < normalizedMasterWords.length &&
+          assignedWords.length > 0
+        ) {
+          const lastMaster =
+            normalizedMasterWords[normalizedMasterWords.length - 1];
+          if (
+            lastMaster.frameEnd >
+            assignedWords[assignedWords.length - 1].frameEnd
+          ) {
+            assignedWords[assignedWords.length - 1].frameEnd =
+              lastMaster.frameEnd;
+          }
+        }
+
         if (assignedWords.length > 0) {
-          // Corte Seco: frameStart na primeira palavra, frameEnd na última palavra
           const blockStart = assignedWords[0].frameStart;
           const blockEnd = Math.max(
             blockStart + 1,
@@ -2584,6 +2650,33 @@ export const Studio: React.FC = () => {
             text: rawWords.join(' '),
             words: assignedWords,
           });
+        }
+      }
+
+      // Estende cada bloco confortavelmente até o início do próximo bloco ou até o fim da fala da cena
+      const sceneTiming = sceneTimings[sceneIdx];
+      const sceneEndFrame = sceneTiming
+        ? sceneTiming.frameEnd
+        : normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
+
+      for (let i = 0; i < updatedSceneBlocks.length; i++) {
+        if (i < updatedSceneBlocks.length - 1) {
+          // Bloco intermediário: permanece visível até 1 frame antes do próximo bloco começar
+          const nextStart = updatedSceneBlocks[i + 1].frameStart;
+          if (nextStart > updatedSceneBlocks[i].frameStart) {
+            updatedSceneBlocks[i].frameEnd = Math.max(
+              updatedSceneBlocks[i].frameEnd,
+              nextStart - 1
+            );
+          }
+        } else {
+          // Último bloco da cena: estende até o final da fala da cena
+          if (sceneEndFrame && sceneEndFrame > updatedSceneBlocks[i].frameStart) {
+            updatedSceneBlocks[i].frameEnd = Math.max(
+              updatedSceneBlocks[i].frameEnd,
+              sceneEndFrame
+            );
+          }
         }
       }
 
@@ -2627,6 +2720,7 @@ export const Studio: React.FC = () => {
       sceneSubtitleGroups,
       sceneMasterWordMap,
       sceneTimings,
+      videoRecord,
     ]
   );
 
