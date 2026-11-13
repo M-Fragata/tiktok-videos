@@ -395,12 +395,38 @@ export const Studio: React.FC = () => {
     return true;
   });
 
+  // Subseção: Regravação de Frases por Cena (Padrão: recolhida)
+  const [isAudioPhrasesCollapsed, setIsAudioPhrasesCollapsed] = useState<boolean>(() => {
+    if (!id) return true;
+    try {
+      const saved = localStorage.getItem(`studio_audio_phrases_collapsed_${id}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return true;
+  });
+
   const toggleAudioNarrationCollapsed = () => {
     setIsAudioNarrationCollapsed((prev) => {
       const next = !prev;
       if (id) {
         try {
           localStorage.setItem(`studio_audio_narration_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleAudioPhrasesCollapsed = () => {
+    setIsAudioPhrasesCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_audio_phrases_collapsed_${id}`, String(next));
         } catch {
           /* ignore storage error */
         }
@@ -561,6 +587,13 @@ export const Studio: React.FC = () => {
         setIsAudioNarrationCollapsed(savedNarration === 'true');
       } else {
         setIsAudioNarrationCollapsed(true);
+      }
+
+      const savedPhrases = localStorage.getItem(`studio_audio_phrases_collapsed_${id}`);
+      if (savedPhrases !== null) {
+        setIsAudioPhrasesCollapsed(savedPhrases === 'true');
+      } else {
+        setIsAudioPhrasesCollapsed(true);
       }
 
       const savedMixer = localStorage.getItem(`studio_audio_mixer_collapsed_${id}`);
@@ -4516,21 +4549,30 @@ export const Studio: React.FC = () => {
                         )}
                       </button>
 
-                      {/* NOVO BLOCO: Regravação Pontual de Falas por Cena */}
+                      {/* Subseção Recolhível: Regravação Pontual de Falas por Cena */}
                       {audioGenerated && (
                         <div className="pt-2 border-t border-white/[0.06] space-y-2">
-                          <div className="flex items-center justify-between">
+                          <div
+                            onClick={toggleAudioPhrasesCollapsed}
+                            className="flex cursor-pointer select-none items-center justify-between gap-2 py-0.5 hover:opacity-90 transition-opacity"
+                          >
                             <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
                               <span>💬</span>
                               <span>Regravação de Frases por Cena</span>
                             </span>
-                            <span className="text-[9px] text-teal-400 font-medium">
-                              Ajuste Fino
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] text-teal-400 font-medium">
+                                Ajuste Fino
+                              </span>
+                              <span className="text-xs text-slate-400 transition-transform">
+                                {isAudioPhrasesCollapsed ? '⌄' : '⌃'}
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
-                            {scenes.map((scene, sceneIdx) => {
+                          {!isAudioPhrasesCollapsed && (
+                            <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar pt-1">
+                              {scenes.map((scene, sceneIdx) => {
                               const dialogues = getSceneDialogues(scene);
                               const isCollapsed =
                                 collapsedNarrationScenes[sceneIdx] !== undefined
@@ -4776,6 +4818,7 @@ export const Studio: React.FC = () => {
                               );
                             })}
                           </div>
+                        )}
                         </div>
                       )}
                     </>

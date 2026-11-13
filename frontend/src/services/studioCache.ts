@@ -17,6 +17,7 @@ export function clearStudioVideoCache(videoId?: string): void {
         `studio_sub_blocks_collapsed_${videoId}`,
         `studio_collapsed_subtitle_scenes_${videoId}`,
         `studio_audio_narration_collapsed_${videoId}`,
+        `studio_audio_phrases_collapsed_${videoId}`,
         `studio_audio_mixer_collapsed_${videoId}`,
         `studio_audio_sfx_collapsed_${videoId}`,
         `studio_collapsed_sfx_scenes_${videoId}`,
