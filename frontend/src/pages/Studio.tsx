@@ -2456,26 +2456,16 @@ export const Studio: React.FC = () => {
         const textWords = sub.text.trim().split(/\s+/).filter(Boolean);
         const subWords = sub.words || [];
 
-        // 1. Contagem de palavras diferente
+        // 1. Se a contagem de palavras do texto do bloco for diferente das palavras sincronizadas
         if (textWords.length !== subWords.length) {
           return true;
         }
 
-        // 2. Palavras diferentes das palavras sincronizadas
+        // 2. Se qualquer palavra do texto do bloco for diferente da palavra sincronizada
         for (let i = 0; i < textWords.length; i++) {
           if (
             normalizeSubtitleWord(textWords[i]) !==
             normalizeSubtitleWord(subWords[i]?.word || '')
-          ) {
-            return true;
-          }
-        }
-
-        // 3. Início ou fim divergente do primeiro e último word timing
-        if (subWords.length > 0) {
-          if (
-            sub.frameStart !== subWords[0].frameStart ||
-            sub.frameEnd !== subWords[subWords.length - 1].frameEnd
           ) {
             return true;
           }
@@ -4758,8 +4748,7 @@ export const Studio: React.FC = () => {
                                           title="Sincronizar tempos das palavras desta cena com o áudio"
                                           className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold text-amber-300 hover:bg-amber-500/30 transition shadow-sm animate-pulse"
                                         >
-                                          <span>⚡</span>
-                                          <span>Sincronizar Tempos</span>
+                                          <span>Sincronizar</span>
                                         </button>
                                       )}
                                       <span className="text-[9px] font-medium text-slate-400">
