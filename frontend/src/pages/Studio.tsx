@@ -37,6 +37,7 @@ import {
   SubtitleFontFamily,
   SubtitleItem,
   SubtitleStyleConfig,
+  SubtitleWordTiming,
   TimeMachineVideoProps,
   VideoRecord,
   VoiceCatalog,
@@ -349,6 +350,10 @@ export const Studio: React.FC = () => {
     BackgroundSegment[]
   >([]);
   const [subtitles, setSubtitles] = useState<SubtitleItem[]>([]);
+  // Dicionário mestre de palavras reais por cena (preserva timestamps da ElevenLabs durante edições de texto)
+  const [sceneMasterWordMap, setSceneMasterWordMap] = useState<
+    Record<number, SubtitleWordTiming[]>
+  >({});
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(
     DEFAULT_SUBTITLE_STYLE
   );
@@ -1693,6 +1698,11 @@ export const Studio: React.FC = () => {
       setAudioSrc(data.audioUrl);
       if (Array.isArray(data.subtitles)) {
         setSubtitles(data.subtitles);
+        setSceneMasterWordMap((prev) => {
+          const next = { ...prev };
+          delete next[sceneIndex];
+          return next;
+        });
       }
       if (Array.isArray(data.sceneTimings)) {
         setSceneTimings(data.sceneTimings);
@@ -2115,6 +2125,7 @@ export const Studio: React.FC = () => {
         setAudioSrc(narration.audioUrl);
         setDurationInFrames(narration.durationInFrames);
         setSubtitles(narration.subtitles || []);
+        setSceneMasterWordMap({});
         setAvatarTimeline(narration.avatarTimeline || []);
         setSceneTimings(narration.sceneTimings || []);
         setAudioGenerated(true);
@@ -2143,216 +2154,6 @@ export const Studio: React.FC = () => {
     }
   };
 
-  // ========================================================
-  // ETAPA 3C: Montar Vídeo no @remotion/player
-  // ========================================================
-  const allScenesHaveSelectedImage =
-    scenes.length > 0 && scenes.every((s) => Boolean(s.selectedImage));
-  const canAssembleVideo = allScenesHaveSelectedImage && audioGenerated;
-
-  const handleAssembleVideo = async () => {
-    if (!id || scenes.length === 0) return;
-    setErrorMsg(null);
-
-    const totalFrames = Math.max(30, durationInFrames);
-    const framesPerScene = Math.floor(totalFrames / scenes.length);
-
-    const assembledBackgroundTimeline: BackgroundSegment[] = scenes.map(
-      (scene, idx) => {
-        const timing = sceneTimings[idx];
-        const frameStart = timing
-          ? timing.frameStart
-          : idx * framesPerScene;
-        const frameEnd = timing
-          ? timing.frameEnd
-          : idx === scenes.length - 1
-            ? totalFrames
-            : (idx + 1) * framesPerScene - 1;
-
-        return {
-          imageSrc: scene.selectedImage || 'background.jpg',
-          frameStart,
-          frameEnd,
-        };
-      }
-    );
-
-    const assembledAvatarTimeline: AvatarSegment[] = scenes.map(
-      (scene, idx) => {
-        const timing = sceneTimings[idx];
-        return {
-          startSecond: timing ? timing.startSecond : idx * 4,
-          endSecond: timing ? timing.endSecond : (idx + 1) * 4,
-          image: scene.avatarSprite,
-        };
-      }
-    );
-
-    const primaryBg =
-      assembledBackgroundTimeline[0]?.imageSrc || 'background.jpg';
-
-    setBackgroundSrc(primaryBg);
-    setBackgroundTimeline(assembledBackgroundTimeline);
-    setAvatarTimeline(assembledAvatarTimeline);
-    setIsAssembled(true);
-
-    const subtitlesToPersist =
-      subtitles.length > 0
-        ? subtitles.map((sub) => ({
-            ...sub,
-            words: ensureSubtitleWordTimings(sub),
-          }))
-        : effectiveSubtitles;
-
-    const payload: TimeMachineVideoProps = {
-      theme: theme || 'Vlog de Viagem no Tempo',
-      durationInFrames: totalFrames,
-      backgroundSrc: primaryBg,
-      backgroundTimeline: assembledBackgroundTimeline,
-      audioSrc,
-      bgmVibe: effectiveBgmVibe,
-      bgmVolume,
-      sfxEnabled: true,
-      globalSfxMultiplier,
-      autoDucking,
-      subtitles: subtitlesToPersist,
-      subtitleStyle,
-      avatarTimeline: assembledAvatarTimeline,
-      storyboard: {
-        durationPreset,
-        scenes,
-        audioGenerated,
-        isAssembled: true,
-        sceneTimings,
-        avatarConfig,
-        ideationOptions,
-        bgmVibe: effectiveBgmVibe,
-        episodeFormat,
-        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
-        protagonistAgency,
-        contentBalance,
-      },
-    };
-
-    try {
-      const res = await fetch(`/api/videos/${id}/storyboard`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVideoRecord(data.video);
-      }
-      setSuccessMsg('Vídeo montado!');
-    } catch (err) {
-      console.warn('Aviso ao persistir montagem no banco:', err);
-    }
-  };
-
-  // Função para disparar o download real do arquivo .mp4 diretamente na pasta Downloads do navegador
-  const triggerDirectMp4Download = async (
-    videoUrl: string,
-    currentTheme: string
-  ) => {
-    const fileName = buildMp4DownloadFileName(currentTheme);
-    setIsDownloadingMp4(true);
-    try {
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error('Falha ao obter o arquivo MP4 renderizado.');
-      }
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-    } catch (err) {
-      console.warn('Fallback para download direto via link:', err);
-      const fallbackLink = document.createElement('a');
-      fallbackLink.href = videoUrl;
-      fallbackLink.download = fileName;
-      fallbackLink.target = '_blank';
-      fallbackLink.rel = 'noreferrer';
-      document.body.appendChild(fallbackLink);
-      fallbackLink.click();
-      document.body.removeChild(fallbackLink);
-    } finally {
-      setIsDownloadingMp4(false);
-    }
-  };
-
-  // ========================================================
-  // Renderização Final do MP4 no Servidor (POST /api/videos/:id/rerender)
-  // ========================================================
-  const handleRenderMp4OnServer = async () => {
-    if (!id) return;
-    if (!isAssembled && canAssembleVideo) {
-      await handleAssembleVideo();
-    }
-
-    setIsRerendering(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    const payload: TimeMachineVideoProps = {
-      theme: theme || 'Vlog de Viagem no Tempo',
-      durationInFrames: effectiveTotalFrames,
-      backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
-      backgroundTimeline: effectiveBackgroundTimeline,
-      audioSrc,
-      bgmVibe: effectiveBgmVibe,
-      subtitles: effectiveSubtitles,
-      subtitleStyle,
-      avatarTimeline: effectiveAvatarTimeline,
-      storyboard: {
-        durationPreset,
-        scenes,
-        audioGenerated,
-        isAssembled: true,
-        sceneTimings,
-        avatarConfig,
-        ideationOptions,
-        bgmVibe: effectiveBgmVibe,
-        episodeFormat,
-        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
-        protagonistAgency,
-        contentBalance,
-      },
-    };
-
-    try {
-      const res = await fetch(`/api/videos/${id}/rerender`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        pendingAutoDownloadRef.current = false;
-        throw new Error(data.error || 'Falha ao acionar renderização do MP4');
-      }
-
-      setVideoRecord(data.video);
-      setIsAssembled(true);
-      setSuccessMsg(
-        'Renderizando MP4 atualizado no servidor! O download iniciará automaticamente ao concluir.'
-      );
-    } catch (err) {
-      pendingAutoDownloadRef.current = false;
-      setErrorMsg(
-        err instanceof Error ? err.message : 'Erro ao renderizar vídeo MP4'
-      );
-    } finally {
-      setIsRerendering(false);
-    }
-  };
-
   const handleSubtitleStyleChange = <K extends keyof SubtitleStyleConfig>(
     field: K,
     value: SubtitleStyleConfig[K]
@@ -2372,13 +2173,10 @@ export const Studio: React.FC = () => {
       const baseList = prev.length > 0 ? prev : effectiveSubtitles;
       return baseList.map((item, idx) => {
         if (idx !== index) return item;
-        const updatedItem: SubtitleItem = {
+        return {
           ...item,
           [field]: value,
-          words: undefined,
         };
-        updatedItem.words = ensureSubtitleWordTimings(updatedItem);
-        return updatedItem;
       });
     });
   };
@@ -2598,6 +2396,520 @@ export const Studio: React.FC = () => {
     effectiveSubtitles,
     effectiveTotalFrames,
   ]);
+
+  // Normalização fonética/léxica para matching de legendas (sem diacríticos, minúsculas, sem pontuação)
+  const normalizeSubtitleWord = (str: string): string => {
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[.,!?;:…"'—\-()]/g, '')
+      .trim();
+  };
+
+  const getMasterWordsForScene = useCallback(
+    (sceneIdx: number): SubtitleWordTiming[] => {
+      if (sceneMasterWordMap[sceneIdx] && sceneMasterWordMap[sceneIdx].length > 0) {
+        return sceneMasterWordMap[sceneIdx];
+      }
+      const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
+      if (!group || group.items.length === 0) return [];
+
+      const collected: SubtitleWordTiming[] = [];
+      for (const item of group.items) {
+        if (item.sub.words && item.sub.words.length > 0) {
+          collected.push(...item.sub.words);
+        } else {
+          collected.push(...ensureSubtitleWordTimings(item.sub));
+        }
+      }
+
+      if (collected.length > 0) {
+        setSceneMasterWordMap((prev) => ({
+          ...prev,
+          [sceneIdx]: collected,
+        }));
+      }
+
+      return collected;
+    },
+    [sceneMasterWordMap, sceneSubtitleGroups]
+  );
+
+  const isSceneSubtitleUnsynced = useCallback(
+    (sceneIdx: number): boolean => {
+      const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
+      if (!group || group.items.length === 0) return false;
+
+      const masterWords = getMasterWordsForScene(sceneIdx);
+      if (masterWords.length === 0) return false;
+
+      for (const { sub } of group.items) {
+        const textWords = sub.text.trim().split(/\s+/).filter(Boolean);
+        const subWords = sub.words || [];
+
+        // 1. Contagem de palavras diferente
+        if (textWords.length !== subWords.length) {
+          return true;
+        }
+
+        // 2. Palavras diferentes das palavras sincronizadas
+        for (let i = 0; i < textWords.length; i++) {
+          if (
+            normalizeSubtitleWord(textWords[i]) !==
+            normalizeSubtitleWord(subWords[i]?.word || '')
+          ) {
+            return true;
+          }
+        }
+
+        // 3. Início ou fim divergente do primeiro e último word timing
+        if (subWords.length > 0) {
+          if (
+            sub.frameStart !== subWords[0].frameStart ||
+            sub.frameEnd !== subWords[subWords.length - 1].frameEnd
+          ) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    },
+    [sceneSubtitleGroups, getMasterWordsForScene]
+  );
+
+  const performSceneSubtitlesSync = useCallback(
+    (
+      sceneIdx: number,
+      currentSubtitlesList?: SubtitleItem[]
+    ): SubtitleItem[] => {
+      const currentList =
+        currentSubtitlesList ||
+        (subtitles.length > 0 ? subtitles : effectiveSubtitles);
+
+      const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
+      if (!group) return currentList;
+
+      let masterWords = sceneMasterWordMap[sceneIdx];
+      if (!masterWords || masterWords.length === 0) {
+        masterWords = group.items.flatMap((item) =>
+          item.sub.words && item.sub.words.length > 0
+            ? item.sub.words
+            : ensureSubtitleWordTimings(item.sub)
+        );
+        if (masterWords.length > 0) {
+          setSceneMasterWordMap((prev) => ({
+            ...prev,
+            [sceneIdx]: masterWords,
+          }));
+        }
+      }
+
+      if (masterWords.length === 0) {
+        return currentList;
+      }
+
+      const normalizedMasterWords = masterWords.map((mw) => ({
+        ...mw,
+        norm: normalizeSubtitleWord(mw.word),
+      }));
+
+      const sceneBlockIndexes = group.items.map((i) => i.globalIndex);
+      const sceneBlocks = sceneBlockIndexes
+        .map((idx) => currentList[idx])
+        .filter(Boolean);
+
+      // Filtra blocos vazios (Suporte a blocos flexíveis)
+      const activeBlocks = sceneBlocks.filter(
+        (b) => b.text.trim().length > 0
+      );
+
+      if (activeBlocks.length === 0) {
+        return currentList.filter((_, idx) => !sceneBlockIndexes.includes(idx));
+      }
+
+      let masterPointer = 0;
+      const updatedSceneBlocks: SubtitleItem[] = [];
+
+      for (let bIdx = 0; bIdx < activeBlocks.length; bIdx++) {
+        const block = activeBlocks[bIdx];
+        const rawWords = block.text.trim().split(/\s+/).filter(Boolean);
+        const assignedWords: SubtitleWordTiming[] = [];
+
+        for (const rawW of rawWords) {
+          const normW = normalizeSubtitleWord(rawW);
+          let matchedIdx = -1;
+
+          // 1. Busca exata a partir de masterPointer
+          for (let m = masterPointer; m < normalizedMasterWords.length; m++) {
+            if (normalizedMasterWords[m].norm === normW) {
+              matchedIdx = m;
+              break;
+            }
+          }
+
+          // 2. Se não encontrou, busca aproximada (prefixo de pelo menos 3 letras)
+          if (matchedIdx === -1 && normW.length >= 3) {
+            for (let m = masterPointer; m < normalizedMasterWords.length; m++) {
+              const mn = normalizedMasterWords[m].norm;
+              if (mn.startsWith(normW) || normW.startsWith(mn)) {
+                matchedIdx = m;
+                break;
+              }
+            }
+          }
+
+          if (matchedIdx >= 0) {
+            const mw = normalizedMasterWords[matchedIdx];
+            assignedWords.push({
+              word: rawW,
+              frameStart: mw.frameStart,
+              frameEnd: mw.frameEnd,
+            });
+            // Avança o ponteiro além da palavra encontrada (suporte a palavras deletadas/ocultadas)
+            masterPointer = matchedIdx + 1;
+          } else {
+            // Palavra não encontrada no áudio original: interpola frames
+            const prevAssigned = assignedWords[assignedWords.length - 1];
+            const fallbackStart = prevAssigned
+              ? prevAssigned.frameEnd + 1
+              : normalizedMasterWords[masterPointer]?.frameStart ?? block.frameStart;
+            const fallbackEnd = fallbackStart + 12;
+            assignedWords.push({
+              word: rawW,
+              frameStart: fallbackStart,
+              frameEnd: fallbackEnd,
+            });
+          }
+        }
+
+        if (assignedWords.length > 0) {
+          // Corte Seco: frameStart na primeira palavra, frameEnd na última palavra
+          const blockStart = assignedWords[0].frameStart;
+          const blockEnd = Math.max(
+            blockStart + 1,
+            assignedWords[assignedWords.length - 1].frameEnd
+          );
+
+          updatedSceneBlocks.push({
+            frameStart: blockStart,
+            frameEnd: blockEnd,
+            text: rawWords.join(' '),
+            words: assignedWords,
+          });
+        }
+      }
+
+      // Previne sobreposição de frames entre blocos consecutivos
+      for (let i = 0; i < updatedSceneBlocks.length - 1; i++) {
+        if (updatedSceneBlocks[i].frameEnd >= updatedSceneBlocks[i + 1].frameStart) {
+          updatedSceneBlocks[i].frameEnd = Math.max(
+            updatedSceneBlocks[i].frameStart,
+            updatedSceneBlocks[i + 1].frameStart - 1
+          );
+        }
+      }
+
+      const minIndex =
+        sceneBlockIndexes.length > 0 ? Math.min(...sceneBlockIndexes) : -1;
+      const maxIndex =
+        sceneBlockIndexes.length > 0 ? Math.max(...sceneBlockIndexes) : -1;
+
+      if (minIndex === -1) {
+        const timing = sceneTimings[sceneIdx];
+        const targetFrame = timing ? timing.frameStart : 0;
+        const insertAt = currentList.findIndex((s) => s.frameStart >= targetFrame);
+        if (insertAt === -1) {
+          return [...currentList, ...updatedSceneBlocks];
+        } else {
+          const copy = [...currentList];
+          copy.splice(insertAt, 0, ...updatedSceneBlocks);
+          return copy;
+        }
+      } else {
+        return [
+          ...currentList.slice(0, minIndex),
+          ...updatedSceneBlocks,
+          ...currentList.slice(maxIndex + 1),
+        ];
+      }
+    },
+    [
+      subtitles,
+      effectiveSubtitles,
+      sceneSubtitleGroups,
+      sceneMasterWordMap,
+      sceneTimings,
+    ]
+  );
+
+  const handleSynchronizeSceneSubtitles = (sceneIdx: number) => {
+    const updated = performSceneSubtitlesSync(sceneIdx);
+    setSubtitles(updated);
+    setSuccessMsg('Legenda sincronizada com o áudio da cena!');
+  };
+
+  const handleAddSubtitleBlock = (sceneIdx: number) => {
+    const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
+    const sceneTiming = sceneTimings[sceneIdx];
+    const defaultFrameStart =
+      group && group.items.length > 0
+        ? group.items[group.items.length - 1].sub.frameEnd + 1
+        : sceneTiming
+          ? sceneTiming.frameStart
+          : 0;
+
+    const newBlock: SubtitleItem = {
+      text: '',
+      frameStart: defaultFrameStart,
+      frameEnd: defaultFrameStart + 30,
+      words: [],
+    };
+
+    setSubtitles((prev) => {
+      const base = prev.length > 0 ? prev : effectiveSubtitles;
+      if (!group || group.items.length === 0) {
+        const insertIdx = base.findIndex((s) => s.frameStart >= defaultFrameStart);
+        if (insertIdx === -1) return [...base, newBlock];
+        const copy = [...base];
+        copy.splice(insertIdx, 0, newBlock);
+        return copy;
+      } else {
+        const lastGlobalIndex = Math.max(...group.items.map((i) => i.globalIndex));
+        const copy = [...base];
+        copy.splice(lastGlobalIndex + 1, 0, newBlock);
+        return copy;
+      }
+    });
+  };
+
+  const handleDeleteSubtitleBlock = (globalIndex: number) => {
+    setSubtitles((prev) => {
+      const base = prev.length > 0 ? prev : effectiveSubtitles;
+      return base.filter((_, idx) => idx !== globalIndex);
+    });
+  };
+
+  // ========================================================
+  // ETAPA 3C: Montar Vídeo no @remotion/player
+  // ========================================================
+  const allScenesHaveSelectedImage =
+    scenes.length > 0 && scenes.every((s) => Boolean(s.selectedImage));
+  const canAssembleVideo = allScenesHaveSelectedImage && audioGenerated;
+
+  const handleAssembleVideo = async () => {
+    if (!id || scenes.length === 0) return;
+    setErrorMsg(null);
+
+    const totalFrames = Math.max(30, durationInFrames);
+    const framesPerScene = Math.floor(totalFrames / scenes.length);
+
+    const assembledBackgroundTimeline: BackgroundSegment[] = scenes.map(
+      (scene, idx) => {
+        const timing = sceneTimings[idx];
+        const frameStart = timing
+          ? timing.frameStart
+          : idx * framesPerScene;
+        const frameEnd = timing
+          ? timing.frameEnd
+          : idx === scenes.length - 1
+            ? totalFrames
+            : (idx + 1) * framesPerScene - 1;
+
+        return {
+          imageSrc: scene.selectedImage || 'background.jpg',
+          frameStart,
+          frameEnd,
+        };
+      }
+    );
+
+    const assembledAvatarTimeline: AvatarSegment[] = scenes.map(
+      (scene, idx) => {
+        const timing = sceneTimings[idx];
+        return {
+          startSecond: timing ? timing.startSecond : idx * 4,
+          endSecond: timing ? timing.endSecond : (idx + 1) * 4,
+          image: scene.avatarSprite,
+        };
+      }
+    );
+
+    const primaryBg =
+      assembledBackgroundTimeline[0]?.imageSrc || 'background.jpg';
+
+    setBackgroundSrc(primaryBg);
+    setBackgroundTimeline(assembledBackgroundTimeline);
+    setAvatarTimeline(assembledAvatarTimeline);
+    setIsAssembled(true);
+
+    // Auto-sincroniza legendas de qualquer cena que possua edições pendentes
+    let finalSubtitles = subtitles.length > 0 ? subtitles : effectiveSubtitles;
+    let hadAutoSync = false;
+    for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
+      if (isSceneSubtitleUnsynced(sIdx)) {
+        finalSubtitles = performSceneSubtitlesSync(sIdx, finalSubtitles);
+        hadAutoSync = true;
+      }
+    }
+    if (hadAutoSync) {
+      setSubtitles(finalSubtitles);
+    }
+
+    const subtitlesToPersist = finalSubtitles.map((sub) => ({
+      ...sub,
+      words: ensureSubtitleWordTimings(sub),
+    }));
+
+    const payload: TimeMachineVideoProps = {
+      theme: theme || 'Vlog de Viagem no Tempo',
+      durationInFrames: totalFrames,
+      backgroundSrc: primaryBg,
+      backgroundTimeline: assembledBackgroundTimeline,
+      audioSrc,
+      bgmVibe: effectiveBgmVibe,
+      bgmVolume,
+      sfxEnabled: true,
+      globalSfxMultiplier,
+      autoDucking,
+      subtitles: subtitlesToPersist,
+      subtitleStyle,
+      avatarTimeline: assembledAvatarTimeline,
+      storyboard: {
+        durationPreset,
+        scenes,
+        audioGenerated,
+        isAssembled: true,
+        sceneTimings,
+        avatarConfig,
+        ideationOptions,
+        bgmVibe: effectiveBgmVibe,
+        episodeFormat,
+        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+        protagonistAgency,
+        contentBalance,
+      },
+    };
+
+    try {
+      const res = await fetch(`/api/videos/${id}/storyboard`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVideoRecord(data.video);
+      }
+      setSuccessMsg('Vídeo montado!');
+    } catch (err) {
+      console.warn('Aviso ao persistir montagem no banco:', err);
+    }
+  };
+
+  // Função para disparar o download real do arquivo .mp4 diretamente na pasta Downloads do navegador
+  const triggerDirectMp4Download = async (
+    videoUrl: string,
+    currentTheme: string
+  ) => {
+    const fileName = buildMp4DownloadFileName(currentTheme);
+    setIsDownloadingMp4(true);
+    try {
+      const response = await fetch(videoUrl);
+      if (!response.ok) {
+        throw new Error('Falha ao obter o arquivo MP4 renderizado.');
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+      console.warn('Fallback para download direto via link:', err);
+      const fallbackLink = document.createElement('a');
+      fallbackLink.href = videoUrl;
+      fallbackLink.download = fileName;
+      fallbackLink.target = '_blank';
+      fallbackLink.rel = 'noreferrer';
+      document.body.appendChild(fallbackLink);
+      fallbackLink.click();
+      document.body.removeChild(fallbackLink);
+    } finally {
+      setIsDownloadingMp4(false);
+    }
+  };
+
+  // ========================================================
+  // Renderização Final do MP4 no Servidor (POST /api/videos/:id/rerender)
+  // ========================================================
+  const handleRenderMp4OnServer = async () => {
+    if (!id) return;
+    if (!isAssembled && canAssembleVideo) {
+      await handleAssembleVideo();
+    }
+
+    setIsRerendering(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const payload: TimeMachineVideoProps = {
+      theme: theme || 'Vlog de Viagem no Tempo',
+      durationInFrames: effectiveTotalFrames,
+      backgroundSrc: effectiveBackgroundTimeline[0]?.imageSrc || backgroundSrc,
+      backgroundTimeline: effectiveBackgroundTimeline,
+      audioSrc,
+      bgmVibe: effectiveBgmVibe,
+      subtitles: effectiveSubtitles,
+      subtitleStyle,
+      avatarTimeline: effectiveAvatarTimeline,
+      storyboard: {
+        durationPreset,
+        scenes,
+        audioGenerated,
+        isAssembled: true,
+        sceneTimings,
+        avatarConfig,
+        ideationOptions,
+        bgmVibe: effectiveBgmVibe,
+        episodeFormat,
+        seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
+        protagonistAgency,
+        contentBalance,
+      },
+    };
+
+    try {
+      const res = await fetch(`/api/videos/${id}/rerender`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        pendingAutoDownloadRef.current = false;
+        throw new Error(data.error || 'Falha ao acionar renderização do MP4');
+      }
+
+      setVideoRecord(data.video);
+      setIsAssembled(true);
+      setSuccessMsg(
+        'Renderizando MP4 atualizado no servidor! O download iniciará automaticamente ao concluir.'
+      );
+    } catch (err) {
+      pendingAutoDownloadRef.current = false;
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Erro ao renderizar vídeo MP4'
+      );
+    } finally {
+      setIsRerendering(false);
+    }
+  };
 
   // Assinatura reativa do estado atual do vídeo no Studio (para detectar se o MP4 existente está atualizado)
   const currentRenderSignature = useMemo(() => {
@@ -4352,6 +4664,20 @@ export const Studio: React.FC = () => {
                                     </div>
 
                                     <div className="flex items-center gap-2">
+                                      {isSceneSubtitleUnsynced(group.sceneIndex) && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSynchronizeSceneSubtitles(group.sceneIndex);
+                                          }}
+                                          title="Sincronizar tempos das palavras desta cena com o áudio"
+                                          className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[9px] font-bold text-amber-300 hover:bg-amber-500/30 transition shadow-sm animate-pulse"
+                                        >
+                                          <span>⚡</span>
+                                          <span>Sincronizar Tempos</span>
+                                        </button>
+                                      )}
                                       <span className="text-[9px] font-medium text-slate-400">
                                         {group.items.length}{' '}
                                         {group.items.length === 1 ? 'bloco' : 'blocos'}
@@ -4418,6 +4744,17 @@ export const Studio: React.FC = () => {
                                                 }
                                                 className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-1.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
                                               />
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteSubtitleBlock(globalIndex)}
+                                                title="Remover este bloco de legenda"
+                                                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                                              >
+                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                              </button>
                                             </div>
 
                                             {/* Informação de Frame Mono-espaçada abaixo do Input */}
@@ -4460,6 +4797,18 @@ export const Studio: React.FC = () => {
                                         );
                                       })
                                     )}
+
+                                    {/* Botão para Adicionar Novo Bloco na Cena */}
+                                    <div className="flex justify-end pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddSubtitleBlock(group.sceneIndex)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-dashed border-white/[0.12] bg-white/[0.02] px-2.5 py-1 text-[10px] font-medium text-slate-400 hover:border-amber-500/40 hover:text-amber-300 transition"
+                                      >
+                                        <span>+</span>
+                                        <span>Novo Bloco na Cena #{group.sceneIndex + 1}</span>
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
                               </div>
