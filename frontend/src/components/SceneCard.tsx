@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DialogueItem, SfxOption, SpeakerType, StoryboardScene } from '../remotion/types';
+import type { DialogueItem, SpeakerType, StoryboardScene } from '../remotion/types';
 import { getSceneDialogues } from '../remotion/types';
 import { getCachedVoiceCatalog } from '../services/voiceCatalog';
 import { VoicePreviewButton } from './VoicePreviewButton';
@@ -33,13 +33,6 @@ export interface SceneCardProps {
   // Visual Prompt generation
   onGenerateVisualPrompt?: () => void;
   isGeneratingVisualPrompt?: boolean;
-  // SFX generation & audio preview
-  sfxOptions?: SfxOption[];
-  onGenerateSfx?: (prompt: string) => void;
-  isGeneratingSfx?: boolean;
-  onPlayAudioPreview?: (url: string) => void;
-  onPromoteSfx?: () => void;
-  isPromotingSfx?: boolean;
 }
 
 export const SceneCard: React.FC<SceneCardProps> = ({
@@ -63,12 +56,6 @@ export const SceneCard: React.FC<SceneCardProps> = ({
   onRemoveDialogue,
   onGenerateVisualPrompt,
   isGeneratingVisualPrompt = false,
-  sfxOptions,
-  onGenerateSfx,
-  isGeneratingSfx = false,
-  onPlayAudioPreview,
-  onPromoteSfx,
-  isPromotingSfx = false,
 }) => {
   const dialogues: DialogueItem[] = getSceneDialogues(scene);
 

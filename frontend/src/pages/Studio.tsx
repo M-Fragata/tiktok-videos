@@ -4167,6 +4167,7 @@ export const Studio: React.FC = () => {
                 </div>
 
                 {/* 3. Card Granular: Efeitos Sonoros por Cena */}
+                {/* 3. Card de Efeitos Sonoros por Cena (Sound Design Centralizado) */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
                   <div
                     onClick={toggleAudioSfxCollapsed}
@@ -4178,12 +4179,12 @@ export const Studio: React.FC = () => {
                         <span>Efeitos Sonoros por Cena</span>
                       </h3>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        Ajuste o volume sugerido de cada efeito sonoro individualmente
+                        Escolha sons da biblioteca ou gere efeitos sonoros exclusivos com a ElevenLabs
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-slate-400">
-                        {scenes.reduce((acc, s) => acc + getSceneSfxList(s).length, 0)} sons
+                        {scenes.filter((s) => s.custom_sfx_url || (s.sfx_suggestion && s.sfx_suggestion !== 'none')).length} ativos
                       </span>
                       <span className="text-xs text-slate-400">
                         {isAudioSfxCollapsed ? '⌄' : '⌃'}
@@ -4193,97 +4194,236 @@ export const Studio: React.FC = () => {
 
                   {!isAudioSfxCollapsed && (
                     <>
-                      {scenes.length === 0 || scenes.every((s) => getSceneSfxList(s).length === 0) ? (
+                      {scenes.length === 0 ? (
                         <div className="py-4 text-center">
                           <p className="text-xs text-slate-400 italic">
-                            Nenhum efeito sonoro configurado nas cenas ainda.
+                            Nenhuma cena disponível no roteiro.
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
                           {scenes.map((scene, sceneIdx) => {
                             const sfxItems = getSceneSfxList(scene);
-                            if (sfxItems.length === 0) return null;
+                            const hasActiveAudio =
+                              Boolean(scene.custom_sfx_url) ||
+                              (Boolean(scene.sfx_suggestion) &&
+                                scene.sfx_suggestion !== 'none');
+                            const activeSfxItem = sfxItems[0];
+                            const previewKey = `sfx-${sceneIdx}-0`;
+                            const isPlaying = playingSfxPreview === previewKey;
+                            const resolvedAudioUrl = activeSfxItem
+                              ? resolveSfxAudioUrl(activeSfxItem)
+                              : '';
+                            const currentVolume =
+                              activeSfxItem?.suggested_volume ?? 0.35;
+                            const isGeneratingThisSfx =
+                              generatingSfxSceneIndex === sceneIdx;
 
                             return (
                               <div
                                 key={`scene-sfx-group-${sceneIdx}`}
-                                className="rounded-lg border border-white/[0.06] bg-[#16161b] p-2.5 space-y-2.5"
+                                className="rounded-xl border border-white/[0.06] bg-[#16161b] p-3 space-y-2.5"
                               >
+                                {/* Cabeçalho da Cena */}
                                 <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
-                                  <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1">
+                                  <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1.5">
                                     <span>🎬</span>
                                     <span>Cena #{sceneIdx + 1}</span>
                                   </span>
-                                  <span className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate" title={scene.text}>
+                                  <span
+                                    className="text-[10px] text-slate-400 line-clamp-1 max-w-[200px] truncate"
+                                    title={scene.text}
+                                  >
                                     {scene.text || 'Sem fala'}
                                   </span>
                                 </div>
 
-                                <div className="space-y-2">
-                                  {sfxItems.map((sfx: SfxItem, sfxIdx: number) => {
-                                    const previewKey = `sfx-${sceneIdx}-${sfxIdx}`;
-                                    const isPlaying = playingSfxPreview === previewKey;
-                                    const resolvedAudioUrl = resolveSfxAudioUrl(sfx);
-                                    const currentVolume = sfx.suggested_volume ?? 0.35;
+                                {/* Linha 1: Som Escolhido */}
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <label className="text-[10px] font-semibold text-slate-300 flex items-center gap-1">
+                                      <span>🔊 Som Escolhido:</span>
+                                      {scene.sfx_label && (
+                                        <span className="text-[9px] text-teal-300/80 font-normal">
+                                          ({scene.sfx_label})
+                                        </span>
+                                      )}
+                                    </label>
 
-                                    return (
-                                      <div
-                                        key={previewKey}
-                                        className="rounded-md bg-[#1f1f26] p-2 space-y-1.5 border border-white/[0.04]"
-                                      >
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-1.5 min-w-0">
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                handlePlaySfxPreview(resolvedAudioUrl, previewKey)
-                                              }
-                                              title="Pré-escutar som"
-                                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] transition ${
-                                                isPlaying
-                                                  ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
-                                                  : 'border-white/10 bg-[#2b2b35] text-slate-200 hover:border-amber-500/50 hover:bg-[#343440]'
-                                              }`}
-                                            >
-                                              {isPlaying ? '⏹' : '▶'}
-                                            </button>
-                                            <span className="text-[11px] font-semibold text-slate-200 truncate">
-                                              {sfx.sfx_key || scene.sfx_suggestion || 'SFX'}
-                                            </span>
-                                          </div>
-
-                                          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 shrink-0">
-                                            {Math.round(currentVolume * 100)}%
-                                          </span>
-                                        </div>
-
-                                        {sfx.sound_prompt && (
-                                          <p className="text-[9.5px] text-slate-400 italic line-clamp-1 truncate" title={sfx.sound_prompt}>
-                                            {sfx.sound_prompt}
-                                          </p>
-                                        )}
-
-                                        <div className="pt-0.5">
-                                          <input
-                                            type="range"
-                                            min="0"
-                                            max="1"
-                                            step="0.05"
-                                            value={currentVolume}
-                                            onChange={(e) =>
-                                              handleUpdateSceneSfxVolume(
-                                                sceneIdx,
-                                                sfxIdx,
-                                                parseFloat(e.target.value)
-                                              )
-                                            }
-                                            className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
-                                          />
-                                        </div>
+                                    {scene.custom_sfx_url && (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                                          ✨ ElevenLabs IA Ativo
+                                        </span>
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            promotingSfxSceneIndex === sceneIdx
+                                          }
+                                          title="Salvar este áudio na Biblioteca Global para reutilizar a custo zero"
+                                          onClick={() =>
+                                            void handlePromoteStoryboardSceneSfx(
+                                              sceneIdx
+                                            )
+                                          }
+                                          className="flex items-center gap-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-teal-200 transition disabled:opacity-50"
+                                        >
+                                          {promotingSfxSceneIndex ===
+                                          sceneIdx ? (
+                                            <span className="h-2 w-2 animate-spin rounded-full border border-teal-200 border-t-transparent" />
+                                          ) : (
+                                            <span>💾 Salvar</span>
+                                          )}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Remover áudio customizado"
+                                          onClick={() =>
+                                            handleRemoveCustomSfx(sceneIdx)
+                                          }
+                                          className="text-slate-400 hover:text-rose-400 transition text-[10px] ml-0.5"
+                                        >
+                                          ✕
+                                        </button>
                                       </div>
-                                    );
-                                  })}
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={
+                                        scene.custom_sfx_url
+                                          ? 'custom'
+                                          : scene.sfx_suggestion || 'none'
+                                      }
+                                      onChange={(e) =>
+                                        handleSceneSfxOptionChange(
+                                          sceneIdx,
+                                          e.target.value
+                                        )
+                                      }
+                                      className="flex-1 rounded-lg border border-[#2c2c32] bg-[#1a1a22] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
+                                    >
+                                      <option value="none">
+                                        🔇 Nenhum / Sem Efeito
+                                      </option>
+                                      {scene.custom_sfx_url && (
+                                        <option value="custom">
+                                          ✨ Áudio Gerado com IA (Ativo)
+                                        </option>
+                                      )}
+                                      {sfxLibraryOptions
+                                        .filter((opt) => opt.value !== 'none')
+                                        .map((opt) => (
+                                          <option
+                                            key={opt.value}
+                                            value={opt.value}
+                                          >
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                    </select>
+
+                                    {hasActiveAudio && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handlePlaySfxPreview(
+                                            resolvedAudioUrl,
+                                            previewKey
+                                          )
+                                        }
+                                        title="Pré-escutar som"
+                                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs transition ${
+                                          isPlaying
+                                            ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
+                                            : 'border-white/10 bg-[#252530] text-slate-200 hover:border-amber-500/50 hover:bg-[#2e2e3c]'
+                                        }`}
+                                      >
+                                        {isPlaying ? '⏹' : '▶'}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {hasActiveAudio && (
+                                    <div className="rounded-lg bg-[#111115] p-2 space-y-1 border border-white/[0.04]">
+                                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                        <span>Volume do Efeito</span>
+                                        <span className="font-mono text-amber-400 font-bold">
+                                          {Math.round(currentVolume * 100)}%
+                                        </span>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={currentVolume}
+                                        onChange={(e) =>
+                                          handleUpdateSceneSfxVolume(
+                                            sceneIdx,
+                                            0,
+                                            parseFloat(e.target.value)
+                                          )
+                                        }
+                                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Linha 2: Prompt Acústico & Botão Gerar */}
+                                <div className="space-y-1 pt-1 border-t border-white/[0.04]">
+                                  <label className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                                    <span className="text-teal-400">🎧</span>
+                                    <span>Prompt Acústico (ElevenLabs):</span>
+                                  </label>
+                                  <div className="flex gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={scene.sfx_prompt || ''}
+                                      onChange={(e) =>
+                                        handleSceneFieldChange(
+                                          sceneIdx,
+                                          'sfx_prompt',
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder="Ex: Sudden dry twig snapping in dead quiet forest..."
+                                      className="flex-1 rounded-lg border border-[#2c2c32] bg-[#121216] px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition italic"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        isGeneratingThisSfx ||
+                                        !scene.sfx_prompt?.trim()
+                                      }
+                                      onClick={() =>
+                                        void handleGenerateSceneSfx(
+                                          sceneIdx,
+                                          scene.sfx_prompt || ''
+                                        )
+                                      }
+                                      title="Gerar efeito sonoro exclusivo com a ElevenLabs Sound Effects"
+                                      className="flex shrink-0 items-center gap-1 rounded-lg border border-teal-500/40 bg-teal-500/15 px-3 py-1.5 text-[11px] font-bold text-teal-300 transition hover:bg-teal-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      {isGeneratingThisSfx ? (
+                                        <>
+                                          <span className="h-2.5 w-2.5 animate-spin rounded-full border border-teal-300 border-t-transparent" />
+                                          <span>Gerando...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>✨</span>
+                                          <span>
+                                            {hasActiveAudio
+                                              ? 'Gerar'
+                                              : '+ Efeito'}
+                                          </span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );

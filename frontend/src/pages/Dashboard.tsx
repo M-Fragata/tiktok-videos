@@ -152,6 +152,122 @@ function renderDeltaBadge(delta: number) {
   return <span className="text-[11px] font-medium text-slate-500">0 estável</span>;
 }
 
+/**
+ * Skeleton completo para o Dashboard, replicando exatamente a anatomia visual
+ * do perfil do criador, KPIs de métricas e grid de publicações.
+ */
+const DashboardSkeleton: React.FC = () => {
+  return (
+    <div className="space-y-8 animate-fadeIn" aria-hidden="true">
+      {/* ─── 1. ANÁLISE DO PERFIL & CABEÇALHO DO CRIADOR SKELETON ─── */}
+      <section className="rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-slate-900/40 p-6 shadow-xl backdrop-blur animate-pulse">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-800/80">
+          <div className="flex items-center gap-5">
+            {/* Foto do Perfil Skeleton */}
+            <div className="h-20 w-20 rounded-2xl bg-slate-800/90 border-2 border-slate-700/60 shadow-lg" />
+
+            {/* Dados Básicos & Bio Skeleton */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2.5">
+                <div className="h-6 w-52 rounded-lg bg-slate-800" />
+                <div className="h-5 w-32 rounded-md bg-slate-800/80" />
+              </div>
+              <div className="h-3.5 w-80 max-w-full rounded bg-slate-800/60" />
+              <div className="h-3.5 w-60 rounded bg-slate-800/50" />
+            </div>
+          </div>
+
+          {/* Status de Sincronização Skeleton */}
+          <div className="flex items-center gap-2.5 self-end md:self-start">
+            <div className="h-4 w-16 rounded-full bg-slate-800/70" />
+            <div className="h-8 w-8 rounded-lg bg-slate-800/80 border border-slate-700/50" />
+          </div>
+        </div>
+
+        {/* ─── CARDS DE KPI SKELETON (5 CARDS) ─── */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-6">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-3 w-16 rounded bg-slate-800/80" />
+                <div className="h-4 w-4 rounded bg-slate-800/60" />
+              </div>
+              <div className="h-7 w-24 rounded bg-slate-800" />
+              <div className="h-3.5 w-16 rounded bg-slate-800/60" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── 2. SEÇÃO DE PUBLICAÇÕES SKELETON ─── */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-48 rounded-lg bg-slate-800" />
+              <div className="h-5 w-8 rounded-md bg-slate-800/80" />
+            </div>
+            <div className="h-3 w-72 rounded bg-slate-800/60" />
+          </div>
+
+          {/* Filtro e Ordenação Skeleton */}
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-56 rounded-xl bg-slate-900 border border-slate-800" />
+            <div className="h-8 w-36 rounded-xl bg-slate-900 border border-slate-800" />
+          </div>
+        </div>
+
+        {/* Grid de Vídeos Skeleton (8 cards = 4 colunas x 2 linhas) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {Array.from({ length: 8 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="flex flex-col rounded-2xl border border-slate-800/90 bg-slate-900/50 overflow-hidden shadow-lg animate-pulse"
+            >
+              {/* Capa 9:14 */}
+              <div className="relative aspect-[9/14] w-full bg-slate-800/60 flex items-center justify-center">
+                <svg
+                  className="w-10 h-10 text-slate-700/40"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                {/* Badges falsos */}
+                <div className="absolute top-2.5 left-2.5 h-4 w-14 rounded-md bg-slate-700/60" />
+                <div className="absolute top-2.5 right-2.5 h-4 w-10 rounded-md bg-slate-700/60" />
+                <div className="absolute bottom-2 left-2 h-3.5 w-16 rounded bg-slate-700/60" />
+              </div>
+
+              {/* Corpo */}
+              <div className="p-3.5 flex-1 flex flex-col justify-between space-y-3">
+                <div className="space-y-1.5">
+                  <div className="h-3.5 w-full rounded bg-slate-800" />
+                  <div className="h-3.5 w-3/4 rounded bg-slate-800/80" />
+                </div>
+                <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-800/80">
+                  <div className="h-3 w-8 rounded bg-slate-800/60" />
+                  <div className="h-3 w-8 rounded bg-slate-800/60" />
+                  <div className="h-3 w-8 rounded bg-slate-800/60 justify-self-end" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+};
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -550,11 +666,7 @@ export const Dashboard: React.FC = () => {
         {/* ─── CONTEÚDO SCROLLÁVEL ─── */}
         <main className="flex-1 p-8 space-y-8 max-w-7xl mx-auto w-full">
           {isLoading && !data ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-amber-500 border-t-transparent mb-4" />
-              <p className="text-sm font-medium text-slate-300">Carregando métricas do TikTok...</p>
-              <p className="text-xs text-slate-500 mt-1">Conectando ao banco de dados SQLite</p>
-            </div>
+            <DashboardSkeleton />
           ) : !data?.connected || !data?.account ? (
             <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-amber-400 mb-4 border border-slate-700">
