@@ -12,6 +12,7 @@ export const subtitleItemSchema = z
     frameEnd: z.number().int().min(1),
     text: z.string().min(1, 'O texto da legenda não pode estar vazio'),
     words: z.array(subtitleWordTimingSchema).optional(),
+    sceneIndex: z.number().int().min(0).optional(),
   })
   .refine((data) => data.frameEnd >= data.frameStart, {
     message: 'frameEnd deve ser maior ou igual a frameStart',
@@ -183,6 +184,18 @@ export const sfxItemSchema = z.object({
     .nullable()
     .optional()
     .describe('URL pública do arquivo gerado por IA ou estático.'),
+  playback_rate: z
+    .number()
+    .min(0.5)
+    .max(2.0)
+    .optional()
+    .default(1.0)
+    .describe('Velocidade de reprodução do som (ex: 0.5x a 2.0x, padrão 1.0x).'),
+  original_duration_sec: z
+    .number()
+    .positive()
+    .optional()
+    .describe('Duração nativa original do arquivo de áudio (em segundos).'),
 });
 export type SfxItemInput = z.infer<typeof sfxItemSchema>;
 
@@ -331,6 +344,7 @@ export const regenerateDialogueAudioSchema = z.object({
   speaker: z.enum(['protagonist', 'narrator', 'character']),
   voiceId: z.string().optional(),
   characterName: z.string().optional(),
+  text: z.string().min(1).optional(),
 });
 
 /**

@@ -4,6 +4,7 @@ import { AnimatedBackground } from './components/AnimatedBackground';
 import { AudioTrack } from './components/AudioTrack';
 import { Avatar } from './components/Avatar';
 import { Subtitles } from './components/Subtitles';
+import { TitleBadge } from './components/TitleBadge';
 import {
   DEFAULT_AVATAR_TIMELINE,
   DEFAULT_BACKGROUND_TIMELINE,
@@ -56,6 +57,9 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
 
       {/* Camada 4: Legendas dinâmicas customizáveis (Karaokê, Pop TikTok ou Hormozi) */}
       <Subtitles subtitles={subtitles} subtitleStyle={subtitleStyle} />
+
+      {/* Camada 5: Badge do título viral (Pop Elástico + Zoom Out Fade nos primeiros 4s / 120 frames) */}
+      <TitleBadge theme={theme} durationInFrames={120} />
     </AbsoluteFill>
   );
 };

@@ -119,39 +119,6 @@ export const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
             'linear-gradient(180deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.18) 35%, rgba(0,0,0,0.42) 70%, rgba(0,0,0,0.88) 100%)',
         }}
       />
-
-      {/* Badge superior do tema da Máquina do Tempo */}
-      {theme && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 80,
-            left: 0,
-            right: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            padding: '0 48px',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: 'rgba(15, 23, 42, 0.85)',
-              border: '2px solid rgba(245, 158, 11, 0.6)',
-              borderRadius: 9999,
-              padding: '14px 32px',
-              color: '#fbbf24',
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-              fontSize: 30,
-              fontWeight: 800,
-              letterSpacing: '0.04em',
-              textAlign: 'center',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
-            }}
-          >
-            ⏳ {theme}
-          </div>
-        </div>
-      )}
     </AbsoluteFill>
   );
 };

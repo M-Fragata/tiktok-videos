@@ -159,6 +159,25 @@ function getAudioFileDurationSeconds(
 }
 
 /**
+ * Mede a duração exata de qualquer ficheiro de áudio no disco (ex: efeitos sonoros .mp3).
+ */
+export function probeAudioDurationSeconds(
+  filePath: string,
+  fallbackDuration: number = 2.0
+): Promise<number> {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      const duration = metadata?.format?.duration;
+      if (!err && typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
+        resolve(Number(duration.toFixed(2)));
+      } else {
+        resolve(fallbackDuration);
+      }
+    });
+  });
+}
+
+/**
  * Utilitário FFmpeg:
  * Concatena os ficheiros de áudio ordenados (chunk_0.mp3, chunk_1.mp3, ...)
  * num único ficheiro final audio.mp3 na raiz de /storage/<videoId>/.
@@ -259,7 +278,8 @@ function extractWordsFromAlignment(
  */
 function buildSubtitlesFromWords(
   words: WordTimestamp[],
-  wordsPerChunk = WORDS_PER_SUBTITLE_CHUNK
+  wordsPerChunk = WORDS_PER_SUBTITLE_CHUNK,
+  sceneIndex?: number
 ): SubtitleItem[] {
   const subtitles: SubtitleItem[] = [];
 
@@ -288,6 +308,7 @@ function buildSubtitlesFromWords(
       frameEnd,
       text: chunk.map((w) => w.word).join(' '),
       words: wordTimings,
+      ...(typeof sceneIndex === 'number' ? { sceneIndex } : {}),
     });
   }
 
@@ -560,7 +581,8 @@ export async function generateNarrationWithTimestamps(
       const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
       const sceneSubtitles = buildSubtitlesFromWords(
         sceneWords,
-        WORDS_PER_SUBTITLE_CHUNK
+        WORDS_PER_SUBTITLE_CHUNK,
+        index
       );
       allSubtitles.push(...sceneSubtitles);
 
@@ -753,7 +775,8 @@ export async function rebuildNarrationFromChunks({
       const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
       const sceneSubtitles = buildSubtitlesFromWords(
         sceneWords,
-        WORDS_PER_SUBTITLE_CHUNK
+        WORDS_PER_SUBTITLE_CHUNK,
+        index
       );
       allSubtitles.push(...sceneSubtitles);
 
@@ -846,6 +869,7 @@ export async function regenerateSingleDialogueNarration({
   speaker,
   voiceId,
   characterName,
+  text,
   scenes,
   storageVideoDir,
   publicBaseUrl,
@@ -856,6 +880,7 @@ export async function regenerateSingleDialogueNarration({
   speaker: SpeakerType;
   voiceId?: string;
   characterName?: string;
+  text?: string;
   scenes: ScriptScene[];
   storageVideoDir: string;
   publicBaseUrl: string;
@@ -870,7 +895,7 @@ export async function regenerateSingleDialogueNarration({
   const chunksDir = path.join(storageVideoDir, 'chunks');
   const manifestPath = path.join(chunksDir, 'chunks_manifest.json');
 
-  // Atualiza as cenas com o novo speaker/voiceId/characterName
+  // Atualiza as cenas com o novo speaker/voiceId/characterName/text
   const updatedScenes = scenes.map((sc, sIdx) => {
     if (sIdx !== sceneIndex) return sc;
     const dialogues =
@@ -885,12 +910,19 @@ export async function regenerateSingleDialogueNarration({
           ];
     const updatedDialogues = dialogues.map((d, dIdx) => {
       if (dIdx !== dialogueIndex) return d;
-      return { ...d, speaker, voiceId, characterName };
+      return {
+        ...d,
+        speaker,
+        voiceId,
+        characterName,
+        text: text?.trim() || d.text,
+      };
     });
     return {
       ...sc,
       speaker: updatedDialogues[0]?.speaker || sc.speaker,
       dialogues: updatedDialogues,
+      text: updatedDialogues.map((d) => d.text).join(' '),
     };
   });
 
@@ -929,8 +961,10 @@ export async function regenerateSingleDialogueNarration({
   }
 
   const targetItem = manifestData.items[targetItemIndex];
+  const textToSynthesize = text?.trim() || targetItem.text;
+
   console.log(
-    `[ElevenLabs] Regravando cirurgicamente diálogo da cena #${sceneIndex + 1}, fala #${dialogueIndex + 1} (speaker: "${speaker}", voiceId: "${voiceId || 'padrão'}")...`
+    `[ElevenLabs] Regravando cirurgicamente diálogo da cena #${sceneIndex + 1}, fala #${dialogueIndex + 1} (speaker: "${speaker}", voiceId: "${voiceId || 'padrão'}", texto: "${textToSynthesize}")...`
   );
 
   const prevText =
@@ -942,7 +976,7 @@ export async function regenerateSingleDialogueNarration({
     ? manifestData.items[0]?.text
     : manifestData.items[targetItemIndex + 1]?.text;
 
-  const data = await synthesizeSceneChunk(targetItem.text, speaker, apiKey, {
+  const data = await synthesizeSceneChunk(textToSynthesize, speaker, apiKey, {
     previous_text: prevText,
     next_text: nextText,
     voiceId,
@@ -967,9 +1001,10 @@ export async function regenerateSingleDialogueNarration({
     lastCharEndSec
   );
 
-  // Atualiza o item no manifest
+  // Atualiza o item no manifest com novo texto, alinhamento e duração
   manifestData.items[targetItemIndex] = {
     ...targetItem,
+    text: textToSynthesize,
     speaker,
     voiceId,
     characterName,

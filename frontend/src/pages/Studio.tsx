@@ -116,6 +116,8 @@ function computeRenderSignature(params: {
     dialogues?: unknown[];
     avatarSprite: string;
     selectedImage?: string | null;
+    sfx_list?: unknown[];
+    custom_sfx_url?: string | null;
   }>;
 }): string {
   return JSON.stringify({
@@ -149,6 +151,8 @@ function computeRenderSignature(params: {
       dialogues: sc.dialogues,
       avatarSprite: sc.avatarSprite,
       selectedImage: sc.selectedImage || null,
+      sfx_list: sc.sfx_list,
+      custom_sfx_url: sc.custom_sfx_url || null,
     })),
   });
 }
@@ -368,6 +372,9 @@ export const Studio: React.FC = () => {
   const [bgmVolume, setBgmVolume] = useState<number>(0.1);
   const [autoDucking, setAutoDucking] = useState<boolean>(true);
   const [playingSfxPreview, setPlayingSfxPreview] = useState<string | null>(null);
+  const [detectedSfxDurations, setDetectedSfxDurations] = useState<Record<string, number>>({});
+  const activePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const activePreviewTimeoutRef = useRef<number | null>(null);
 
   // Estados de recolhimento dos cards na aba Áudio (Padrão: todas recolhidas)
   const [isAudioNarrationCollapsed, setIsAudioNarrationCollapsed] =
@@ -692,6 +699,8 @@ export const Studio: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRerendering, setIsRerendering] = useState<boolean>(false);
   const [isDownloadingMp4, setIsDownloadingMp4] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [simulatedRenderProgress, setSimulatedRenderProgress] = useState<number>(2);
   const [lastRenderedSignature, setLastRenderedSignature] = useState<
     string | null
   >(null);
@@ -871,10 +880,52 @@ export const Studio: React.FC = () => {
       }
 
       const loadedScenes = props.storyboard.scenes || [];
-      setScenes(loadedScenes);
-      if (loadedScenes.length > 0 && finalMixScenes.length === 0) {
+      const loadedSubtitles = props.subtitles || [];
+      const loadedTimings = props.storyboard.sceneTimings || [];
+
+      // Reconcilia automaticamente o texto das cenas com as legendas consolidadas mais recentes
+      const reconciledScenes = loadedScenes.map((sc, sIdx) => {
+        const sceneBlocks = loadedSubtitles.filter((sub) => {
+          if (sub.sceneIndex !== undefined) return sub.sceneIndex === sIdx;
+          const timing = loadedTimings[sIdx];
+          if (!timing) return false;
+          const mid = (sub.frameStart + sub.frameEnd) / 2;
+          return mid >= timing.frameStart - 2 && mid <= timing.frameEnd + 2;
+        });
+
+        if (sceneBlocks.length === 0) return sc;
+        const consolidatedText = sceneBlocks
+          .map((b) => b.text.trim())
+          .filter(Boolean)
+          .join(' ');
+        if (!consolidatedText || consolidatedText === sc.text) return sc;
+
+        const currentDialogues = getSceneDialogues(sc);
+        const updatedDialogues =
+          currentDialogues.length <= 1
+            ? [
+                {
+                  id: currentDialogues[0]?.id || `dlg_${sIdx}`,
+                  speaker:
+                    currentDialogues[0]?.speaker || sc.speaker || 'protagonist',
+                  text: consolidatedText,
+                  voiceId: currentDialogues[0]?.voiceId,
+                  characterName: currentDialogues[0]?.characterName,
+                },
+              ]
+            : currentDialogues;
+
+        return {
+          ...sc,
+          text: consolidatedText,
+          dialogues: updatedDialogues,
+        };
+      });
+
+      setScenes(reconciledScenes);
+      if (reconciledScenes.length > 0 && finalMixScenes.length === 0) {
         setFinalMixScenes(
-          loadedScenes.map((sc, idx) => ({
+          reconciledScenes.map((sc, idx) => ({
             uid: `approved__scene_${idx}`,
             sourceOptionId: 'approved',
             sourceOptionBadge: '✓ Aprovada',
@@ -1394,12 +1445,17 @@ export const Studio: React.FC = () => {
   };
 
   /**
-   * Atualiza o timing (início na cena ou duração) de um efeito específico dentro de uma cena
+   * Atualiza o timing (início na cena ou duração) e velocidade de um efeito específico dentro de uma cena
    */
   const handleUpdateSceneSfxTiming = (
     sceneIndex: number,
     sfxIndex: number,
-    updates: { start_time_sec?: number; duration_sec?: number }
+    updates: {
+      start_time_sec?: number;
+      duration_sec?: number;
+      playback_rate?: number;
+      original_duration_sec?: number;
+    }
   ) => {
     setScenes((prev) =>
       prev.map((scene, idx) => {
@@ -1417,6 +1473,12 @@ export const Studio: React.FC = () => {
                       ...(updates.duration_sec !== undefined
                         ? { duration_sec: updates.duration_sec }
                         : {}),
+                      ...(updates.playback_rate !== undefined
+                        ? { playback_rate: updates.playback_rate }
+                        : {}),
+                      ...(updates.original_duration_sec !== undefined
+                        ? { original_duration_sec: updates.original_duration_sec }
+                        : {}),
                     }
                   : item
               )
@@ -1427,6 +1489,10 @@ export const Studio: React.FC = () => {
                   start_time_sec: updates.start_time_sec ?? 0,
                   duration_sec: updates.duration_sec ?? 2.0,
                   suggested_volume: 0.35,
+                  playback_rate: updates.playback_rate ?? 1.0,
+                  ...(updates.original_duration_sec !== undefined
+                    ? { original_duration_sec: updates.original_duration_sec }
+                    : {}),
                   sfx_key:
                     scene.sfx_suggestion && scene.sfx_suggestion !== 'none'
                       ? scene.sfx_suggestion
@@ -1442,21 +1508,99 @@ export const Studio: React.FC = () => {
     );
   };
 
+  const stopSfxPreview = useCallback(() => {
+    if (activePreviewTimeoutRef.current) {
+      window.clearTimeout(activePreviewTimeoutRef.current);
+      activePreviewTimeoutRef.current = null;
+    }
+    if (activePreviewAudioRef.current) {
+      activePreviewAudioRef.current.pause();
+      activePreviewAudioRef.current.currentTime = 0;
+      activePreviewAudioRef.current = null;
+    }
+    setPlayingSfxPreview(null);
+  }, []);
+
   /**
-   * Reproduz um efeito sonoro isolado para pré-escuta na aba de Áudio
+   * Reproduz um efeito sonoro isolado para pré-escuta na aba de Áudio,
+   * respeitando a velocidade configurada, o tempo exato do slider e o loop contínuo.
    */
-  const handlePlaySfxPreview = (audioUrl: string, keyId: string) => {
+  const handlePlaySfxPreview = (
+    audioUrl: string,
+    keyId: string,
+    options?: {
+      targetDurationSec?: number;
+      playbackRate?: number;
+      volume?: number;
+    }
+  ) => {
     try {
+      stopSfxPreview();
       const audio = new window.Audio(audioUrl);
+      activePreviewAudioRef.current = audio;
       setPlayingSfxPreview(keyId);
-      audio.onended = () => setPlayingSfxPreview(null);
-      audio.onerror = () => setPlayingSfxPreview(null);
+
+      const speed = Math.min(2.0, Math.max(0.5, options?.playbackRate ?? 1.0));
+      const vol = Math.min(1.0, Math.max(0.0, options?.volume ?? 0.35));
+      const targetDurationSec = options?.targetDurationSec ?? 2.0;
+
+      audio.playbackRate = speed;
+      audio.volume = vol;
+      audio.loop = true;
+
+      // Tempo de reprodução real ajustado pela velocidade
+      const playDurationMs = Math.max(
+        100,
+        Math.round((targetDurationSec / speed) * 1000)
+      );
+      activePreviewTimeoutRef.current = window.setTimeout(() => {
+        stopSfxPreview();
+      }, playDurationMs);
+
+      audio.onerror = () => stopSfxPreview();
       void audio.play();
     } catch (e) {
       console.warn('Erro ao reproduzir pré-escuta de SFX:', e);
-      setPlayingSfxPreview(null);
+      stopSfxPreview();
     }
   };
+
+  useEffect(() => {
+    return () => {
+      stopSfxPreview();
+    };
+  }, [stopSfxPreview]);
+
+  // Detecção automática da duração original de arquivos de som vinculados
+  useEffect(() => {
+    scenes.forEach((scene) => {
+      const list = getSceneSfxList(scene);
+      list.forEach((sfx) => {
+        const url = resolveSfxAudioUrl(sfx);
+        if (!url || detectedSfxDurations[url]) return;
+        if (sfx.original_duration_sec) {
+          setDetectedSfxDurations((prev) => ({
+            ...prev,
+            [url]: sfx.original_duration_sec!,
+          }));
+          return;
+        }
+        const audio = new window.Audio(url);
+        audio.onloadedmetadata = () => {
+          if (
+            audio.duration &&
+            Number.isFinite(audio.duration) &&
+            audio.duration > 0
+          ) {
+            setDetectedSfxDurations((prev) => ({
+              ...prev,
+              [url]: Number(audio.duration.toFixed(2)),
+            }));
+          }
+        };
+      });
+    });
+  }, [scenes, detectedSfxDurations]);
 
   /**
    * Gera um efeito sonoro sob demanda na ElevenLabs via Text-to-SFX
@@ -1487,6 +1631,14 @@ export const Studio: React.FC = () => {
       }
 
       const audioUrl = data.audioUrl;
+      const realDuration = data.originalDurationSec;
+      if (audioUrl && realDuration) {
+        setDetectedSfxDurations((prev) => ({
+          ...prev,
+          [audioUrl]: realDuration,
+        }));
+      }
+
       setScenes((prev) =>
         prev.map((sc, idx) => {
           if (idx !== sceneIndex) return sc;
@@ -1502,6 +1654,8 @@ export const Studio: React.FC = () => {
                         ...item,
                         sound_prompt: promptText.trim(),
                         audio_url: audioUrl,
+                        original_duration_sec: realDuration,
+                        playback_rate: item.playback_rate ?? 1.0,
                         ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
                       }
                     : item
@@ -1511,9 +1665,11 @@ export const Studio: React.FC = () => {
                     sound_prompt: promptText.trim(),
                     match_score: 95,
                     start_time_sec: 0,
-                    duration_sec: durationSeconds || 2.5,
+                    duration_sec: durationSeconds || realDuration || 2.5,
                     suggested_volume: 0.35,
                     audio_url: audioUrl,
+                    original_duration_sec: realDuration,
+                    playback_rate: 1.0,
                   },
                 ];
           return {
@@ -1722,6 +1878,7 @@ export const Studio: React.FC = () => {
           speaker: dialogue.speaker,
           voiceId: dialogue.voiceId,
           characterName: dialogue.characterName,
+          text: dialogue.text,
         }),
       });
 
@@ -2273,6 +2430,46 @@ export const Studio: React.FC = () => {
   // ========================================================
   const hasScript = scenes.length > 0;
   const isPending = videoRecord?.status === 'PENDING';
+
+  // Progresso simulado contínuo durante a renderização no backend
+  useEffect(() => {
+    if (!isPending && !isRerendering) {
+      setSimulatedRenderProgress(2);
+      return;
+    }
+    const timer = setInterval(() => {
+      setSimulatedRenderProgress((prev) => {
+        if (prev >= 92) return 92;
+        if (prev < 30) return prev + 3;
+        if (prev < 60) return prev + 2;
+        return prev + 1;
+      });
+    }, 700);
+    return () => clearInterval(timer);
+  }, [isPending, isRerendering]);
+
+  const displayProgress = useMemo(() => {
+    if (isDownloadingMp4) {
+      return downloadProgress !== null ? downloadProgress : 100;
+    }
+    if (isRerendering || isPending) {
+      if (
+        videoRecord?.renderProgress !== undefined &&
+        videoRecord?.renderProgress !== null
+      ) {
+        return Math.max(2, Math.min(99, videoRecord.renderProgress));
+      }
+      return simulatedRenderProgress;
+    }
+    return 0;
+  }, [
+    isDownloadingMp4,
+    downloadProgress,
+    isRerendering,
+    isPending,
+    videoRecord?.renderProgress,
+    simulatedRenderProgress,
+  ]);
 
   const effectiveTotalFrames = useMemo(() => {
     if (durationInFrames && durationInFrames > 0) return durationInFrames;
@@ -3139,6 +3336,47 @@ export const Studio: React.FC = () => {
       words: ensureSubtitleWordTimings(sub),
     }));
 
+    // Sincroniza o texto das falas das cenas com as legendas consolidadas da Aba 3
+    const synchronizedScenes: StoryboardScene[] = scenes.map((sc, sIdx) => {
+      const sceneBlocks = finalSubtitles.filter((sub) => {
+        if (sub.sceneIndex !== undefined) return sub.sceneIndex === sIdx;
+        const timing = sceneTimings[sIdx];
+        if (!timing) return false;
+        const mid = (sub.frameStart + sub.frameEnd) / 2;
+        return mid >= timing.frameStart - 2 && mid <= timing.frameEnd + 2;
+      });
+
+      if (sceneBlocks.length === 0) return sc;
+      const consolidatedText = sceneBlocks
+        .map((b) => b.text.trim())
+        .filter(Boolean)
+        .join(' ');
+      if (!consolidatedText) return sc;
+
+      const currentDialogues = getSceneDialogues(sc);
+      const updatedDialogues =
+        currentDialogues.length <= 1
+          ? [
+              {
+                id: currentDialogues[0]?.id || `dlg_${sIdx}`,
+                speaker:
+                  currentDialogues[0]?.speaker || sc.speaker || 'protagonist',
+                text: consolidatedText,
+                voiceId: currentDialogues[0]?.voiceId,
+                characterName: currentDialogues[0]?.characterName,
+              },
+            ]
+          : currentDialogues;
+
+      return {
+        ...sc,
+        text: consolidatedText,
+        dialogues: updatedDialogues,
+      };
+    });
+
+    setScenes(synchronizedScenes);
+
     const payload: TimeMachineVideoProps = {
       theme: theme || 'Vlog de Viagem no Tempo',
       durationInFrames: totalFrames,
@@ -3155,7 +3393,7 @@ export const Studio: React.FC = () => {
       avatarTimeline: assembledAvatarTimeline,
       storyboard: {
         durationPreset,
-        scenes,
+        scenes: synchronizedScenes,
         audioGenerated,
         isAssembled: true,
         sceneTimings,
@@ -3192,12 +3430,40 @@ export const Studio: React.FC = () => {
   ) => {
     const fileName = buildMp4DownloadFileName(currentTheme);
     setIsDownloadingMp4(true);
+    setDownloadProgress(0);
     try {
       const response = await fetch(videoUrl);
       if (!response.ok) {
         throw new Error('Falha ao obter o arquivo MP4 renderizado.');
       }
-      const blob = await response.blob();
+
+      const contentLength = response.headers.get('content-length');
+      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+      let blob: Blob;
+      if (response.body && totalBytes > 0) {
+        const reader = response.body.getReader();
+        const chunks: BlobPart[] = [];
+        let receivedBytes = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            receivedBytes += value.length;
+            setDownloadProgress(
+              Math.min(100, Math.round((receivedBytes / totalBytes) * 100))
+            );
+          }
+        }
+        blob = new Blob(chunks, { type: 'video/mp4' });
+      } else {
+        setDownloadProgress(50);
+        blob = await response.blob();
+        setDownloadProgress(100);
+      }
+
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -3217,7 +3483,10 @@ export const Studio: React.FC = () => {
       fallbackLink.click();
       document.body.removeChild(fallbackLink);
     } finally {
-      setIsDownloadingMp4(false);
+      setTimeout(() => {
+        setIsDownloadingMp4(false);
+        setDownloadProgress(null);
+      }, 700);
     }
   };
 
@@ -3912,17 +4181,8 @@ export const Studio: React.FC = () => {
           )}
         </div>
 
-        {/* Direita: Pílula temporária de progresso + Menu de 3 Pontos Verticais */}
+        {/* Direita: Menu de 3 Pontos Verticais */}
         <div className="relative flex items-center gap-2.5" ref={optionsMenuRef}>
-          {(isRerendering || isPending || isDownloadingMp4) && (
-            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 shadow-sm">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-              <span>
-                {isDownloadingMp4 ? 'Baixando MP4...' : 'Renderizando MP4...'}
-              </span>
-            </div>
-          )}
-
           <button
             type="button"
             onClick={() => setIsOptionsMenuOpen((prev) => !prev)}
@@ -3930,19 +4190,15 @@ export const Studio: React.FC = () => {
             aria-label="Mais opções"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#2c2c32]/80 bg-[#1c1c22] text-slate-200 transition hover:border-white/20 hover:bg-[#24242c] hover:text-white"
           >
-            {isRerendering || isPending || isDownloadingMp4 ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-            ) : (
-              <svg
-                className="h-5 w-5"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <circle cx="12" cy="5" r="1.8" />
-                <circle cx="12" cy="12" r="1.8" />
-                <circle cx="12" cy="19" r="1.8" />
-              </svg>
-            )}
+            <svg
+              className="h-5 w-5"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
           </button>
 
           {isOptionsMenuOpen && (
@@ -5574,9 +5830,34 @@ export const Studio: React.FC = () => {
                                               )}
                                             </div>
 
-                                            {/* Linha 2: Texto da Fala (Apenas Leitura Estilizada) */}
-                                            <div className="rounded bg-[#16161c] border border-white/[0.04] p-2 text-[11px] text-slate-200 leading-relaxed font-normal italic select-text">
-                                              "{dialogue.text || '(Sem fala)'}"
+                                            {/* Linha 2: Texto da Fala Editável para Regravação */}
+                                            <div className="space-y-1">
+                                              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                <span className="font-medium text-slate-300">
+                                                  Texto da fala para regravar:
+                                                </span>
+                                                <span className="text-[9px] font-mono text-amber-400/90">
+                                                  {dialogue.text
+                                                    ?.trim()
+                                                    .split(/\s+/)
+                                                    .filter(Boolean).length || 0}{' '}
+                                                  palavras
+                                                </span>
+                                              </div>
+                                              <textarea
+                                                rows={2}
+                                                value={dialogue.text || ''}
+                                                onChange={(e) =>
+                                                  handleUpdateDialogueInStudio(
+                                                    sceneIdx,
+                                                    dialogue.id,
+                                                    'text',
+                                                    e.target.value
+                                                  )
+                                                }
+                                                placeholder="Digite o texto da fala a ser regravada na ElevenLabs..."
+                                                className="w-full resize-none rounded-lg border border-[#30303c] bg-[#14141a] p-2 text-[11px] text-slate-100 placeholder-slate-500 focus:border-teal-500 focus:outline-none transition-colors"
+                                              />
                                             </div>
 
                                             {/* Linha 3: Botão Regravar Frase */}
@@ -5779,6 +6060,17 @@ export const Studio: React.FC = () => {
                               activeSfxItem?.start_time_sec ?? 0;
                             const currentDuration =
                               activeSfxItem?.duration_sec ?? 2.0;
+                            const currentSpeed =
+                              activeSfxItem?.playback_rate ?? 1.0;
+                            const originalAudioDuration =
+                              activeSfxItem?.original_duration_sec ??
+                              (resolvedAudioUrl
+                                ? detectedSfxDurations[resolvedAudioUrl]
+                                : undefined);
+                            const isLooping = Boolean(
+                              originalAudioDuration &&
+                                currentDuration > originalAudioDuration
+                            );
                             const isGeneratingThisSfx =
                               generatingSfxSceneIndex === sceneIdx;
 
@@ -5963,13 +6255,22 @@ export const Studio: React.FC = () => {
                                         {hasActiveAudio && resolvedAudioUrl && (
                                           <button
                                             type="button"
-                                            onClick={() =>
-                                              handlePlaySfxPreview(
-                                                resolvedAudioUrl,
-                                                previewKey
-                                              )
-                                            }
-                                            title="Pré-escutar som"
+                                            onClick={() => {
+                                              if (isPlaying) {
+                                                stopSfxPreview();
+                                              } else {
+                                                handlePlaySfxPreview(
+                                                  resolvedAudioUrl,
+                                                  previewKey,
+                                                  {
+                                                    targetDurationSec: currentDuration,
+                                                    playbackRate: currentSpeed,
+                                                    volume: currentVolume,
+                                                  }
+                                                );
+                                              }
+                                            }}
+                                            title="Pré-escutar som com timing, loop e velocidade aplicados"
                                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs transition ${
                                               isPlaying
                                                 ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
@@ -6141,15 +6442,148 @@ export const Studio: React.FC = () => {
                                             </div>
                                           </div>
 
-                                          {/* Slider 3: Duração do Efeito */}
+                                          {/* Slider 3: Duração do Efeito com Traço Dourado e Badge de Loop */}
+                                          {(() => {
+                                            const minDur = 0.5;
+                                            const maxDur = Math.max(
+                                              10,
+                                              Math.ceil(sceneDuration)
+                                            );
+                                            const clampedOrig =
+                                              originalAudioDuration
+                                                ? Math.min(
+                                                    maxDur,
+                                                    Math.max(
+                                                      minDur,
+                                                      originalAudioDuration
+                                                    )
+                                                  )
+                                                : null;
+                                            const origPercent =
+                                              clampedOrig !== null
+                                                ? ((clampedOrig - minDur) /
+                                                    (maxDur - minDur)) *
+                                                  100
+                                                : null;
+
+                                            return (
+                                              <div className="rounded-lg bg-[#111115] p-2 space-y-1.5 border border-white/[0.04]">
+                                                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                  <span className="flex items-center gap-1 font-medium">
+                                                    <span>⏳</span>
+                                                    <span>Duração do Efeito</span>
+                                                    {isLooping && (
+                                                      <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                                                        🔁 Loop
+                                                      </span>
+                                                    )}
+                                                  </span>
+                                                  <div className="flex items-center gap-1.5">
+                                                    {originalAudioDuration && (
+                                                      <span
+                                                        className="text-[9px] text-amber-400/90 font-mono font-medium"
+                                                        title="Duração original do áudio"
+                                                      >
+                                                        (Original: {originalAudioDuration.toFixed(1)}s)
+                                                      </span>
+                                                    )}
+                                                    <span className="font-mono text-purple-400 font-bold">
+                                                      {currentDuration.toFixed(1)}s
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      handleUpdateSceneSfxTiming(
+                                                        sceneIdx,
+                                                        0,
+                                                        {
+                                                          duration_sec: Math.max(
+                                                            0.5,
+                                                            Number(
+                                                              (
+                                                                currentDuration - 0.5
+                                                              ).toFixed(1)
+                                                            )
+                                                          ),
+                                                        }
+                                                      )
+                                                    }
+                                                    title="Diminuir duração em 0.5s"
+                                                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                                  >
+                                                    -
+                                                  </button>
+                                                  <div className="relative flex-1 flex items-center">
+                                                    <input
+                                                      type="range"
+                                                      min={minDur}
+                                                      max={maxDur}
+                                                      step="0.1"
+                                                      value={Math.min(
+                                                        currentDuration,
+                                                        maxDur
+                                                      )}
+                                                      onChange={(e) =>
+                                                        handleUpdateSceneSfxTiming(
+                                                          sceneIdx,
+                                                          0,
+                                                          {
+                                                            duration_sec: parseFloat(
+                                                              e.target.value
+                                                            ),
+                                                          }
+                                                        )
+                                                      }
+                                                      className="w-full accent-purple-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                                    />
+                                                    {origPercent !== null && (
+                                                      <div
+                                                        style={{ left: `${origPercent}%` }}
+                                                        className="absolute pointer-events-none -top-1 bottom-0 w-1 -ml-0.5 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] z-10 rounded-full"
+                                                        title={`Duração original do som: ${originalAudioDuration?.toFixed(1)}s`}
+                                                      />
+                                                    )}
+                                                  </div>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      handleUpdateSceneSfxTiming(
+                                                        sceneIdx,
+                                                        0,
+                                                        {
+                                                          duration_sec: Math.min(
+                                                            maxDur,
+                                                            Number(
+                                                              (
+                                                                currentDuration + 0.5
+                                                              ).toFixed(1)
+                                                            )
+                                                          ),
+                                                        }
+                                                      )
+                                                    }
+                                                    title="Aumentar duração em 0.5s"
+                                                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                                  >
+                                                    +
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+
+                                          {/* Slider 4: Velocidade do Efeito (0.5x - 2.0x, padrão 1.0x) */}
                                           <div className="rounded-lg bg-[#111115] p-2 space-y-1.5 border border-white/[0.04]">
                                             <div className="flex items-center justify-between text-[10px] text-slate-400">
                                               <span className="flex items-center gap-1 font-medium">
-                                                <span>⏳</span>
-                                                <span>Duração do Efeito</span>
+                                                <span>⚡</span>
+                                                <span>Velocidade do Efeito</span>
                                               </span>
-                                              <span className="font-mono text-purple-400 font-bold">
-                                                {currentDuration.toFixed(1)}s
+                                              <span className="font-mono text-emerald-400 font-bold">
+                                                {currentSpeed.toFixed(1)}x
                                               </span>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -6160,18 +6594,18 @@ export const Studio: React.FC = () => {
                                                     sceneIdx,
                                                     0,
                                                     {
-                                                      duration_sec: Math.max(
+                                                      playback_rate: Math.max(
                                                         0.5,
                                                         Number(
                                                           (
-                                                            currentDuration - 0.5
+                                                            currentSpeed - 0.1
                                                           ).toFixed(1)
                                                         )
                                                       ),
                                                     }
                                                   )
                                                 }
-                                                title="Diminuir duração em 0.5s"
+                                                title="Diminuir velocidade em 0.1x (mais lento)"
                                                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
                                               >
                                                 -
@@ -6179,30 +6613,21 @@ export const Studio: React.FC = () => {
                                               <input
                                                 type="range"
                                                 min="0.5"
-                                                max={Math.max(
-                                                  10,
-                                                  Math.ceil(sceneDuration)
-                                                )}
+                                                max="2.0"
                                                 step="0.1"
-                                                value={Math.min(
-                                                  currentDuration,
-                                                  Math.max(
-                                                    10,
-                                                    Math.ceil(sceneDuration)
-                                                  )
-                                                )}
+                                                value={currentSpeed}
                                                 onChange={(e) =>
                                                   handleUpdateSceneSfxTiming(
                                                     sceneIdx,
                                                     0,
                                                     {
-                                                      duration_sec: parseFloat(
+                                                      playback_rate: parseFloat(
                                                         e.target.value
                                                       ),
                                                     }
                                                   )
                                                 }
-                                                className="w-full accent-purple-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                                className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
                                               />
                                               <button
                                                 type="button"
@@ -6211,21 +6636,18 @@ export const Studio: React.FC = () => {
                                                     sceneIdx,
                                                     0,
                                                     {
-                                                      duration_sec: Math.min(
-                                                        Math.max(
-                                                          10,
-                                                          Math.ceil(sceneDuration)
-                                                        ),
+                                                      playback_rate: Math.min(
+                                                        2.0,
                                                         Number(
                                                           (
-                                                            currentDuration + 0.5
+                                                            currentSpeed + 0.1
                                                           ).toFixed(1)
                                                         )
                                                       ),
                                                     }
                                                   )
                                                 }
-                                                title="Aumentar duração em 0.5s"
+                                                title="Aumentar velocidade em 0.1x (mais rápido)"
                                                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
                                               >
                                                 +
@@ -6393,10 +6815,22 @@ export const Studio: React.FC = () => {
               PAINEL DO PLAYER CENTRAL (Vertical 9:16 + Barra Compacta)
              ================================================================ */}
           <section className="relative flex flex-1 min-h-0 flex-col items-center justify-center rounded-2xl border border-[#2c2c32]/50 bg-[#141417] p-4 overflow-hidden shadow-2xl">
-            {isPending && (
-              <div className="absolute top-4 right-4 z-20 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-[#18181c]/90 px-3 py-1.5 text-xs font-semibold text-amber-300 backdrop-blur">
-                <span className="h-2 w-2 animate-ping rounded-full bg-amber-400" />
-                <span>Renderizando MP4 no servidor...</span>
+            {(isPending || isRerendering || isDownloadingMp4) && (
+              <div className="absolute top-4 right-4 z-30 flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-[#18181c]/95 px-3.5 py-2.5 shadow-2xl backdrop-blur-md min-w-[200px] animate-fadeIn">
+                <div className="flex items-center justify-between gap-3 text-xs font-semibold text-amber-300">
+                  <span>{isDownloadingMp4 ? 'Baixando MP4' : 'Renderizando MP4'}</span>
+                  <span className="font-mono text-[11px] font-bold text-amber-400">
+                    {displayProgress !== null ? `${displayProgress}%` : ''}
+                  </span>
+                </div>
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800/90">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 shadow-[0_0_8px_rgba(245,158,11,0.5)] transition-all duration-300 ease-out"
+                    style={{
+                      width: `${displayProgress !== null ? Math.max(3, displayProgress) : 0}%`,
+                    }}
+                  />
+                </div>
               </div>
             )}
 

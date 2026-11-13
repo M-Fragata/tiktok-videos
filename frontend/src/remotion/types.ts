@@ -401,6 +401,7 @@ export interface SubtitleItem {
   frameEnd: number;
   text: string;
   words?: SubtitleWordTiming[];
+  sceneIndex?: number;
 }
 
 export type SubtitleAnimationType = 'karaoke' | 'pop' | 'hormozi';
@@ -489,6 +490,8 @@ export interface SfxItem {
   suggested_volume: number;
   sfx_key?: string;
   audio_url?: string | null;
+  playback_rate?: number;
+  original_duration_sec?: number;
 }
 
 export interface StoryboardScene {
@@ -644,6 +647,7 @@ export interface VideoRecord {
   status: 'DRAFT' | 'PENDING' | 'RENDERED' | 'FAILED' | string;
   videoUrl: string | null;
   remotionProps?: TimeMachineVideoProps | null;
+  renderProgress?: number | null;
   createdAt: string;
 }
 
@@ -839,11 +843,17 @@ export const splitSceneTextIntoSubtitleChunks = (
 export const resolveAssetSrc = (src: string): string => {
   if (
     /^https?:\/\//i.test(src) ||
-    src.startsWith('/storage/') ||
     src.startsWith('data:') ||
     src.startsWith('blob:')
   ) {
     return src;
+  }
+  if (src.startsWith('/storage/')) {
+    const isViteDev =
+      typeof window !== 'undefined' &&
+      window.location &&
+      window.location.port === '5173';
+    return isViteDev ? src : `http://127.0.0.1:3333${src}`;
   }
   const normalizedPath = src.replace(/^\/+/, '');
   return staticFile(normalizedPath);

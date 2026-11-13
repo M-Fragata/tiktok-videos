@@ -33,6 +33,7 @@ import {
 import {
   generateNarrationWithTimestamps,
   generateSoundEffect,
+  probeAudioDurationSeconds,
   regenerateSingleDialogueNarration,
 } from '../services/elevenlabs.service.ts';
 import {
@@ -568,7 +569,7 @@ export async function regenerateDialogueAudioController(
     return;
   }
 
-  const { sceneIndex, dialogueIndex, speaker, voiceId, characterName } =
+  const { sceneIndex, dialogueIndex, speaker, voiceId, characterName, text } =
     parsedBody.data;
 
   try {
@@ -598,14 +599,46 @@ export async function regenerateDialogueAudioController(
     const publicBaseUrl = getPublicBaseUrl();
     const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
 
-    const scriptScenesForTts: ScriptScene[] = scenes.map((s) => ({
-      speaker: s.speaker,
-      text: s.text,
-      dialogues: s.dialogues,
-      avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
-      imagePrompt: s.imagePrompt,
-      sfx_suggestion: s.sfx_suggestion,
-    }));
+    const scriptScenesForTts: ScriptScene[] = scenes.map((s, idx) => {
+      if (idx !== sceneIndex) {
+        return {
+          speaker: s.speaker,
+          text: s.text,
+          dialogues: s.dialogues,
+          avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
+          imagePrompt: s.imagePrompt,
+          sfx_suggestion: s.sfx_suggestion,
+        };
+      }
+      const rawDialogues =
+        s.dialogues && s.dialogues.length > 0
+          ? s.dialogues
+          : [
+              {
+                id: `dlg_${idx}`,
+                speaker: s.speaker || 'protagonist',
+                text: s.text || '',
+              },
+            ];
+      const updatedDialogues = rawDialogues.map((d, dIdx) => {
+        if (dIdx !== dialogueIndex) return d;
+        return {
+          ...d,
+          speaker,
+          voiceId,
+          characterName,
+          text: text?.trim() || d.text,
+        };
+      });
+      return {
+        speaker: updatedDialogues[0]?.speaker || s.speaker,
+        text: updatedDialogues.map((d) => d.text).join(' '),
+        dialogues: updatedDialogues,
+        avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
+        imagePrompt: s.imagePrompt,
+        sfx_suggestion: s.sfx_suggestion,
+      };
+    });
 
     const narrationResult = await regenerateSingleDialogueNarration({
       videoId: id,
@@ -614,6 +647,7 @@ export async function regenerateDialogueAudioController(
       speaker,
       voiceId,
       characterName,
+      text: text?.trim(),
       scenes: scriptScenesForTts,
       storageVideoDir,
       publicBaseUrl,
@@ -621,7 +655,7 @@ export async function regenerateDialogueAudioController(
 
     const cacheBustedAudioUrl = `${narrationResult.audioUrl}?v=${Date.now()}`;
 
-    // Atualiza o diálogo nas cenas do storyboard
+    // Atualiza o diálogo e texto nas cenas do storyboard
     const updatedScenes = scenes.map((sc, sIdx) => {
       if (sIdx !== sceneIndex) return sc;
       const rawDialogues =
@@ -636,12 +670,19 @@ export async function regenerateDialogueAudioController(
             ];
       const updatedDialogues = rawDialogues.map((d, dIdx) => {
         if (dIdx !== dialogueIndex) return d;
-        return { ...d, speaker, voiceId, characterName };
+        return {
+          ...d,
+          speaker,
+          voiceId,
+          characterName,
+          text: text?.trim() || d.text,
+        };
       });
       return {
         ...sc,
         speaker: updatedDialogues[0]?.speaker || sc.speaker,
         dialogues: updatedDialogues,
+        text: updatedDialogues.map((d) => d.text).join(' '),
       };
     });
 
@@ -843,6 +884,8 @@ export async function generateVideoController(
   }
 }
 
+export const activeRenderProgressMap: Record<string, number> = {};
+
 /**
  * POST /api/videos/:id/rerender
  * Recebe as remotionProps montadas no Studio, atualiza o JSON no Prisma
@@ -882,6 +925,8 @@ export async function rerenderVideoController(
       },
     });
 
+    activeRenderProgressMap[id] = 2;
+
     void (async () => {
       try {
         console.log(
@@ -889,7 +934,16 @@ export async function rerenderVideoController(
         );
 
         const { outputFilePath, publicVideoUrl } =
-          await renderTimeMachineVideoOnDisk(id, updatedProps);
+          await renderTimeMachineVideoOnDisk(
+            id,
+            updatedProps,
+            ({ progress }) => {
+              activeRenderProgressMap[id] = Math.max(
+                2,
+                Math.min(99, Math.round(progress * 100))
+              );
+            }
+          );
 
         const versionedVideoUrl = `${publicVideoUrl}?v=${Date.now()}`;
 
@@ -916,6 +970,8 @@ export async function rerenderVideoController(
             status: 'FAILED',
           },
         });
+      } finally {
+        delete activeRenderProgressMap[id];
       }
     })();
 
@@ -1017,7 +1073,12 @@ export async function getVideoByIdController(
       return;
     }
 
-    res.status(200).json(video);
+    res.status(200).json({
+      ...video,
+      renderProgress:
+        activeRenderProgressMap[id] ??
+        (video.status === 'RENDERED' ? 100 : null),
+    });
   } catch (error) {
     console.error('[Prisma] Erro ao buscar vídeo:', error);
     res.status(500).json({ error: 'Erro interno ao consultar o vídeo.' });
@@ -1313,7 +1374,14 @@ export async function generateSceneSfxController(
     const sfxFilePath = path.join(storageDir, sfxFileName);
     fs.writeFileSync(sfxFilePath, sfxBuffer);
 
-    const publicSfxUrl = `/storage/${id}/${sfxFileName}`;
+    // Mede a duração real do áudio gerado via ffprobe para calibração precisa do slider
+    const realAudioDurationSec = await probeAudioDurationSeconds(
+      sfxFilePath,
+      durationSeconds || 2.5
+    );
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const publicSfxUrl = `${publicBaseUrl}/storage/${id}/${sfxFileName}`;
 
     const currentProps = (video.remotionProps || {}) as RenderVideoInput;
     const currentStoryboard = currentProps.storyboard || {
@@ -1335,6 +1403,8 @@ export async function generateSceneSfxController(
                   ...item,
                   sound_prompt: sfxPrompt,
                   audio_url: publicSfxUrl,
+                  original_duration_sec: realAudioDurationSec,
+                  playback_rate: item.playback_rate ?? 1.0,
                   ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
                 }
               : item
@@ -1344,9 +1414,11 @@ export async function generateSceneSfxController(
               sound_prompt: sfxPrompt,
               match_score: 95,
               start_time_sec: 0,
-              duration_sec: durationSeconds || 2.5,
+              duration_sec: durationSeconds || realAudioDurationSec,
               suggested_volume: 0.35,
               audio_url: publicSfxUrl,
+              original_duration_sec: realAudioDurationSec,
+              playback_rate: 1.0,
             },
           ];
 
@@ -1391,6 +1463,7 @@ export async function generateSceneSfxController(
       sceneIndex,
       sfxPrompt,
       audioUrl: publicSfxUrl,
+      originalDurationSec: realAudioDurationSec,
       video: updatedVideo,
     });
   } catch (err) {

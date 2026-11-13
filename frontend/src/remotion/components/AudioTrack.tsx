@@ -1,5 +1,5 @@
 import React from 'react';
-import { Audio, Sequence, useVideoConfig } from 'remotion';
+import { Audio, Loop, Sequence, useVideoConfig } from 'remotion';
 import {
   BackgroundSegment,
   BgmVibe,
@@ -79,6 +79,20 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
               1,
               Math.max(0, sfx.suggested_volume * globalSfxMultiplier)
             );
+            const playbackRate = Math.min(
+              2.0,
+              Math.max(0.5, sfx.playback_rate ?? 1.0)
+            );
+
+            // Duração de uma repetição nativa considerando a velocidade configurada
+            const originalDurationSec = sfx.original_duration_sec;
+            const singleRepFrames = originalDurationSec
+              ? Math.max(
+                  1,
+                  Math.round((originalDurationSec / playbackRate) * fps)
+                )
+              : durationFrames;
+            const shouldLoop = durationFrames > singleRepFrames;
 
             return (
               <Sequence
@@ -86,10 +100,21 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
                 from={startFrame}
                 durationInFrames={durationFrames}
               >
-                <Audio
-                  src={resolvedAudioUrl}
-                  volume={calculatedVolume}
-                />
+                {shouldLoop ? (
+                  <Loop durationInFrames={singleRepFrames}>
+                    <Audio
+                      src={resolvedAudioUrl}
+                      volume={calculatedVolume}
+                      playbackRate={playbackRate}
+                    />
+                  </Loop>
+                ) : (
+                  <Audio
+                    src={resolvedAudioUrl}
+                    volume={calculatedVolume}
+                    playbackRate={playbackRate}
+                  />
+                )}
               </Sequence>
             );
           });
