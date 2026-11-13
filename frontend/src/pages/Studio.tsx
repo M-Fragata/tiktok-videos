@@ -17,6 +17,9 @@ import {
   EpisodeFormat,
   getSceneDialogues,
   getSceneFullText,
+  getSceneSfxList,
+  resolveSfxAudioUrl,
+  SfxItem,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
   ProtagonistAgency,
@@ -241,6 +244,7 @@ export const Studio: React.FC = () => {
   const [globalSfxMultiplier, setGlobalSfxMultiplier] = useState<number>(1.0);
   const [bgmVolume, setBgmVolume] = useState<number>(0.1);
   const [autoDucking, setAutoDucking] = useState<boolean>(true);
+  const [playingSfxPreview, setPlayingSfxPreview] = useState<string | null>(null);
 
   // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
   const [sfxLibraryOptions, setSfxLibraryOptions] =
@@ -870,6 +874,45 @@ export const Studio: React.FC = () => {
         idx === sceneIndex ? { ...scene, [field]: value } : scene
       )
     );
+  };
+
+  /**
+   * Atualiza o volume sugerido (0.0 a 1.0) de um efeito específico dentro de uma cena
+   */
+  const handleUpdateSceneSfxVolume = (
+    sceneIndex: number,
+    sfxIndex: number,
+    newVolume: number
+  ) => {
+    setScenes((prev) =>
+      prev.map((scene, idx) => {
+        if (idx !== sceneIndex) return scene;
+        const currentList: SfxItem[] = getSceneSfxList(scene);
+        const updatedList: SfxItem[] = currentList.map((item: SfxItem, sIdx: number) =>
+          sIdx === sfxIndex ? { ...item, suggested_volume: newVolume } : item
+        );
+        return {
+          ...scene,
+          sfx_list: updatedList,
+        };
+      })
+    );
+  };
+
+  /**
+   * Reproduz um efeito sonoro isolado para pré-escuta na aba de Áudio
+   */
+  const handlePlaySfxPreview = (audioUrl: string, keyId: string) => {
+    try {
+      const audio = new window.Audio(audioUrl);
+      setPlayingSfxPreview(keyId);
+      audio.onended = () => setPlayingSfxPreview(null);
+      audio.onerror = () => setPlayingSfxPreview(null);
+      void audio.play();
+    } catch (e) {
+      console.warn('Erro ao reproduzir pré-escuta de SFX:', e);
+      setPlayingSfxPreview(null);
+    }
   };
 
   const handleAddDialogueInStudio = (sceneIndex: number) => {
@@ -3783,6 +3826,122 @@ export const Studio: React.FC = () => {
                       />
                     </button>
                   </div>
+                </div>
+
+                {/* 3. Card Granular: Efeitos Sonoros por Cena */}
+                <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
+                  <div className="border-b border-[#2c2c32]/60 pb-2 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <span>🔊</span>
+                        <span>Efeitos Sonoros por Cena</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Ajuste o volume sugerido de cada efeito sonoro individualmente
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                      {scenes.reduce((acc, s) => acc + getSceneSfxList(s).length, 0)} sons
+                    </span>
+                  </div>
+
+                  {scenes.length === 0 || scenes.every((s) => getSceneSfxList(s).length === 0) ? (
+                    <div className="py-4 text-center">
+                      <p className="text-xs text-slate-400 italic">
+                        Nenhum efeito sonoro configurado nas cenas ainda.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
+                      {scenes.map((scene, sceneIdx) => {
+                        const sfxItems = getSceneSfxList(scene);
+                        if (sfxItems.length === 0) return null;
+
+                        return (
+                          <div
+                            key={`scene-sfx-group-${sceneIdx}`}
+                            className="rounded-lg border border-white/[0.06] bg-[#16161b] p-2.5 space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
+                              <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1">
+                                <span>🎬</span>
+                                <span>Cena #{sceneIdx + 1}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate" title={scene.text}>
+                                {scene.text || 'Sem fala'}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {sfxItems.map((sfx: SfxItem, sfxIdx: number) => {
+                                const previewKey = `sfx-${sceneIdx}-${sfxIdx}`;
+                                const isPlaying = playingSfxPreview === previewKey;
+                                const resolvedAudioUrl = resolveSfxAudioUrl(sfx);
+                                const currentVolume = sfx.suggested_volume ?? 0.35;
+
+                                return (
+                                  <div
+                                    key={previewKey}
+                                    className="rounded-md bg-[#1f1f26] p-2 space-y-1.5 border border-white/[0.04]"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handlePlaySfxPreview(resolvedAudioUrl, previewKey)
+                                          }
+                                          title="Pré-escutar som"
+                                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] transition ${
+                                            isPlaying
+                                              ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
+                                              : 'border-white/10 bg-[#2b2b35] text-slate-200 hover:border-amber-500/50 hover:bg-[#343440]'
+                                          }`}
+                                        >
+                                          {isPlaying ? '⏹' : '▶'}
+                                        </button>
+                                        <span className="text-[11px] font-semibold text-slate-200 truncate">
+                                          {sfx.sfx_key || scene.sfx_suggestion || 'SFX'}
+                                        </span>
+                                      </div>
+
+                                      <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 shrink-0">
+                                        {Math.round(currentVolume * 100)}%
+                                      </span>
+                                    </div>
+
+                                    {sfx.sound_prompt && (
+                                      <p className="text-[9.5px] text-slate-400 italic line-clamp-1 truncate" title={sfx.sound_prompt}>
+                                        {sfx.sound_prompt}
+                                      </p>
+                                    )}
+
+                                    <div className="pt-0.5">
+                                      <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={currentVolume}
+                                        onChange={(e) =>
+                                          handleUpdateSceneSfxVolume(
+                                            sceneIdx,
+                                            sfxIdx,
+                                            parseFloat(e.target.value)
+                                          )
+                                        }
+                                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
