@@ -1183,18 +1183,38 @@ export async function generateSceneSfxController(
       sceneTimings: [],
     };
 
-    const baseScenes = currentStoryboard.scenes || [];
+    const baseScenes = currentStoryboard.scenes || currentProps.scenes || [];
     const updatedScenes = baseScenes.map((scene, idx) => {
       if (idx !== sceneIndex) return scene;
+      const existingList = Array.isArray(scene.sfx_list) && scene.sfx_list.length > 0 ? scene.sfx_list : [];
+      const updatedSfxList = existingList.length > 0
+        ? existingList.map((item, itemIdx) =>
+            itemIdx === 0
+              ? { ...item, sound_prompt: sfxPrompt, audio_url: publicSfxUrl }
+              : item
+          )
+        : [
+            {
+              sound_prompt: sfxPrompt,
+              match_score: 95,
+              start_time_sec: 0,
+              duration_sec: durationSeconds || 2.5,
+              suggested_volume: 0.35,
+              audio_url: publicSfxUrl,
+            },
+          ];
+
       return {
         ...scene,
         sfx_prompt: sfxPrompt,
         custom_sfx_url: publicSfxUrl,
+        sfx_list: updatedSfxList,
       };
     });
 
     const updatedProps: RenderVideoInput = {
       ...currentProps,
+      scenes: updatedScenes,
       storyboard: {
         ...currentStoryboard,
         scenes: updatedScenes,

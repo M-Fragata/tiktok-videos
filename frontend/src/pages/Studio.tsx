@@ -49,6 +49,7 @@ import {
   IdeationDressingRoomTab,
   SelectedFinalSceneItem,
 } from '../components/IdeationDressingRoomTab';
+import { clearStudioVideoCache } from '../services/studioCache';
 
 type InspectorTab =
   | 'briefing'
@@ -477,10 +478,23 @@ export const Studio: React.FC = () => {
     }
   }, [id]);
 
+  // Ao sair da página do vídeo (navegar para Home, Dashboard, etc.), limpa o cache para que
+  // ao retornar o vídeo inicie limpo com todas as abas e seções recolhidas.
+  useEffect(() => {
+    return () => {
+      if (id) {
+        clearStudioVideoCache(id);
+      }
+    };
+  }, [id]);
+
   // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
   const [sfxLibraryOptions, setSfxLibraryOptions] =
     useState<SfxOption[]>(SFX_OPTIONS);
   const [promotingSfxSceneIndex, setPromotingSfxSceneIndex] = useState<
+    number | null
+  >(null);
+  const [generatingSfxSceneIndex, setGeneratingSfxSceneIndex] = useState<
     number | null
   >(null);
 
@@ -1144,6 +1158,165 @@ export const Studio: React.FC = () => {
       console.warn('Erro ao reproduzir pré-escuta de SFX:', e);
       setPlayingSfxPreview(null);
     }
+  };
+
+  /**
+   * Gera um efeito sonoro sob demanda na ElevenLabs via Text-to-SFX
+   */
+  const handleGenerateSceneSfx = async (
+    sceneIndex: number,
+    promptText: string
+  ) => {
+    if (!id || !promptText.trim()) return;
+    setGeneratingSfxSceneIndex(sceneIndex);
+    try {
+      const res = await fetch(`/api/videos/${id}/generate-scene-sfx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneIndex,
+          sfxPrompt: promptText.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error || 'Falha ao sintetizar efeito sonoro na ElevenLabs'
+        );
+      }
+
+      const audioUrl = data.audioUrl;
+      setScenes((prev) =>
+        prev.map((sc, idx) => {
+          if (idx !== sceneIndex) return sc;
+          const existingList =
+            Array.isArray(sc.sfx_list) && sc.sfx_list.length > 0
+              ? sc.sfx_list
+              : [];
+          const updatedList: SfxItem[] =
+            existingList.length > 0
+              ? existingList.map((item, itemIdx) =>
+                  itemIdx === 0
+                    ? {
+                        ...item,
+                        sound_prompt: promptText.trim(),
+                        audio_url: audioUrl,
+                      }
+                    : item
+                )
+              : [
+                  {
+                    sound_prompt: promptText.trim(),
+                    match_score: 95,
+                    start_time_sec: 0,
+                    duration_sec: 2.5,
+                    suggested_volume: 0.35,
+                    audio_url: audioUrl,
+                  },
+                ];
+          return {
+            ...sc,
+            sfx_prompt: promptText.trim(),
+            custom_sfx_url: audioUrl,
+            sfx_list: updatedList,
+          };
+        })
+      );
+      setSuccessMsg(
+        `Efeito sonoro gerado com sucesso para a Cena #${sceneIndex + 1}!`
+      );
+    } catch (err: unknown) {
+      console.error('[Generate SFX Error]', err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao gerar efeito sonoro na ElevenLabs'
+      );
+    } finally {
+      setGeneratingSfxSceneIndex(null);
+    }
+  };
+
+  /**
+   * Altera a opção de efeito sonoro selecionada da biblioteca (ou limpa)
+   */
+  const handleSceneSfxOptionChange = (
+    sceneIndex: number,
+    newOptionValue: string
+  ) => {
+    setScenes((prev) =>
+      prev.map((sc, idx) => {
+        if (idx !== sceneIndex) return sc;
+        if (newOptionValue === 'custom') {
+          return sc;
+        }
+        if (newOptionValue === 'none') {
+          return {
+            ...sc,
+            sfx_suggestion: 'none',
+            custom_sfx_url: null,
+            sfx_list: [],
+          };
+        }
+        const selectedOpt = sfxLibraryOptions.find(
+          (o) => o.value === newOptionValue
+        );
+        const existingList =
+          Array.isArray(sc.sfx_list) && sc.sfx_list.length > 0
+            ? sc.sfx_list
+            : [];
+        const updatedList: SfxItem[] =
+          existingList.length > 0
+            ? existingList.map((item, itemIdx) =>
+                itemIdx === 0
+                  ? { ...item, sfx_key: newOptionValue, audio_url: null }
+                  : item
+              )
+            : [
+                {
+                  sound_prompt:
+                    sc.sfx_prompt || selectedOpt?.label || newOptionValue,
+                  match_score: 90,
+                  start_time_sec: 0,
+                  duration_sec: 2.0,
+                  suggested_volume: 0.35,
+                  sfx_key: newOptionValue,
+                  audio_url: null,
+                },
+              ];
+        return {
+          ...sc,
+          sfx_suggestion: newOptionValue,
+          sfx_label: selectedOpt?.label,
+          custom_sfx_url: null,
+          sfx_list: updatedList,
+        };
+      })
+    );
+  };
+
+  /**
+   * Remove o áudio customizado de IA gerado e desvincula da cena
+   */
+  const handleRemoveCustomSfx = (sceneIndex: number) => {
+    setScenes((prev) =>
+      prev.map((sc, idx) => {
+        if (idx !== sceneIndex) return sc;
+        const existingList =
+          Array.isArray(sc.sfx_list) && sc.sfx_list.length > 0
+            ? sc.sfx_list
+            : [];
+        const updatedList: SfxItem[] = existingList.map((item, itemIdx) =>
+          itemIdx === 0 ? { ...item, audio_url: null } : item
+        );
+        return {
+          ...sc,
+          custom_sfx_url: null,
+          sfx_list: updatedList,
+        };
+      })
+    );
   };
 
   const handleAddDialogueInStudio = (sceneIndex: number) => {
@@ -3123,104 +3296,6 @@ export const Studio: React.FC = () => {
                                 />
                               </div>
 
-                              {/* Campo: Design de Som (SFX & Prompt de Som ElevenLabs) */}
-                              <div className="rounded-xl border border-[#2c2c32]/70 bg-[#121214] p-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-xs font-semibold text-teal-400 flex items-center gap-1.5">
-                                    <span>🎧 Design de Som (SFX)</span>
-                                  </label>
-                                  {scene.custom_sfx_url && (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                                        ✨ ElevenLabs IA Ativo
-                                      </span>
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          promotingSfxSceneIndex === index
-                                        }
-                                        title="Salvar este áudio na Biblioteca Global para reutilizar em futuros roteiros a custo zero"
-                                        onClick={() =>
-                                          void handlePromoteStoryboardSceneSfx(
-                                            index
-                                          )
-                                        }
-                                        className="flex items-center gap-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-teal-200 transition disabled:opacity-50"
-                                      >
-                                        {promotingSfxSceneIndex === index ? (
-                                          <span className="h-2 w-2 animate-spin rounded-full border border-teal-200 border-t-transparent" />
-                                        ) : (
-                                          <span>💾 Salvar</span>
-                                        )}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        title="Remover áudio customizado e voltar ao som da biblioteca"
-                                        onClick={() =>
-                                          handleSceneFieldChange(
-                                            index,
-                                            'custom_sfx_url',
-                                            null
-                                          )
-                                        }
-                                        className="text-slate-400 hover:text-rose-400 transition text-[10px] ml-0.5"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
-                                      <span>Efeito da Biblioteca</span>
-                                      {scene.sfx_label && (
-                                        <span className="text-[9px] text-teal-300/80 font-normal">
-                                          ({scene.sfx_label})
-                                        </span>
-                                      )}
-                                    </label>
-                                    <select
-                                      value={scene.sfx_suggestion || 'whoosh'}
-                                      onChange={(e) =>
-                                        handleSceneFieldChange(
-                                          index,
-                                          'sfx_suggestion',
-                                          e.target.value
-                                        )
-                                      }
-                                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
-                                    >
-                                      {sfxLibraryOptions.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-[10px] text-slate-400 mb-1">
-                                      Prompt Acústico (IA)
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={scene.sfx_prompt || ''}
-                                      onChange={(e) =>
-                                        handleSceneFieldChange(
-                                          index,
-                                          'sfx_prompt',
-                                          e.target.value
-                                        )
-                                      }
-                                      placeholder="Prompt em inglês para ElevenLabs"
-                                      className="w-full rounded-lg border border-[#2c2c32] bg-[#18181c] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-
                               {/* Secção B-Roll */}
                               <div>
                                 <div className="flex items-center justify-between mb-2">
@@ -4238,7 +4313,7 @@ export const Studio: React.FC = () => {
                 }`}
               >
                 <span className="text-[13px]">🎵</span>
-                <span>Áudio</span>
+                <span>4. Áudio</span>
               </button>
               <button
                 type="button"
@@ -4246,7 +4321,7 @@ export const Studio: React.FC = () => {
                 className="flex items-center justify-center gap-1.5 border-t-2 border-transparent py-3.5 px-3 text-xs text-slate-500 opacity-50 cursor-not-allowed select-none -mt-[1px]"
               >
                 <span className="text-[12px]">🔒</span>
-                <span>Em breve</span>
+                <span>5. Efeitos</span>
               </button>
               <button
                 type="button"
@@ -4254,7 +4329,7 @@ export const Studio: React.FC = () => {
                 className="flex items-center justify-center gap-1.5 border-t-2 border-transparent py-3.5 px-3 text-xs text-slate-500 opacity-50 cursor-not-allowed select-none -mt-[1px]"
               >
                 <span className="text-[12px]">🔒</span>
-                <span>Em breve</span>
+                <span>6. Config</span>
               </button>
             </div>
 

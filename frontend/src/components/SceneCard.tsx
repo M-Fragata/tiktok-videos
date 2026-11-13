@@ -1,6 +1,6 @@
 import React from 'react';
 import type { DialogueItem, SfxOption, SpeakerType, StoryboardScene } from '../remotion/types';
-import { getSceneDialogues, SFX_OPTIONS } from '../remotion/types';
+import { getSceneDialogues } from '../remotion/types';
 import { getCachedVoiceCatalog } from '../services/voiceCatalog';
 import { VoicePreviewButton } from './VoicePreviewButton';
 
@@ -323,113 +323,6 @@ export const SceneCard: React.FC<SceneCardProps> = ({
             <span className="text-xs font-bold leading-none">+</span>
             <span>Nova Fala</span>
           </button>
-        </div>
-      </div>
-
-      {/* ====================================================================
-          4. Design de Som Integrado (Som Escolhido + Prompt ElevenLabs)
-         ==================================================================== */}
-      <div className="rounded-lg border border-[#262630] bg-[#121216] p-2.5 space-y-2">
-        {/* Linha do Som Escolhido (Biblioteca Local) */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex flex-col gap-1.5 text-[11px]">
-            <span className="font-semibold text-teal-400 flex items-center gap-1">
-              <span>🔊 Som Escolhido:</span>
-              {scene.sfx_label && (
-                <span className="text-[10px] text-teal-300/80 font-normal">
-                  ({scene.sfx_label})
-                </span>
-              )}
-            </span>
-            <select
-              value={scene.sfx_suggestion || 'whoosh'}
-              onChange={(e) => onUpdateField('sfx_suggestion', e.target.value)}
-              className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none"
-            >
-              {(sfxOptions || SFX_OPTIONS).map((sfx) => (
-                <option key={sfx.value} value={sfx.value}>
-                  {sfx.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {scene.custom_sfx_url && (
-            <div className="flex items-center gap-1.5 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-              <span>✨ Áudio IA Ativo</span>
-              {onPlayAudioPreview && (
-                <button
-                  type="button"
-                  title="Ouvir áudio gerado pela ElevenLabs"
-                  onClick={() => onPlayAudioPreview(scene.custom_sfx_url!)}
-                  className="hover:scale-110 transition"
-                >
-                  ▶️
-                </button>
-              )}
-              {onPromoteSfx && (
-                <button
-                  type="button"
-                  disabled={isPromotingSfx}
-                  title="Salvar este áudio na Biblioteca Global para reutilizar em futuros roteiros a custo zero"
-                  onClick={onPromoteSfx}
-                  className="flex items-center gap-1 rounded bg-teal-500/25 hover:bg-teal-500/40 border border-teal-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-teal-200 transition disabled:opacity-50"
-                >
-                  {isPromotingSfx ? (
-                    <span className="h-2 w-2 animate-spin rounded-full border border-teal-200 border-t-transparent" />
-                  ) : (
-                    <span>💾 Salvar</span>
-                  )}
-                </button>
-              )}
-              <button
-                type="button"
-                title="Remover áudio customizado e voltar ao som da biblioteca"
-                onClick={() => onUpdateField('custom_sfx_url', null)}
-                className="text-slate-400 hover:text-rose-400 transition"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Linha do Prompt IA (ElevenLabs Text-to-SFX) */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1 shrink-0 text-[11px] font-semibold text-slate-400">
-            <span className="text-teal-400">🎧</span>
-            <span>Prompt:</span>
-          </div>
-          <div className='flex gap-1'>
-          <input
-            type="text"
-            value={scene.sfx_prompt || ''}
-            onChange={(e) => onUpdateField('sfx_prompt', e.target.value)}
-            placeholder="Ex: Quick dramatic whoosh followed by crumbling ancient stone..."
-            className="flex-1 rounded-md border border-[#2c2c32] bg-[#121214] px-2.5 py-1 text-xs text-slate-300 placeholder-slate-600 focus:border-teal-500 focus:outline-none transition italic"
-          />
-          {onGenerateSfx && (
-            <button
-              type="button"
-              disabled={isGeneratingSfx || !scene.sfx_prompt?.trim()}
-              onClick={() => onGenerateSfx(scene.sfx_prompt || '')}
-              title="Gerar efeito sonoro exclusivo com a ElevenLabs Sound Effects"
-              className="flex shrink-0 items-center gap-1 rounded-md border border-teal-500/40 bg-teal-500/15 px-2.5 py-1 text-[11px] font-semibold text-teal-300 transition hover:bg-teal-500/25 disabled:opacity-40"
-            >
-              {isGeneratingSfx ? (
-                <>
-                  <span className="h-2.5 w-2.5 animate-spin rounded-full border border-teal-300 border-t-transparent" />
-                  <span>Gerando</span>
-                </>
-              ) : (
-                <>
-                  <span>✨</span>
-                  <span>Gerar</span>
-                </>
-              )}
-            </button>
-          )}
-          </div>
         </div>
       </div>
     </div>

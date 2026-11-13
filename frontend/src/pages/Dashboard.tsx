@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { clearStudioVideoCache } from '../services/studioCache';
 
 interface AccountSnapshot {
   recordedAt: string;
@@ -179,6 +180,10 @@ export const Dashboard: React.FC = () => {
 
   // Ticker de tempo decorrido (atualiza a cada 10s para refletir "1 minuto", "2 minutos" etc.)
   const [, setTick] = useState<number>(Date.now());
+
+  useEffect(() => {
+    clearStudioVideoCache();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -362,6 +367,7 @@ export const Dashboard: React.FC = () => {
       });
       const resData = await res.json();
       if (res.ok && resData.video?.id) {
+        clearStudioVideoCache(resData.video.id);
         navigate(`/video/${resData.video.id}`);
       } else {
         navigate('/');
@@ -1082,7 +1088,12 @@ export const Dashboard: React.FC = () => {
                         {selectedVideo.localVideo.theme}
                       </span>
                       <button
-                        onClick={() => navigate(`/video/${selectedVideo.localVideoId}`)}
+                        onClick={() => {
+                          if (selectedVideo.localVideoId) {
+                            clearStudioVideoCache(selectedVideo.localVideoId);
+                          }
+                          navigate(`/video/${selectedVideo.localVideoId}`);
+                        }}
                         className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition flex items-center gap-1"
                       >
                         <span>Abrir no Studio</span>

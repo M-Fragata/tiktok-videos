@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resolveAssetSrc, VideoRecord } from '../remotion/types';
+import { clearStudioVideoCache } from '../services/studioCache';
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export const Home: React.FC = () => {
   };
 
   useEffect(() => {
+    clearStudioVideoCache();
     void fetchVideos();
   }, []);
 
@@ -53,6 +55,7 @@ export const Home: React.FC = () => {
         throw new Error(data.error || 'Erro ao iniciar rascunho de vídeo');
       }
 
+      clearStudioVideoCache(data.video.id);
       navigate(`/video/${data.video.id}`);
     } catch (err) {
       setError(
@@ -157,7 +160,10 @@ export const Home: React.FC = () => {
             return (
               <div
                 key={video.id}
-                onClick={() => navigate(`/video/${video.id}`)}
+                onClick={() => {
+                  clearStudioVideoCache(video.id);
+                  navigate(`/video/${video.id}`);
+                }}
                 className="group relative flex min-h-[380px] cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/60 transition-all duration-200 hover:-translate-y-1 hover:border-slate-700 hover:shadow-2xl hover:shadow-black/60"
               >
                 {/* Thumbnail 9:16 Aspect Area */}
