@@ -3514,12 +3514,15 @@ export const Studio: React.FC = () => {
                   >
                     <div>
                       <h3 className="text-xs font-bold text-slate-100">
-                        Estilo &amp; Animação das Legendas
+                        Estilo &amp; Animação
                       </h3>
                       <p className="text-[11px] text-slate-400">
                         Alterações aplicadas em tempo real no vídeo
                       </p>
                     </div>
+                    <span className="text-xs text-slate-400 transition-transform">
+                      {isSubtitleStyleCollapsed ? '⌄' : '⌃'}
+                    </span>
                   </div>
 
                   {!isSubtitleStyleCollapsed && (
@@ -4038,11 +4041,11 @@ export const Studio: React.FC = () => {
                       <span>Narração</span>
                       </div>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        Escolha sons disponíveis ou gere efeitos sonoros com a ElevenLabs
+                        Grave a narração das falas do roteiro com ElevenLabs
                       </p>
                       
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 transition-transform">
                       {isAudioNarrationCollapsed ? '⌄' : '⌃'}
                     </span>
                   </div>
@@ -4100,7 +4103,7 @@ export const Studio: React.FC = () => {
                         Mudanças afetam a reprodução no player e a renderização final do MP4
                       </p>
                     </div>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 transition-transform">
                       {isAudioMixerCollapsed ? '⌄' : '⌃'}
                     </span>
                   </div>
@@ -4208,6 +4211,9 @@ export const Studio: React.FC = () => {
                         Escolha sons disponíveis ou gere efeitos sonoros com a ElevenLabs
                       </p>
                     </div>
+                    <span className="text-xs text-slate-400 transition-transform">
+                      {isAudioSfxCollapsed ? '⌄' : '⌃'}
+                    </span>
                    </div>
 
                   {!isAudioSfxCollapsed && (

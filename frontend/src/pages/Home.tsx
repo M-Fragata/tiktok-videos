@@ -18,7 +18,7 @@ const HomeVideoCardSkeleton: React.FC = () => {
       aria-hidden="true"
     >
       {/* Thumbnail Area Compacta */}
-      <div className="relative h-[180px] w-full bg-slate-800/60 flex items-center justify-center overflow-hidden">
+      <div className="relative h-[290px] w-full bg-slate-800/60 flex items-center justify-center overflow-hidden">
         <svg
           className="h-8 w-8 text-slate-700/50"
           fill="none"
@@ -278,7 +278,7 @@ export const Home: React.FC = () => {
                   className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/60 transition-all duration-200 hover:-translate-y-1 hover:border-slate-700 hover:shadow-xl hover:shadow-black/60"
                 >
                   {/* Thumbnail Area Compacta */}
-                  <div className="relative h-[180px] w-full overflow-hidden bg-slate-950">
+                  <div className="relative h-[290px] w-full overflow-hidden bg-slate-950">
                     <img
                       src={resolvedThumb}
                       alt={video.theme}
