@@ -527,7 +527,7 @@ export const getSceneSfxList = (
         start_time_sec: 0,
         duration_sec: 1.5,
         suggested_volume: 0.35,
-        sfx_key: key && key !== 'none' ? key : 'whoosh',
+        sfx_key: key && key !== 'none' ? key : undefined,
         audio_url: scene.custom_sfx_url || null,
       },
     ];
@@ -535,28 +535,18 @@ export const getSceneSfxList = (
   return [];
 };
 
-export const resolveSfxAudioUrl = (sfx: SfxItem): string => {
+export const resolveSfxAudioUrl = (sfx: SfxItem): string | null => {
   if (sfx.audio_url) {
     return resolveAssetSrc(sfx.audio_url);
   }
-  if (sfx.sfx_key) {
+  if (sfx.sfx_key && sfx.sfx_key !== 'none') {
     const matched = SFX_OPTIONS.find((opt) => opt.value === sfx.sfx_key);
     if (matched?.file) {
       return resolveAssetSrc(matched.file);
     }
     return resolveAssetSrc(`bgm/effects/${sfx.sfx_key}.mp3`);
   }
-  // Fallback por palavra-chave se não houver sfx_key
-  const promptLower = (sfx.sound_prompt || '').toLowerCase();
-  for (const opt of SFX_OPTIONS) {
-    if (opt.value !== 'none' && opt.file) {
-      const slugClean = opt.value.replace(/-/g, ' ');
-      if (promptLower.includes(opt.value) || promptLower.includes(slugClean)) {
-        return resolveAssetSrc(opt.file);
-      }
-    }
-  }
-  return resolveAssetSrc('bgm/effects/whoosh.mp3');
+  return null;
 };
 
 export const getSceneDialogues = (

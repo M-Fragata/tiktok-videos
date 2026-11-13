@@ -63,6 +63,9 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
           if (!sfxList || sfxList.length === 0) return null;
 
           return sfxList.map((sfx, sfxIdx) => {
+            const resolvedAudioUrl = resolveSfxAudioUrl(sfx);
+            if (!resolvedAudioUrl) return null;
+
             const startOffsetFrames = Math.max(
               0,
               Math.round(sfx.start_time_sec * fps)
@@ -84,7 +87,7 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
                 durationInFrames={durationFrames}
               >
                 <Audio
-                  src={resolveSfxAudioUrl(sfx)}
+                  src={resolvedAudioUrl}
                   volume={calculatedVolume}
                 />
               </Sequence>

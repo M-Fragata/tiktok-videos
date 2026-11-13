@@ -474,7 +474,7 @@ export const Dashboard: React.FC = () => {
   };
 
   // Criar novo rascunho de vídeo no Studio
-  const handleCreateDraft = async () => {
+  const _handleCreateDraft = async () => {
     try {
       const res = await fetch('/api/videos', {
         method: 'POST',

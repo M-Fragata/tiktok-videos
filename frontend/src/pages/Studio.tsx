@@ -4228,16 +4228,13 @@ export const Studio: React.FC = () => {
                         <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
                           {scenes.map((scene, sceneIdx) => {
                             const sfxItems = getSceneSfxList(scene);
-                            const hasActiveAudio =
-                              Boolean(scene.custom_sfx_url) ||
-                              (Boolean(scene.sfx_suggestion) &&
-                                scene.sfx_suggestion !== 'none');
                             const activeSfxItem = sfxItems[0];
-                            const previewKey = `sfx-${sceneIdx}-0`;
-                            const isPlaying = playingSfxPreview === previewKey;
                             const resolvedAudioUrl = activeSfxItem
                               ? resolveSfxAudioUrl(activeSfxItem)
-                              : '';
+                              : null;
+                            const hasActiveAudio = Boolean(resolvedAudioUrl);
+                            const previewKey = `sfx-${sceneIdx}-0`;
+                            const isPlaying = playingSfxPreview === previewKey;
                             const currentVolume =
                               activeSfxItem?.suggested_volume ?? 0.35;
                             const isGeneratingThisSfx =
@@ -4348,7 +4345,7 @@ export const Studio: React.FC = () => {
                                         ))}
                                     </select>
 
-                                    {hasActiveAudio && (
+                                    {hasActiveAudio && resolvedAudioUrl && (
                                       <button
                                         type="button"
                                         onClick={() =>
