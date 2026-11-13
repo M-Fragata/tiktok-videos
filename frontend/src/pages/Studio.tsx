@@ -666,6 +666,13 @@ export const Studio: React.FC = () => {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isScrubbingTimeline, setIsScrubbingTimeline] =
     useState<boolean>(false);
+  const [isScrubbingPlayerBar, setIsScrubbingPlayerBar] =
+    useState<boolean>(false);
+  const wasPlayingBeforePlayerScrubRef = useRef<boolean>(false);
+  const [playerBarHover, setPlayerBarHover] = useState<{
+    xPercent: number;
+    timeText: string;
+  } | null>(null);
   const [isDraggingSubtitle, setIsDraggingSubtitle] = useState<boolean>(false);
 
   // Modal de Visualização Ampliada de Cenário B-Roll
@@ -719,6 +726,7 @@ export const Studio: React.FC = () => {
   const workspaceContainerRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const playerProgressBarRef = useRef<HTMLDivElement>(null);
   const videoCanvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -3271,13 +3279,89 @@ export const Studio: React.FC = () => {
     playerRef.current?.seekTo(clamped);
   };
 
-  const handleTimelineSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const ratio = rect.width > 0 ? clickX / rect.width : 0;
-    const targetFrame = Math.round(ratio * Math.max(0, effectiveTotalFrames - 1));
-    seekToFrame(targetFrame);
+  const seekPlayerBarByClientX = (clientX: number) => {
+    const bar = playerProgressBarRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const ratio = rect.width > 0 ? offsetX / rect.width : 0;
+    const targetFrame = Math.round(
+      ratio * Math.max(0, effectiveTotalFrames - 1)
+    );
+    const clamped = Math.max(0, Math.min(targetFrame, effectiveTotalFrames - 1));
+    setCurrentFrame(clamped);
+    playerRef.current?.seekTo(clamped);
   };
+
+  const handlePlayerBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    wasPlayingBeforePlayerScrubRef.current = isPlaying;
+    if (isPlaying) {
+      playerRef.current?.pause();
+    }
+    setIsScrubbingPlayerBar(true);
+    seekPlayerBarByClientX(e.clientX);
+  };
+
+  const handlePlayerBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = playerProgressBarRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const ratio = rect.width > 0 ? offsetX / rect.width : 0;
+    const targetFrame = Math.round(
+      ratio * Math.max(0, effectiveTotalFrames - 1)
+    );
+    setPlayerBarHover({
+      xPercent: ratio * 100,
+      timeText: formatShortTime(targetFrame),
+    });
+  };
+
+  const handlePlayerBarMouseLeave = () => {
+    if (!isScrubbingPlayerBar) {
+      setPlayerBarHover(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isScrubbingPlayerBar) return;
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      seekPlayerBarByClientX(e.clientX);
+      const bar = playerProgressBarRef.current;
+      if (bar) {
+        const rect = bar.getBoundingClientRect();
+        const offsetX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const ratio = rect.width > 0 ? offsetX / rect.width : 0;
+        const targetFrame = Math.round(
+          ratio * Math.max(0, effectiveTotalFrames - 1)
+        );
+        setPlayerBarHover({
+          xPercent: ratio * 100,
+          timeText: formatShortTime(targetFrame),
+        });
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      setIsScrubbingPlayerBar(false);
+      setPlayerBarHover(null);
+      if (wasPlayingBeforePlayerScrubRef.current) {
+        playerRef.current?.play();
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScrubbingPlayerBar, effectiveTotalFrames]);
 
   const seekTimelineByClientX = (clientX: number) => {
     const container = timelineContainerRef.current;
@@ -6054,15 +6138,45 @@ export const Studio: React.FC = () => {
 
               {/* Barra Compacta de Reprodução na Mesma Largura do Vídeo */}
               <div className="w-full shrink-0 border-t border-white/[0.08] bg-[#1c1c22] px-3.5 py-2.5">
-                {/* Barra de Progresso Fina Clicável */}
+                {/* Barra de Progresso Fina Clicável e Arrastável com Thumb e Tooltip */}
                 <div
-                  onClick={handleTimelineSeek}
-                  className="mb-2 h-1 w-full cursor-pointer overflow-hidden rounded-full bg-white/15"
+                  ref={playerProgressBarRef}
+                  onMouseDown={handlePlayerBarMouseDown}
+                  onMouseMove={handlePlayerBarMouseMove}
+                  onMouseLeave={handlePlayerBarMouseLeave}
+                  className="group/progress relative mb-2 flex h-3.5 w-full cursor-pointer items-center select-none"
                 >
-                  <div
-                    className="h-full rounded-full bg-slate-200 transition-all duration-75"
-                    style={{ width: `${playheadPercent}%` }}
-                  />
+                  {/* Tooltip com timecode flutuante ao passar mouse ou arrastar */}
+                  {playerBarHover && (
+                    <div
+                      className="pointer-events-none absolute -top-6 -translate-x-1/2 z-30 rounded bg-slate-900/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-white shadow-xl border border-white/20 whitespace-nowrap"
+                      style={{
+                        left: `${Math.max(4, Math.min(96, playerBarHover.xPercent))}%`,
+                      }}
+                    >
+                      {playerBarHover.timeText}
+                    </div>
+                  )}
+
+                  {/* Trilha da Barra */}
+                  <div className="relative h-1 w-full rounded-full bg-white/15 transition-all duration-150 group-hover/progress:h-1.5">
+                    {/* Barra de Preenchimento */}
+                    <div
+                      className={`h-full rounded-full bg-slate-200 ${
+                        isScrubbingPlayerBar ? '' : 'transition-all duration-75'
+                      }`}
+                      style={{ width: `${playheadPercent}%` }}
+                    />
+                    {/* Thumb / Bolinha Indicadora Arrastável */}
+                    <div
+                      className={`pointer-events-none absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3 w-3 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.7)] transition-transform duration-100 ${
+                        isScrubbingPlayerBar
+                          ? 'scale-100 ring-2 ring-white/50'
+                          : 'scale-0 group-hover/progress:scale-100'
+                      }`}
+                      style={{ left: `${playheadPercent}%` }}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
