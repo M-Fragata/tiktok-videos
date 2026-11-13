@@ -246,6 +246,11 @@ export const Studio: React.FC = () => {
   const [autoDucking, setAutoDucking] = useState<boolean>(true);
   const [playingSfxPreview, setPlayingSfxPreview] = useState<string | null>(null);
 
+  // Estados de recolhimento dos cards na aba Áudio
+  const [isAudioNarrationCollapsed, setIsAudioNarrationCollapsed] = useState<boolean>(false);
+  const [isAudioMixerCollapsed, setIsAudioMixerCollapsed] = useState<boolean>(false);
+  const [isAudioSfxCollapsed, setIsAudioSfxCollapsed] = useState<boolean>(false);
+
   // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
   const [sfxLibraryOptions, setSfxLibraryOptions] =
     useState<SfxOption[]>(SFX_OPTIONS);
@@ -2562,7 +2567,7 @@ export const Studio: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div>
+                  <div className="space-y-4 max-h-[calc(100vh-210px)] overflow-y-auto pr-1.5 custom-scrollbar">
                     {scenes.map((scene, index) => {
                       const isGeneratingImg = Boolean(
                         generatingImageForScene[index]
@@ -3185,7 +3190,7 @@ export const Studio: React.FC = () => {
                   </div>
 
                   {!isSubtitleStyleCollapsed && (
-                    <div className="mt-4 space-y-4 border-t border-white/[0.05] pt-4">
+                    <div className="mt-4 space-y-4 border-t border-white/[0.05] pt-4 max-h-[420px] overflow-y-auto pr-1.5 custom-scrollbar">
                       {/* 1. Tipo de Animação (Karaokê / Pop TikTok / Hormozi) */}
                       <div className="space-y-1.5">
                         <label className="block text-[11px] font-semibold text-slate-300">
@@ -3586,7 +3591,7 @@ export const Studio: React.FC = () => {
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-2.5">
+                        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1.5 custom-scrollbar">
                           {effectiveSubtitles.map((sub, index) => {
                             const isCurrentBlock =
                               index === activeSubtitleIndexAtPlayhead;
@@ -3692,145 +3697,170 @@ export const Studio: React.FC = () => {
 
                 {/* 1. Card de Narração Multi-Voz (ElevenLabs) */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div
+                    onClick={() => setIsAudioNarrationCollapsed((prev) => !prev)}
+                    className="flex cursor-pointer items-center justify-between"
+                  >
                     <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                       <span>🎙️</span>
                       <span>Narração</span>
                     </span>
+                    <span className="text-xs text-slate-400">
+                      {isAudioNarrationCollapsed ? '⌄' : '⌃'}
+                    </span>
                   </div>
 
-                  {audioGenerated && audioSrc ? (
-                    <div className="rounded-lg bg-[#141418] p-2 border border-white/[0.05]">
-                      <audio
-                        controls
-                        src={resolveAssetSrc(audioSrc)}
-                        className="w-full h-8"
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-slate-400 italic">
-                      Nenhum áudio gerado ainda.
-                    </p>
-                  )}
+                  {!isAudioNarrationCollapsed && (
+                    <>
+                      {audioGenerated && audioSrc ? (
+                        <div className="rounded-lg bg-[#141418] p-2 border border-white/[0.05]">
+                          <audio
+                            controls
+                            src={resolveAssetSrc(audioSrc)}
+                            className="w-full h-8"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic">
+                          Nenhum áudio gerado ainda.
+                        </p>
+                      )}
 
-                  <button
-                    type="button"
-                    onClick={handleGenerateAudio}
-                    disabled={isGeneratingAudio || !hasScript}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2c2c32] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-[#2a2a32] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {isGeneratingAudio ? (
-                      <>
-                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
-                        <span>Gravando Narração...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>🎙️</span>
-                        <span>{audioGenerated ? 'Regravar Narração' : 'Gravar Narração'}</span>
-                      </>
-                    )}
-                  </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateAudio}
+                        disabled={isGeneratingAudio || !hasScript}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2c2c32] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-[#2a2a32] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {isGeneratingAudio ? (
+                          <>
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+                            <span>Gravando Narração...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>🎙️</span>
+                            <span>{audioGenerated ? 'Regravar Narração' : 'Gravar Narração'}</span>
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* 2. Card de Mixagem Global de Áudio */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-4">
-                  <div className="border-b border-[#2c2c32]/60 pb-2">
-                    <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                      <span>🎚️</span>
-                      <span>Mixer de Áudio</span>
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      Mudanças afetam a reprodução no player e a renderização final do MP4
-                    </p>
-                  </div>
-
-                  {/* Slider: SFX Multiplier */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                        <span>💥</span>
-                        <span>Intensidade dos Efeitos (SFX)</span>
-                      </span>
-                      <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
-                        {globalSfxMultiplier.toFixed(1)}x
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={globalSfxMultiplier}
-                      onChange={(e) => setGlobalSfxMultiplier(parseFloat(e.target.value))}
-                      className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
-                    />
-                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span>0.0x (Mudo)</span>
-                      <span>1.0x (Padrão)</span>
-                      <span>2.0x (Máximo)</span>
-                    </div>
-                  </div>
-
-                  {/* Slider: BGM Volume */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                        <span>🎶</span>
-                        <span>Volume da Música de Fundo (BGM)</span>
-                      </span>
-                      <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
-                        {Math.round(bgmVolume * 100)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={bgmVolume}
-                      onChange={(e) => setBgmVolume(parseFloat(e.target.value))}
-                      className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
-                    />
-                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-                      <span>0%</span>
-                      <span>10% (Padrão)</span>
-                      <span>100%</span>
-                    </div>
-                  </div>
-
-                  {/* Toggle: Auto-Ducking */}
-                  <div className="flex items-center justify-between pt-1 border-t border-[#2c2c32]/60">
-                    <div className="space-y-0.5 pr-3">
-                      <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                        <span>🔉</span>
-                        <span>Reduzir música nas falas</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 leading-tight">
-                        Abaixa suavemente o volume da musica em momentos de diálogo.
+                  <div
+                    onClick={() => setIsAudioMixerCollapsed((prev) => !prev)}
+                    className="cursor-pointer flex items-center justify-between border-b border-[#2c2c32]/60 pb-2"
+                  >
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <span>🎚️</span>
+                        <span>Mixer de Áudio</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Mudanças afetam a reprodução no player e a renderização final do MP4
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={autoDucking}
-                      onClick={() => setAutoDucking((prev) => !prev)}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        autoDucking ? 'bg-amber-500' : 'bg-[#2a2a32]'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                          autoDucking ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                    <span className="text-xs text-slate-400">
+                      {isAudioMixerCollapsed ? '⌄' : '⌃'}
+                    </span>
                   </div>
+
+                  {!isAudioMixerCollapsed && (
+                    <>
+                      {/* Slider: SFX Multiplier */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <span>💥</span>
+                            <span>Intensidade dos Efeitos (SFX)</span>
+                          </span>
+                          <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
+                            {globalSfxMultiplier.toFixed(1)}x
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value={globalSfxMultiplier}
+                          onChange={(e) => setGlobalSfxMultiplier(parseFloat(e.target.value))}
+                          className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>0.0x (Mudo)</span>
+                          <span>1.0x (Padrão)</span>
+                          <span>2.0x (Máximo)</span>
+                        </div>
+                      </div>
+
+                      {/* Slider: BGM Volume */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <span>🎶</span>
+                            <span>Volume da Música de Fundo (BGM)</span>
+                          </span>
+                          <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
+                            {Math.round(bgmVolume * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={bgmVolume}
+                          onChange={(e) => setBgmVolume(parseFloat(e.target.value))}
+                          className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                          <span>0%</span>
+                          <span>10% (Padrão)</span>
+                          <span>100%</span>
+                        </div>
+                      </div>
+
+                      {/* Toggle: Auto-Ducking */}
+                      <div className="flex items-center justify-between pt-1 border-t border-[#2c2c32]/60">
+                        <div className="space-y-0.5 pr-3">
+                          <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                            <span>🔉</span>
+                            <span>Reduzir música nas falas</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-tight">
+                            Abaixa suavemente o volume da musica em momentos de diálogo.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={autoDucking}
+                          onClick={() => setAutoDucking((prev) => !prev)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            autoDucking ? 'bg-amber-500' : 'bg-[#2a2a32]'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              autoDucking ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 3. Card Granular: Efeitos Sonoros por Cena */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
-                  <div className="border-b border-[#2c2c32]/60 pb-2 flex items-center justify-between">
+                  <div
+                    onClick={() => setIsAudioSfxCollapsed((prev) => !prev)}
+                    className="cursor-pointer border-b border-[#2c2c32]/60 pb-2 flex items-center justify-between"
+                  >
                     <div>
                       <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                         <span>🔊</span>
@@ -3840,107 +3870,116 @@ export const Studio: React.FC = () => {
                         Ajuste o volume sugerido de cada efeito sonoro individualmente
                       </p>
                     </div>
-                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-slate-400">
-                      {scenes.reduce((acc, s) => acc + getSceneSfxList(s).length, 0)} sons
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                        {scenes.reduce((acc, s) => acc + getSceneSfxList(s).length, 0)} sons
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {isAudioSfxCollapsed ? '⌄' : '⌃'}
+                      </span>
+                    </div>
                   </div>
 
-                  {scenes.length === 0 || scenes.every((s) => getSceneSfxList(s).length === 0) ? (
-                    <div className="py-4 text-center">
-                      <p className="text-xs text-slate-400 italic">
-                        Nenhum efeito sonoro configurado nas cenas ainda.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1">
-                      {scenes.map((scene, sceneIdx) => {
-                        const sfxItems = getSceneSfxList(scene);
-                        if (sfxItems.length === 0) return null;
+                  {!isAudioSfxCollapsed && (
+                    <>
+                      {scenes.length === 0 || scenes.every((s) => getSceneSfxList(s).length === 0) ? (
+                        <div className="py-4 text-center">
+                          <p className="text-xs text-slate-400 italic">
+                            Nenhum efeito sonoro configurado nas cenas ainda.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1 custom-scrollbar">
+                          {scenes.map((scene, sceneIdx) => {
+                            const sfxItems = getSceneSfxList(scene);
+                            if (sfxItems.length === 0) return null;
 
-                        return (
-                          <div
-                            key={`scene-sfx-group-${sceneIdx}`}
-                            className="rounded-lg border border-white/[0.06] bg-[#16161b] p-2.5 space-y-2.5"
-                          >
-                            <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
-                              <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1">
-                                <span>🎬</span>
-                                <span>Cena #{sceneIdx + 1}</span>
-                              </span>
-                              <span className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate" title={scene.text}>
-                                {scene.text || 'Sem fala'}
-                              </span>
-                            </div>
+                            return (
+                              <div
+                                key={`scene-sfx-group-${sceneIdx}`}
+                                className="rounded-lg border border-white/[0.06] bg-[#16161b] p-2.5 space-y-2.5"
+                              >
+                                <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
+                                  <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1">
+                                    <span>🎬</span>
+                                    <span>Cena #{sceneIdx + 1}</span>
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate" title={scene.text}>
+                                    {scene.text || 'Sem fala'}
+                                  </span>
+                                </div>
 
-                            <div className="space-y-2">
-                              {sfxItems.map((sfx: SfxItem, sfxIdx: number) => {
-                                const previewKey = `sfx-${sceneIdx}-${sfxIdx}`;
-                                const isPlaying = playingSfxPreview === previewKey;
-                                const resolvedAudioUrl = resolveSfxAudioUrl(sfx);
-                                const currentVolume = sfx.suggested_volume ?? 0.35;
+                                <div className="space-y-2">
+                                  {sfxItems.map((sfx: SfxItem, sfxIdx: number) => {
+                                    const previewKey = `sfx-${sceneIdx}-${sfxIdx}`;
+                                    const isPlaying = playingSfxPreview === previewKey;
+                                    const resolvedAudioUrl = resolveSfxAudioUrl(sfx);
+                                    const currentVolume = sfx.suggested_volume ?? 0.35;
 
-                                return (
-                                  <div
-                                    key={previewKey}
-                                    className="rounded-md bg-[#1f1f26] p-2 space-y-1.5 border border-white/[0.04]"
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            handlePlaySfxPreview(resolvedAudioUrl, previewKey)
-                                          }
-                                          title="Pré-escutar som"
-                                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] transition ${
-                                            isPlaying
-                                              ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
-                                              : 'border-white/10 bg-[#2b2b35] text-slate-200 hover:border-amber-500/50 hover:bg-[#343440]'
-                                          }`}
-                                        >
-                                          {isPlaying ? '⏹' : '▶'}
-                                        </button>
-                                        <span className="text-[11px] font-semibold text-slate-200 truncate">
-                                          {sfx.sfx_key || scene.sfx_suggestion || 'SFX'}
-                                        </span>
+                                    return (
+                                      <div
+                                        key={previewKey}
+                                        className="rounded-md bg-[#1f1f26] p-2 space-y-1.5 border border-white/[0.04]"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handlePlaySfxPreview(resolvedAudioUrl, previewKey)
+                                              }
+                                              title="Pré-escutar som"
+                                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-[11px] transition ${
+                                                isPlaying
+                                                  ? 'border-amber-400 bg-amber-500/20 text-amber-300 animate-pulse'
+                                                  : 'border-white/10 bg-[#2b2b35] text-slate-200 hover:border-amber-500/50 hover:bg-[#343440]'
+                                              }`}
+                                            >
+                                              {isPlaying ? '⏹' : '▶'}
+                                            </button>
+                                            <span className="text-[11px] font-semibold text-slate-200 truncate">
+                                              {sfx.sfx_key || scene.sfx_suggestion || 'SFX'}
+                                            </span>
+                                          </div>
+
+                                          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 shrink-0">
+                                            {Math.round(currentVolume * 100)}%
+                                          </span>
+                                        </div>
+
+                                        {sfx.sound_prompt && (
+                                          <p className="text-[9.5px] text-slate-400 italic line-clamp-1 truncate" title={sfx.sound_prompt}>
+                                            {sfx.sound_prompt}
+                                          </p>
+                                        )}
+
+                                        <div className="pt-0.5">
+                                          <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.05"
+                                            value={currentVolume}
+                                            onChange={(e) =>
+                                              handleUpdateSceneSfxVolume(
+                                                sceneIdx,
+                                                sfxIdx,
+                                                parseFloat(e.target.value)
+                                              )
+                                            }
+                                            className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                                          />
+                                        </div>
                                       </div>
-
-                                      <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 shrink-0">
-                                        {Math.round(currentVolume * 100)}%
-                                      </span>
-                                    </div>
-
-                                    {sfx.sound_prompt && (
-                                      <p className="text-[9.5px] text-slate-400 italic line-clamp-1 truncate" title={sfx.sound_prompt}>
-                                        {sfx.sound_prompt}
-                                      </p>
-                                    )}
-
-                                    <div className="pt-0.5">
-                                      <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={currentVolume}
-                                        onChange={(e) =>
-                                          handleUpdateSceneSfxVolume(
-                                            sceneIdx,
-                                            sfxIdx,
-                                            parseFloat(e.target.value)
-                                          )
-                                        }
-                                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
-                                      />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

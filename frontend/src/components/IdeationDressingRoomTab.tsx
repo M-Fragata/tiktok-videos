@@ -1447,7 +1447,9 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                           </button>
                         </div>
 
-                        {option.scenes.map((scene, sIdx) => {
+                        {/* Lista de Cenas da Opção com Scroll Interno */}
+                        <div className="max-h-[400px] overflow-y-auto pr-1.5 custom-scrollbar space-y-2">
+                          {option.scenes.map((scene, sIdx) => {
                           const uid = makeSceneUid(option.id, sIdx);
                           const finalOrderIdx = finalMixScenes.findIndex(
                             (item) => item.uid === uid
@@ -1551,6 +1553,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                             </div>
                           );
                         })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1720,8 +1723,8 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                   </button>
                 </div>
 
-                {/* Lista de Cenas Reordenáveis com SceneCard Multi-Diálogos */}
-                <div className="space-y-2.5">
+                {/* Lista de Cenas Reordenáveis com SceneCard Multi-Diálogos e Scroll Interno */}
+                <div className="max-h-[480px] overflow-y-auto pr-1.5 custom-scrollbar space-y-2.5">
                   {finalMixScenes.map((item, idx) => (
                     <SceneCard
                       key={`${item.uid}_${idx}`}
