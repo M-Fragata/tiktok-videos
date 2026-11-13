@@ -1851,7 +1851,7 @@ Cena 4: Conclusão instigante convidando a comentar.`}
                   onClick={handleAddCustomScene}
                   className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#2c2c32] bg-[#121214] py-2 text-[11px] font-semibold text-slate-300 transition hover:border-amber-500/50 hover:text-amber-300"
                 >
-                  <span>+ Adicionar Cena Extra</span>
+                  <span>+ Cena Extra</span>
                 </button>
               </>
             )}

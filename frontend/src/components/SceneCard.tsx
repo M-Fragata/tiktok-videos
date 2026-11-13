@@ -332,7 +332,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
       <div className="rounded-lg border border-[#262630] bg-[#121216] p-2.5 space-y-2">
         {/* Linha do Som Escolhido (Biblioteca Local) */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex flex-col gap-1.5 text-[11px]">
             <span className="font-semibold text-teal-400 flex items-center gap-1">
               <span>🔊 Som Escolhido:</span>
               {scene.sfx_label && (
@@ -344,7 +344,7 @@ export const SceneCard: React.FC<SceneCardProps> = ({
             <select
               value={scene.sfx_suggestion || 'whoosh'}
               onChange={(e) => onUpdateField('sfx_suggestion', e.target.value)}
-              className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none max-w-[220px]"
+              className="rounded-md border border-[#2c2c32] bg-[#18181f] px-2 py-1 text-[11px] font-mono text-teal-300 focus:border-teal-500 focus:outline-none"
             >
               {(sfxOptions || SFX_OPTIONS).map((sfx) => (
                 <option key={sfx.value} value={sfx.value}>
@@ -395,11 +395,12 @@ export const SceneCard: React.FC<SceneCardProps> = ({
         </div>
 
         {/* Linha do Prompt IA (ElevenLabs Text-to-SFX) */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1 shrink-0 text-[11px] font-semibold text-slate-400">
             <span className="text-teal-400">🎧</span>
-            <span>Prompt IA:</span>
+            <span>Prompt:</span>
           </div>
+          <div className='flex gap-1'>
           <input
             type="text"
             value={scene.sfx_prompt || ''}
@@ -418,16 +419,17 @@ export const SceneCard: React.FC<SceneCardProps> = ({
               {isGeneratingSfx ? (
                 <>
                   <span className="h-2.5 w-2.5 animate-spin rounded-full border border-teal-300 border-t-transparent" />
-                  <span>Gerando...</span>
+                  <span>Gerando</span>
                 </>
               ) : (
                 <>
                   <span>✨</span>
-                  <span>Gerar SFX</span>
+                  <span>Gerar</span>
                 </>
               )}
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>

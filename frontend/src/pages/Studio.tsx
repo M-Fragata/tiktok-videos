@@ -241,10 +241,58 @@ export const Studio: React.FC = () => {
     }
   }, [id]);
 
+  // Estados de recolhimento dos cards na aba Legendas (Padrão: todas recolhidas)
   const [isSubtitleStyleCollapsed, setIsSubtitleStyleCollapsed] =
-    useState<boolean>(true);
+    useState<boolean>(() => {
+      if (!id) return true;
+      try {
+        const saved = localStorage.getItem(`studio_sub_style_collapsed_${id}`);
+        if (saved !== null) return saved === 'true';
+      } catch {
+        /* ignore storage error */
+      }
+      return true;
+    });
+
   const [isSubtitleBlocksCollapsed, setIsSubtitleBlocksCollapsed] =
-    useState<boolean>(false);
+    useState<boolean>(() => {
+      if (!id) return true;
+      try {
+        const saved = localStorage.getItem(`studio_sub_blocks_collapsed_${id}`);
+        if (saved !== null) return saved === 'true';
+      } catch {
+        /* ignore storage error */
+      }
+      return true;
+    });
+
+  const toggleSubtitleStyleCollapsed = () => {
+    setIsSubtitleStyleCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_sub_style_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleSubtitleBlocksCollapsed = () => {
+    setIsSubtitleBlocksCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_sub_blocks_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
 
   // Etapa 1: Sala de Ideação & Camarim 360º
   const [theme, setTheme] = useState<string>('');
@@ -310,10 +358,124 @@ export const Studio: React.FC = () => {
   const [autoDucking, setAutoDucking] = useState<boolean>(true);
   const [playingSfxPreview, setPlayingSfxPreview] = useState<string | null>(null);
 
-  // Estados de recolhimento dos cards na aba Áudio
-  const [isAudioNarrationCollapsed, setIsAudioNarrationCollapsed] = useState<boolean>(false);
-  const [isAudioMixerCollapsed, setIsAudioMixerCollapsed] = useState<boolean>(false);
-  const [isAudioSfxCollapsed, setIsAudioSfxCollapsed] = useState<boolean>(false);
+  // Estados de recolhimento dos cards na aba Áudio (Padrão: todas recolhidas)
+  const [isAudioNarrationCollapsed, setIsAudioNarrationCollapsed] =
+    useState<boolean>(() => {
+      if (!id) return true;
+      try {
+        const saved = localStorage.getItem(`studio_audio_narration_collapsed_${id}`);
+        if (saved !== null) return saved === 'true';
+      } catch {
+        /* ignore storage error */
+      }
+      return true;
+    });
+
+  const [isAudioMixerCollapsed, setIsAudioMixerCollapsed] = useState<boolean>(() => {
+    if (!id) return true;
+    try {
+      const saved = localStorage.getItem(`studio_audio_mixer_collapsed_${id}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return true;
+  });
+
+  const [isAudioSfxCollapsed, setIsAudioSfxCollapsed] = useState<boolean>(() => {
+    if (!id) return true;
+    try {
+      const saved = localStorage.getItem(`studio_audio_sfx_collapsed_${id}`);
+      if (saved !== null) return saved === 'true';
+    } catch {
+      /* ignore storage error */
+    }
+    return true;
+  });
+
+  const toggleAudioNarrationCollapsed = () => {
+    setIsAudioNarrationCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_audio_narration_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleAudioMixerCollapsed = () => {
+    setIsAudioMixerCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_audio_mixer_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleAudioSfxCollapsed = () => {
+    setIsAudioSfxCollapsed((prev) => {
+      const next = !prev;
+      if (id) {
+        try {
+          localStorage.setItem(`studio_audio_sfx_collapsed_${id}`, String(next));
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    try {
+      const savedSubStyle = localStorage.getItem(`studio_sub_style_collapsed_${id}`);
+      if (savedSubStyle !== null) {
+        setIsSubtitleStyleCollapsed(savedSubStyle === 'true');
+      } else {
+        setIsSubtitleStyleCollapsed(true);
+      }
+
+      const savedSubBlocks = localStorage.getItem(`studio_sub_blocks_collapsed_${id}`);
+      if (savedSubBlocks !== null) {
+        setIsSubtitleBlocksCollapsed(savedSubBlocks === 'true');
+      } else {
+        setIsSubtitleBlocksCollapsed(true);
+      }
+
+      const savedNarration = localStorage.getItem(`studio_audio_narration_collapsed_${id}`);
+      if (savedNarration !== null) {
+        setIsAudioNarrationCollapsed(savedNarration === 'true');
+      } else {
+        setIsAudioNarrationCollapsed(true);
+      }
+
+      const savedMixer = localStorage.getItem(`studio_audio_mixer_collapsed_${id}`);
+      if (savedMixer !== null) {
+        setIsAudioMixerCollapsed(savedMixer === 'true');
+      } else {
+        setIsAudioMixerCollapsed(true);
+      }
+
+      const savedSfx = localStorage.getItem(`studio_audio_sfx_collapsed_${id}`);
+      if (savedSfx !== null) {
+        setIsAudioSfxCollapsed(savedSfx === 'true');
+      } else {
+        setIsAudioSfxCollapsed(true);
+      }
+    } catch {
+      /* ignore storage error */
+    }
+  }, [id]);
 
   // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
   const [sfxLibraryOptions, setSfxLibraryOptions] =
@@ -3252,9 +3414,7 @@ export const Studio: React.FC = () => {
                 {/* 1. Card Recolhível: Estilo & Animação das Legendas (Padrão: Recolhido) */}
                 <div className="rounded-xl bg-[#202024]/70 border border-white/[0.06] p-4 hover:border-white/[0.1] transition-all">
                   <div
-                    onClick={() =>
-                      setIsSubtitleStyleCollapsed((prev) => !prev)
-                    }
+                    onClick={toggleSubtitleStyleCollapsed}
                     className="flex cursor-pointer items-center justify-between gap-2"
                   >
                     <div>
@@ -3639,12 +3799,10 @@ export const Studio: React.FC = () => {
                   )}
                 </div>
 
-                {/* 2. Card Recolhível: Blocos de Fala (Padrão: Aberto) */}
+                {/* 2. Card Recolhível: Blocos de Fala (Padrão: Recolhido) */}
                 <div className="rounded-xl bg-[#202024]/60 border border-white/[0.05] p-4 hover:border-white/[0.1] transition-all">
                   <div
-                    onClick={() =>
-                      setIsSubtitleBlocksCollapsed((prev) => !prev)
-                    }
+                    onClick={toggleSubtitleBlocksCollapsed}
                     className="flex cursor-pointer items-center justify-between gap-2"
                   >
                     <div>
@@ -3776,7 +3934,7 @@ export const Studio: React.FC = () => {
                 {/* 1. Card de Narração Multi-Voz (ElevenLabs) */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
                   <div
-                    onClick={() => setIsAudioNarrationCollapsed((prev) => !prev)}
+                    onClick={toggleAudioNarrationCollapsed}
                     className="flex cursor-pointer items-center justify-between"
                   >
                     <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
@@ -3829,7 +3987,7 @@ export const Studio: React.FC = () => {
                 {/* 2. Card de Mixagem Global de Áudio */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-4">
                   <div
-                    onClick={() => setIsAudioMixerCollapsed((prev) => !prev)}
+                    onClick={toggleAudioMixerCollapsed}
                     className="cursor-pointer flex items-center justify-between border-b border-[#2c2c32]/60 pb-2"
                   >
                     <div>
@@ -3936,7 +4094,7 @@ export const Studio: React.FC = () => {
                 {/* 3. Card Granular: Efeitos Sonoros por Cena */}
                 <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
                   <div
-                    onClick={() => setIsAudioSfxCollapsed((prev) => !prev)}
+                    onClick={toggleAudioSfxCollapsed}
                     className="cursor-pointer border-b border-[#2c2c32]/60 pb-2 flex items-center justify-between"
                   >
                     <div>
