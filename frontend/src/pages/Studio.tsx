@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Player, PlayerRef } from '@remotion/player';
 import { TimeMachineVideo } from '../remotion/TimeMachineVideo';
@@ -572,7 +572,22 @@ export const Studio: React.FC = () => {
     getCachedVoiceCatalog()
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<{ id: number; text: string } | null>(null);
+  const setSuccessMsg = useCallback((msg: string | null) => {
+    if (!msg) {
+      setSuccessToast(null);
+    } else {
+      setSuccessToast({ id: Date.now(), text: msg });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!successToast) return;
+    const timer = setTimeout(() => {
+      setSuccessToast(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [successToast]);
   const pendingAutoDownloadRef = useRef<boolean>(false);
   const renderingSignatureRef = useRef<string | null>(null);
   const shouldSyncInitialRenderedSignatureRef = useRef<boolean>(false);
@@ -2051,9 +2066,7 @@ export const Studio: React.FC = () => {
         const data = await res.json();
         setVideoRecord(data.video);
       }
-      setSuccessMsg(
-        'Vídeo e estilos de legenda salvos e sincronizados com o Player!'
-      );
+      setSuccessMsg('Vídeo montado!');
     } catch (err) {
       console.warn('Aviso ao persistir montagem no banco:', err);
     }
@@ -2828,7 +2841,7 @@ export const Studio: React.FC = () => {
             </h1>
           )}
 
-          {/* Notificação Compacta Flutuante */}
+          {/* Notificação de Erro */}
           {errorMsg && (
             <div className="hidden xl:flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1 text-[11px] text-rose-200">
               <span className="truncate max-w-[240px]">{errorMsg}</span>
@@ -2836,18 +2849,6 @@ export const Studio: React.FC = () => {
                 type="button"
                 onClick={() => setErrorMsg(null)}
                 className="text-rose-400 hover:text-white font-bold"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {!errorMsg && successMsg && (
-            <div className="hidden xl:flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-[11px] text-emerald-200">
-              <span className="truncate max-w-[240px]">{successMsg}</span>
-              <button
-                type="button"
-                onClick={() => setSuccessMsg(null)}
-                className="text-emerald-400 hover:text-white font-bold"
               >
                 ×
               </button>
@@ -3012,32 +3013,18 @@ export const Studio: React.FC = () => {
           </div>
 
           {/* Feedback Mobile/Tablet */}
-          {(errorMsg || successMsg) && (
+          {errorMsg && (
             <div className="xl:hidden px-4 pt-3 shrink-0">
-              {errorMsg && (
-                <div className="flex items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
-                  <span>{errorMsg}</span>
-                  <button
-                    type="button"
-                    onClick={() => setErrorMsg(null)}
-                    className="ml-2 font-bold"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              {!errorMsg && successMsg && (
-                <div className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs text-emerald-200">
-                  <span>{successMsg}</span>
-                  <button
-                    type="button"
-                    onClick={() => setSuccessMsg(null)}
-                    className="ml-2 font-bold"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
+                <span>{errorMsg}</span>
+                <button
+                  type="button"
+                  onClick={() => setErrorMsg(null)}
+                  className="ml-2 font-bold"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           )}
 
@@ -5558,6 +5545,39 @@ export const Studio: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Toast Flutuante de Sucesso com Efeito de Vôo */}
+      {successToast && (
+        <div
+          key={successToast.id}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-semibold text-emerald-300 shadow-2xl shadow-black/80 backdrop-blur-md animate-toast-fly pointer-events-auto"
+        >
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+          <span className="text-slate-100">{successToast.text}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessToast(null)}
+            className="ml-2 text-slate-400 hover:text-white transition-colors"
+            title="Fechar notificação"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
