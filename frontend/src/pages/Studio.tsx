@@ -675,7 +675,17 @@ export const Studio: React.FC = () => {
       setIsAssembled(Boolean(props.storyboard.isAssembled));
       setSceneTimings(props.storyboard.sceneTimings || []);
       if (loadedScenes.length > 0) {
-        setActiveTab('storyboard');
+        let hasCachedTab = false;
+        try {
+          hasCachedTab = Boolean(
+            id && localStorage.getItem(`studio_active_tab_${id}`)
+          );
+        } catch {
+          /* ignore storage error */
+        }
+        if (!hasCachedTab) {
+          setActiveTab('storyboard');
+        }
       }
     } else if (
       props.backgroundTimeline &&
@@ -702,7 +712,17 @@ export const Studio: React.FC = () => {
         })
       );
       setScenes(legacyScenes);
-      setActiveTab('storyboard');
+      let hasCachedTab = false;
+      try {
+        hasCachedTab = Boolean(
+          id && localStorage.getItem(`studio_active_tab_${id}`)
+        );
+      } catch {
+        /* ignore storage error */
+      }
+      if (!hasCachedTab) {
+        setActiveTab('storyboard');
+      }
     }
   };
 
@@ -4012,9 +4032,15 @@ export const Studio: React.FC = () => {
                     onClick={toggleAudioNarrationCollapsed}
                     className="flex cursor-pointer items-center justify-between"
                   >
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-200 ">
+                      <div className="flex items-center gap-1.5">
                       <span>🎙️</span>
                       <span>Narração</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Escolha sons disponíveis ou gere efeitos sonoros com a ElevenLabs
+                      </p>
+                      
                     </span>
                     <span className="text-xs text-slate-400">
                       {isAudioNarrationCollapsed ? '⌄' : '⌃'}
@@ -4179,18 +4205,10 @@ export const Studio: React.FC = () => {
                         <span>Efeitos Sonoros por Cena</span>
                       </h3>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        Escolha sons da biblioteca ou gere efeitos sonoros exclusivos com a ElevenLabs
+                        Escolha sons disponíveis ou gere efeitos sonoros com a ElevenLabs
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-mono text-slate-400">
-                        {scenes.filter((s) => s.custom_sfx_url || (s.sfx_suggestion && s.sfx_suggestion !== 'none')).length} ativos
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {isAudioSfxCollapsed ? '⌄' : '⌃'}
-                      </span>
-                    </div>
-                  </div>
+                   </div>
 
                   {!isAudioSfxCollapsed && (
                     <>
@@ -4305,7 +4323,7 @@ export const Studio: React.FC = () => {
                                       className="flex-1 rounded-lg border border-[#2c2c32] bg-[#1a1a22] py-1.5 px-2.5 text-xs text-slate-200 focus:border-teal-500 focus:outline-none"
                                     >
                                       <option value="none">
-                                        🔇 Nenhum / Sem Efeito
+                                        🔇 Sem Efeito
                                       </option>
                                       {scene.custom_sfx_url && (
                                         <option value="custom">
@@ -4781,6 +4799,7 @@ export const Studio: React.FC = () => {
                 <div className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-300">
                   <span className="text-xs opacity-80">🎵</span>
                   <span className="truncate">Narração</span>
+                  
                 </div>
 
                 {/* Label Track 3: Legendas */}

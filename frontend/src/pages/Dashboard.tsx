@@ -220,9 +220,9 @@ const DashboardSkeleton: React.FC = () => {
           </div>
         </div>
 
-        {/* Grid de Vídeos Skeleton (8 cards = 4 colunas x 2 linhas) */}
+        {/* Grid de Vídeos Skeleton (4 cards = 4 colunas x 1 linha) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-          {Array.from({ length: 8 }).map((_, idx) => (
+          {Array.from({ length: 4 }).map((_, idx) => (
             <div
               key={idx}
               className="flex flex-col rounded-2xl border border-slate-800/90 bg-slate-900/50 overflow-hidden shadow-lg animate-pulse"

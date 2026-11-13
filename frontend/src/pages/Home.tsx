@@ -9,18 +9,18 @@ const SKELETON_ITEMS_COUNT = 7; // No loading: 1 card de criação real + 7 skel
 
 /**
  * Componente de Skeleton para um card de vídeo no grid da Home.
- * Segue exatamente as dimensões e proporções dos cards reais.
+ * Segue exatamente as dimensões compactas e proporções dos cards reais, sem espaço vazio.
  */
 const HomeVideoCardSkeleton: React.FC = () => {
   return (
     <div
-      className="flex min-h-[380px] flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40 animate-pulse"
+      className="flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40 animate-pulse"
       aria-hidden="true"
     >
-      {/* Thumbnail 9:16 Aspect Area */}
-      <div className="relative aspect-[9/16] max-h-[260px] w-full bg-slate-800/60 flex items-center justify-center overflow-hidden">
+      {/* Thumbnail Area Compacta */}
+      <div className="relative h-[180px] w-full bg-slate-800/60 flex items-center justify-center overflow-hidden">
         <svg
-          className="h-10 w-10 text-slate-700/50"
+          className="h-8 w-8 text-slate-700/50"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -35,15 +35,10 @@ const HomeVideoCardSkeleton: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
       </div>
 
-      {/* Conteúdo do Card */}
-      <div className="flex flex-1 flex-col justify-between p-4">
-        <div className="space-y-2">
-          <div className="h-4 w-4/5 rounded bg-slate-800" />
-          <div className="h-4 w-3/5 rounded bg-slate-800/80" />
-        </div>
-        <div className="pt-3">
-          <div className="h-3 w-2/5 rounded bg-slate-800/60" />
-        </div>
+      {/* Conteúdo do Card Skeleton - sem espaço vazio desnecessário */}
+      <div className="p-3 space-y-1.5">
+        <div className="h-4 w-4/5 rounded bg-slate-800" />
+        <div className="h-3 w-1/2 rounded bg-slate-800/60 mt-1" />
       </div>
     </div>
   );
@@ -171,15 +166,15 @@ export const Home: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
       {/* Top Header */}
-      <header className="border-b border-slate-800/80 bg-slate-900/50 backdrop-blur sticky top-0 z-20">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <header className="sticky top-0 z-20 flex-shrink-0 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
           <div className="flex items-center gap-3">
             <img
               src="/logo/fragata_shorts_logo.png"
               alt="Fragata Shorts"
-              className="h-11 w-auto cursor-pointer object-contain transition-transform hover:scale-105 active:scale-95"
+              className="h-10 w-auto cursor-pointer object-contain transition-transform hover:scale-105 active:scale-95"
             />
           </div>
 
@@ -187,7 +182,7 @@ export const Home: React.FC = () => {
             <button
               onClick={handleCreateDraftVideo}
               disabled={isCreating}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-400 hover:to-amber-500 active:scale-95 disabled:opacity-50"
             >
               <span className="text-base leading-none font-black">+</span>
               <span>{isCreating ? 'Criando...' : 'Nova História'}</span>
@@ -197,10 +192,10 @@ export const Home: React.FC = () => {
       </header>
 
       {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-6 pt-5 pb-20">
+        <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-white">
+            <h2 className="text-lg font-bold tracking-tight text-white">
               Histórico de Produções
             </h2>
             <p className="text-xs text-slate-400">
@@ -210,20 +205,20 @@ export const Home: React.FC = () => {
 
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/80 px-3.5 py-2.5 text-xs font-semibold text-slate-200 shadow-sm transition hover:bg-slate-750 hover:text-white hover:border-amber-500/60"
+            className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/80 px-3.5 py-2 text-xs font-semibold text-slate-200 shadow-sm transition hover:bg-slate-750 hover:text-white hover:border-amber-500/60"
           >
             <span>Dashboard</span>
           </button>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
+          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
             {error}
           </div>
         )}
 
-        {/* Dashboard Grid: 4 colunas x 2 linhas */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {/* Dashboard Grid: 4 colunas x 2 linhas compacto */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {/* 
             Na 1ª página, o 1º slot (1ª linha, 1ª coluna) é SEMPRE a box para Criar Nova História.
             Ela NÃO entra no skeleton e permanece disponível mesmo durante o loading.
@@ -231,13 +226,13 @@ export const Home: React.FC = () => {
           {currentPage === 1 && (
             <div
               onClick={handleCreateDraftVideo}
-              className="group relative flex min-h-[380px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-900/30 p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/60 hover:bg-amber-500/5 hover:shadow-xl hover:shadow-amber-500/5"
+              className="group relative flex h-full min-h-[225px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-slate-800 bg-slate-900/30 p-4 text-center transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/60 hover:bg-amber-500/5 hover:shadow-xl hover:shadow-amber-500/5"
             >
-              <span className="text-7xl font-light leading-none group-hover:text-amber-400 transition">+</span>
-              <h3 className="mt-5 text-base font-bold text-white group-hover:text-amber-400 transition">
+              <span className="text-5xl font-light leading-none group-hover:text-amber-400 transition">+</span>
+              <h3 className="mt-3 text-sm font-bold text-white group-hover:text-amber-400 transition">
                 {isCreating ? 'Abrindo Studio...' : 'Criar Nova História'}
               </h3>
-              <p className="mt-1.5 max-w-[210px] text-xs text-slate-400">
+              <p className="mt-1 max-w-[190px] text-[11px] leading-relaxed text-slate-400">
                 Crie o roteiro da sua história, gere imagens, legendas e vozes.
               </p>
             </div>
@@ -249,7 +244,7 @@ export const Home: React.FC = () => {
               <HomeVideoCardSkeleton key={`skeleton-${index}`} />
             ))
           ) : (
-            /* Cartões dos Vídeos Paginados */
+            /* Cartões dos Vídeos Paginados com altura otimizada */
             displayedVideos.map((video) => {
               const firstSelectedSceneImg =
                 video.remotionProps?.storyboard?.scenes?.find(
@@ -280,10 +275,10 @@ export const Home: React.FC = () => {
                     clearStudioVideoCache(video.id);
                     navigate(`/video/${video.id}`);
                   }}
-                  className="group relative flex min-h-[380px] cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/60 transition-all duration-200 hover:-translate-y-1 hover:border-slate-700 hover:shadow-2xl hover:shadow-black/60"
+                  className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/60 transition-all duration-200 hover:-translate-y-1 hover:border-slate-700 hover:shadow-xl hover:shadow-black/60"
                 >
-                  {/* Thumbnail 9:16 Aspect Area */}
-                  <div className="relative aspect-[9/16] max-h-[260px] w-full overflow-hidden bg-slate-950">
+                  {/* Thumbnail Area Compacta */}
+                  <div className="relative h-[180px] w-full overflow-hidden bg-slate-950">
                     <img
                       src={resolvedThumb}
                       alt={video.theme}
@@ -293,9 +288,9 @@ export const Home: React.FC = () => {
 
                     {/* Play Overlay no Hover */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/40">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/40">
                         <svg
-                          className="h-5 w-5 translate-x-0.5 fill-current"
+                          className="h-4 w-4 translate-x-0.5 fill-current"
                           viewBox="0 0 24 24"
                         >
                           <path d="M8 5v14l11-7z" />
@@ -304,87 +299,97 @@ export const Home: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Conteúdo do Card */}
-                  <div className="flex flex-1 flex-col justify-between p-4">
-                    <div>
-                      <h4 className="line-clamp-2 text-sm font-bold text-white group-hover:text-amber-400 transition">
-                        {video.theme}
-                      </h4>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        ID #{video.id.slice(0, 8)} • {dateStr}
-                      </p>
-                    </div>
+                  {/* Conteúdo do Card - sem espaço vazio desnecessário */}
+                  <div className="p-3">
+                    <h4 className="line-clamp-1 text-xs sm:text-sm font-bold text-white group-hover:text-amber-400 transition">
+                      {video.theme}
+                    </h4>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      ID #{video.id.slice(0, 8)} • {dateStr}
+                    </p>
                   </div>
                 </div>
               );
             })
           )}
         </div>
-
-        {/* ─── BARRA DE PAGINAÇÃO NO FINAL DA HOME ─── */}
-        {!isLoading && totalVideos > 0 && (
-          <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-slate-800/80 pt-6 sm:flex-row">
-            <p className="text-xs text-slate-400">
-              Mostrando <span className="font-semibold text-slate-200">{startIndex + 1}</span> a{' '}
-              <span className="font-semibold text-slate-200">{endIndex}</span> de{' '}
-              <span className="font-semibold text-slate-200">{totalVideos}</span> produções
-            </p>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white disabled:pointer-events-none disabled:opacity-40"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  <span>Anterior</span>
-                </button>
-
-                {/* Botões numéricos de página */}
-                <div className="flex items-center gap-1">
-                  {getVisiblePages(currentPage, totalPages).map((pageItem, idx) => {
-                    if (typeof pageItem === 'string') {
-                      return (
-                        <span key={`dots-${idx}`} className="px-1.5 text-xs text-slate-600">
-                          ...
-                        </span>
-                      );
-                    }
-                    const isActive = pageItem === currentPage;
-                    return (
-                      <button
-                        key={pageItem}
-                        onClick={() => handlePageChange(pageItem)}
-                        className={`h-8 min-w-[32px] rounded-xl px-2.5 text-xs font-bold transition ${
-                          isActive
-                            ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                            : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {pageItem}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <button
-                  onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white disabled:pointer-events-none disabled:opacity-40"
-                >
-                  <span>Próxima</span>
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </main>
+
+      {/* ─── BARRA DE PAGINAÇÃO FIXA NO FOOTER (SEMPRE ANCORADA NO RODAPÉ) ─── */}
+      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-800/80 bg-slate-950/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-2.5">
+          <p className="text-xs text-slate-400">
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>Carregando produções...</span>
+              </span>
+            ) : totalVideos > 0 ? (
+              <>
+                Mostrando <span className="font-semibold text-slate-200">{startIndex + 1}</span> a{' '}
+                <span className="font-semibold text-slate-200">{endIndex}</span> de{' '}
+                <span className="font-semibold text-slate-200">{totalVideos}</span> produções
+              </>
+            ) : (
+              <span>Nenhuma produção cadastrada</span>
+            )}
+          </p>
+
+          {/* Controles de página se houver mais de 1 página */}
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white disabled:pointer-events-none disabled:opacity-40"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                <span>Anterior</span>
+              </button>
+
+              {/* Botões numéricos de página */}
+              <div className="flex items-center gap-1">
+                {getVisiblePages(currentPage, totalPages).map((pageItem, idx) => {
+                  if (typeof pageItem === 'string') {
+                    return (
+                      <span key={`dots-${idx}`} className="px-1 text-xs text-slate-600">
+                        ...
+                      </span>
+                    );
+                  }
+                  const isActive = pageItem === currentPage;
+                  return (
+                    <button
+                      key={pageItem}
+                      onClick={() => handlePageChange(pageItem)}
+                      className={`h-7 min-w-[28px] rounded-lg px-2 text-xs font-bold transition ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                          : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      {pageItem}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/80 px-2.5 py-1 text-xs font-semibold text-slate-300 transition hover:border-slate-700 hover:bg-slate-800 hover:text-white disabled:pointer-events-none disabled:opacity-40"
+              >
+                <span>Próxima</span>
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      </footer>
     </div>
   );
 };
