@@ -11,6 +11,7 @@ import {
   generateScriptSchema,
   generateVideoSchema,
   promoteSfxSchema,
+  regenerateDialogueAudioSchema,
   renderVideoSchema,
   reviewFinalScriptSchema,
   updateVideoTitleSchema,
@@ -32,6 +33,7 @@ import {
 import {
   generateNarrationWithTimestamps,
   generateSoundEffect,
+  regenerateSingleDialogueNarration,
 } from '../services/elevenlabs.service.ts';
 import {
   generateAllSceneBackgrounds,
@@ -543,6 +545,145 @@ export async function generateAudioController(
         error instanceof Error
           ? error.message
           : 'Erro ao gravar narração na ElevenLabs.',
+    });
+  }
+}
+
+/**
+ * POST /api/videos/:id/regenerate-dialogue-audio
+ * Regrava cirurgicamente apenas uma fala específica na ElevenLabs e remonta o áudio final
+ */
+export async function regenerateDialogueAudioController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = regenerateDialogueAudioSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para regravação do diálogo',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { sceneIndex, dialogueIndex, speaker, voiceId, characterName } =
+    parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short' as const,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const scenes = currentStoryboard.scenes || currentProps.scenes || [];
+    if (!scenes[sceneIndex]) {
+      res
+        .status(404)
+        .json({ error: `Cena #${sceneIndex + 1} não encontrada no roteiro.` });
+      return;
+    }
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+
+    const scriptScenesForTts: ScriptScene[] = scenes.map((s) => ({
+      speaker: s.speaker,
+      text: s.text,
+      dialogues: s.dialogues,
+      avatarSprite: s.avatarSprite as ScriptScene['avatarSprite'],
+      imagePrompt: s.imagePrompt,
+      sfx_suggestion: s.sfx_suggestion,
+    }));
+
+    const narrationResult = await regenerateSingleDialogueNarration({
+      videoId: id,
+      sceneIndex,
+      dialogueIndex,
+      speaker,
+      voiceId,
+      characterName,
+      scenes: scriptScenesForTts,
+      storageVideoDir,
+      publicBaseUrl,
+    });
+
+    const cacheBustedAudioUrl = `${narrationResult.audioUrl}?v=${Date.now()}`;
+
+    // Atualiza o diálogo nas cenas do storyboard
+    const updatedScenes = scenes.map((sc, sIdx) => {
+      if (sIdx !== sceneIndex) return sc;
+      const rawDialogues =
+        sc.dialogues && sc.dialogues.length > 0
+          ? sc.dialogues
+          : [
+              {
+                id: `dlg_${sIdx}`,
+                speaker: sc.speaker || 'protagonist',
+                text: sc.text || '',
+              },
+            ];
+      const updatedDialogues = rawDialogues.map((d, dIdx) => {
+        if (dIdx !== dialogueIndex) return d;
+        return { ...d, speaker, voiceId, characterName };
+      });
+      return {
+        ...sc,
+        speaker: updatedDialogues[0]?.speaker || sc.speaker,
+        dialogues: updatedDialogues,
+      };
+    });
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      theme: existingVideo.theme,
+      durationInFrames: narrationResult.durationInFrames,
+      audioSrc: cacheBustedAudioUrl,
+      subtitles: narrationResult.subtitles,
+      avatarTimeline: narrationResult.avatarTimeline,
+      storyboard: {
+        ...currentStoryboard,
+        scenes: updatedScenes,
+        audioGenerated: true,
+        sceneTimings: narrationResult.sceneTimings,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+        remotionProps: updatedProps as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    res.json({
+      success: true,
+      audioUrl: cacheBustedAudioUrl,
+      video: updatedVideo,
+      subtitles: narrationResult.subtitles,
+      sceneTimings: narrationResult.sceneTimings,
+      durationInFrames: narrationResult.durationInFrames,
+      scenes: updatedScenes,
+    });
+  } catch (error: unknown) {
+    console.error('[Regenerate Dialogue Audio Controller Error]', error);
+    res.status(500).json({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Falha ao regravar fala na ElevenLabs.',
     });
   }
 }

@@ -52,10 +52,24 @@ export interface SceneFrameTiming {
   frameEnd: number;
 }
 
-interface ElevenLabsAlignment {
+export interface ElevenLabsAlignment {
   characters: string[];
   character_start_times_seconds: number[];
   character_end_times_seconds: number[];
+}
+
+export interface ChunkManifestItem {
+  chunkId: number;
+  fileName: string;
+  sceneIndex: number;
+  dialogueIndex: number;
+  dialogueId?: string;
+  speaker: SpeakerType;
+  voiceId?: string;
+  characterName?: string;
+  text: string;
+  alignment: ElevenLabsAlignment;
+  durationSeconds: number;
 }
 
 interface ElevenLabsWithTimestampsResponse {
@@ -380,6 +394,7 @@ export async function generateNarrationWithTimestamps(
   fs.mkdirSync(chunksDir, { recursive: true });
 
   const chunkFilePaths: string[] = [];
+  const manifestItems: ChunkManifestItem[] = [];
   const allSubtitles: SubtitleItem[] = [];
   const rawSceneTimings: Array<{ startSecond: number; endSecond: number }> = [];
 
@@ -559,6 +574,20 @@ export async function generateNarrationWithTimestamps(
         lastCharEndSec
       );
 
+      manifestItems.push({
+        chunkId,
+        fileName: `chunk_${chunkId}.mp3`,
+        sceneIndex: index,
+        dialogueIndex: dIdx,
+        dialogueId: dialogue.id,
+        speaker: dialogue.speaker,
+        voiceId: dialogue.voiceId,
+        characterName: dialogue.characterName,
+        text: dialogue.text,
+        alignment,
+        durationSeconds: chunkDurationSeconds,
+      });
+
       cumulativeDurationSeconds += chunkDurationSeconds;
     }
 
@@ -587,9 +616,14 @@ export async function generateNarrationWithTimestamps(
   );
   await concatenateAudioChunks(chunkFilePaths, finalAudioFilePath, chunksDir);
 
-  // Remove a pasta temporária de chunks/ após concatenação bem-sucedida
-  fs.rmSync(chunksDir, { recursive: true, force: true });
-  console.log(`[FFmpeg] Pasta temporária chunks/ removida com sucesso.`);
+  // Salva o manifest com metadados e alignments de cada chunk para permitir regravação pontual cirúrgica
+  const manifestFilePath = path.join(chunksDir, 'chunks_manifest.json');
+  fs.writeFileSync(
+    manifestFilePath,
+    JSON.stringify({ items: manifestItems }, null, 2),
+    'utf-8'
+  );
+  console.log(`[ElevenLabs] Manifest salvo em ${manifestFilePath} com ${manifestItems.length} chunks.`);
 
   // Calcula durationInFrames final com margem mínima de decaimento vocal (0.06s ~ 2 frames)
   // Substitui a margem antiga de +0.5s para viabilizar o Seamless Loop sem pausa morta perceptível
@@ -647,6 +681,315 @@ export async function generateNarrationWithTimestamps(
     avatarTimeline,
     sceneTimings,
   };
+}
+
+/**
+ * Remonta o áudio final (audio.mp3), timestamps das legendas e timeline das cenas a partir dos chunks existentes
+ */
+export async function rebuildNarrationFromChunks({
+  videoId,
+  manifestItems,
+  scenes,
+  storageVideoDir,
+  publicBaseUrl,
+}: {
+  videoId: string;
+  manifestItems: ChunkManifestItem[];
+  scenes: ScriptScene[];
+  storageVideoDir: string;
+  publicBaseUrl: string;
+}): Promise<NarrationSyncResult> {
+  const chunksDir = path.join(storageVideoDir, 'chunks');
+  const chunkFilePaths: string[] = manifestItems.map((item) =>
+    path.join(chunksDir, item.fileName)
+  );
+  const allSubtitles: SubtitleItem[] = [];
+  const rawSceneTimings: Array<{ startSecond: number; endSecond: number }> = [];
+
+  const mergedAlignment: ElevenLabsAlignment = {
+    characters: [],
+    character_start_times_seconds: [],
+    character_end_times_seconds: [],
+  };
+
+  let cumulativeDurationSeconds = 0;
+
+  for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
+    const sceneStartSecond = cumulativeDurationSeconds;
+    const sceneChunks = manifestItems.filter((m) => m.sceneIndex === sIdx);
+
+    for (const chunk of sceneChunks) {
+      const alignment = chunk.alignment;
+      const shiftedStartTimes = alignment.character_start_times_seconds.map(
+        (t) => t + cumulativeDurationSeconds
+      );
+      const shiftedEndTimes = alignment.character_end_times_seconds.map(
+        (t) => t + cumulativeDurationSeconds
+      );
+
+      const shiftedChunkAlignment: ElevenLabsAlignment = {
+        characters: alignment.characters,
+        character_start_times_seconds: shiftedStartTimes,
+        character_end_times_seconds: shiftedEndTimes,
+      };
+
+      if (mergedAlignment.characters.length > 0) {
+        mergedAlignment.characters.push(' ');
+        mergedAlignment.character_start_times_seconds.push(
+          cumulativeDurationSeconds
+        );
+        mergedAlignment.character_end_times_seconds.push(
+          cumulativeDurationSeconds
+        );
+      }
+      mergedAlignment.characters.push(...shiftedChunkAlignment.characters);
+      mergedAlignment.character_start_times_seconds.push(
+        ...shiftedChunkAlignment.character_start_times_seconds
+      );
+      mergedAlignment.character_end_times_seconds.push(
+        ...shiftedChunkAlignment.character_end_times_seconds
+      );
+
+      const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
+      const sceneSubtitles = buildSubtitlesFromWords(
+        sceneWords,
+        WORDS_PER_SUBTITLE_CHUNK
+      );
+      allSubtitles.push(...sceneSubtitles);
+
+      cumulativeDurationSeconds += chunk.durationSeconds;
+    }
+
+    const sceneEndSecond = cumulativeDurationSeconds;
+    rawSceneTimings.push({
+      startSecond: sceneStartSecond,
+      endSecond: sceneEndSecond,
+    });
+  }
+
+  for (let i = 0; i < allSubtitles.length - 1; i++) {
+    if (allSubtitles[i].frameEnd >= allSubtitles[i + 1].frameStart) {
+      allSubtitles[i].frameEnd = Math.max(
+        allSubtitles[i].frameStart,
+        allSubtitles[i + 1].frameStart - 1
+      );
+    }
+  }
+
+  const finalAudioFilePath = path.join(storageVideoDir, 'audio.mp3');
+  console.log(
+    `[FFmpeg] Re-concatenando ${chunkFilePaths.length} chunks de áudio em ${finalAudioFilePath}...`
+  );
+  await concatenateAudioChunks(chunkFilePaths, finalAudioFilePath, chunksDir);
+
+  const AUDIO_DECAY_PADDING_SECONDS = 0.06;
+  const lastGlobalCharEnd =
+    mergedAlignment.character_end_times_seconds[
+      mergedAlignment.character_end_times_seconds.length - 1
+    ] ?? cumulativeDurationSeconds;
+  const ultimoTimestampSegundos = Math.max(
+    cumulativeDurationSeconds,
+    lastGlobalCharEnd
+  );
+  const durationInFrames = Math.ceil(
+    (ultimoTimestampSegundos + AUDIO_DECAY_PADDING_SECONDS) * FPS
+  );
+  const totalSeconds = durationInFrames / FPS;
+
+  const sceneTimings: SceneFrameTiming[] = rawSceneTimings.map((timing, idx) => {
+    const startSecond = idx === 0 ? 0 : timing.startSecond;
+    const endSecond =
+      idx === scenes.length - 1 ? totalSeconds : timing.endSecond;
+
+    return {
+      sceneIndex: idx,
+      startSecond,
+      endSecond,
+      frameStart: idx === 0 ? 0 : Math.floor(startSecond * FPS),
+      frameEnd:
+        idx === scenes.length - 1
+          ? durationInFrames
+          : Math.ceil(endSecond * FPS),
+    };
+  });
+
+  for (let i = 0; i < sceneTimings.length - 1; i++) {
+    sceneTimings[i].endSecond = sceneTimings[i + 1].startSecond;
+    sceneTimings[i].frameEnd = Math.max(
+      sceneTimings[i].frameStart,
+      sceneTimings[i + 1].frameStart - 1
+    );
+  }
+
+  const avatarTimeline: AvatarSegment[] = scenes.map((scene, idx) => ({
+    startSecond: sceneTimings[idx].startSecond,
+    endSecond: sceneTimings[idx].endSecond,
+    image: scene.avatarSprite,
+  }));
+
+  return {
+    audioUrl: `${publicBaseUrl}/storage/${videoId}/audio.mp3`,
+    durationInFrames,
+    subtitles: allSubtitles,
+    avatarTimeline,
+    sceneTimings,
+  };
+}
+
+/**
+ * Regrava cirurgicamente uma única frase/diálogo na ElevenLabs e remonta o áudio global do vídeo
+ */
+export async function regenerateSingleDialogueNarration({
+  videoId,
+  sceneIndex,
+  dialogueIndex,
+  speaker,
+  voiceId,
+  characterName,
+  scenes,
+  storageVideoDir,
+  publicBaseUrl,
+}: {
+  videoId: string;
+  sceneIndex: number;
+  dialogueIndex: number;
+  speaker: SpeakerType;
+  voiceId?: string;
+  characterName?: string;
+  scenes: ScriptScene[];
+  storageVideoDir: string;
+  publicBaseUrl: string;
+}): Promise<NarrationSyncResult> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'ELEVENLABS_API_KEY não configurada no ficheiro backend/.env.'
+    );
+  }
+
+  const chunksDir = path.join(storageVideoDir, 'chunks');
+  const manifestPath = path.join(chunksDir, 'chunks_manifest.json');
+
+  // Atualiza as cenas com o novo speaker/voiceId/characterName
+  const updatedScenes = scenes.map((sc, sIdx) => {
+    if (sIdx !== sceneIndex) return sc;
+    const dialogues =
+      sc.dialogues && sc.dialogues.length > 0
+        ? sc.dialogues
+        : [
+            {
+              id: `dlg_${sIdx}`,
+              speaker: sc.speaker || 'protagonist',
+              text: sc.text || '',
+            },
+          ];
+    const updatedDialogues = dialogues.map((d, dIdx) => {
+      if (dIdx !== dialogueIndex) return d;
+      return { ...d, speaker, voiceId, characterName };
+    });
+    return {
+      ...sc,
+      speaker: updatedDialogues[0]?.speaker || sc.speaker,
+      dialogues: updatedDialogues,
+    };
+  });
+
+  // Se a pasta chunks ou manifest não existir, executa geração global para criar o cache de chunks
+  if (!fs.existsSync(chunksDir) || !fs.existsSync(manifestPath)) {
+    console.log(
+      `[ElevenLabs] Manifest não encontrado em ${manifestPath}. Gerando narração global para criar cache de chunks...`
+    );
+    return generateNarrationWithTimestamps(
+      videoId,
+      updatedScenes,
+      storageVideoDir,
+      publicBaseUrl
+    );
+  }
+
+  const manifestData: { items: ChunkManifestItem[] } = JSON.parse(
+    fs.readFileSync(manifestPath, 'utf-8')
+  );
+
+  const targetItemIndex = manifestData.items.findIndex(
+    (item) =>
+      item.sceneIndex === sceneIndex && item.dialogueIndex === dialogueIndex
+  );
+
+  if (targetItemIndex === -1) {
+    console.warn(
+      `[ElevenLabs] Item da cena #${sceneIndex + 1} fala #${dialogueIndex + 1} não encontrado no manifest. Regenerando narração global...`
+    );
+    return generateNarrationWithTimestamps(
+      videoId,
+      updatedScenes,
+      storageVideoDir,
+      publicBaseUrl
+    );
+  }
+
+  const targetItem = manifestData.items[targetItemIndex];
+  console.log(
+    `[ElevenLabs] Regravando cirurgicamente diálogo da cena #${sceneIndex + 1}, fala #${dialogueIndex + 1} (speaker: "${speaker}", voiceId: "${voiceId || 'padrão'}")...`
+  );
+
+  const prevText =
+    targetItemIndex > 0
+      ? manifestData.items[targetItemIndex - 1]?.text
+      : undefined;
+  const isVeryLast = targetItemIndex === manifestData.items.length - 1;
+  const nextText = isVeryLast
+    ? manifestData.items[0]?.text
+    : manifestData.items[targetItemIndex + 1]?.text;
+
+  const data = await synthesizeSceneChunk(targetItem.text, speaker, apiKey, {
+    previous_text: prevText,
+    next_text: nextText,
+    voiceId,
+  });
+
+  const chunkFilePath = path.join(chunksDir, targetItem.fileName);
+  fs.writeFileSync(chunkFilePath, Buffer.from(data.audio_base64, 'base64'));
+
+  const alignment = data.alignment || data.normalized_alignment;
+  if (!alignment || alignment.character_end_times_seconds.length === 0) {
+    throw new Error(
+      `A resposta da ElevenLabs para a cena #${sceneIndex + 1} (fala #${dialogueIndex + 1}) não contém dados de alignment válidos.`
+    );
+  }
+
+  const lastCharEndSec =
+    alignment.character_end_times_seconds[
+      alignment.character_end_times_seconds.length - 1
+    ] ?? 0;
+  const newDurationSeconds = await getAudioFileDurationSeconds(
+    chunkFilePath,
+    lastCharEndSec
+  );
+
+  // Atualiza o item no manifest
+  manifestData.items[targetItemIndex] = {
+    ...targetItem,
+    speaker,
+    voiceId,
+    characterName,
+    alignment,
+    durationSeconds: newDurationSeconds,
+  };
+
+  fs.writeFileSync(
+    manifestPath,
+    JSON.stringify(manifestData, null, 2),
+    'utf-8'
+  );
+
+  return rebuildNarrationFromChunks({
+    videoId,
+    manifestItems: manifestData.items,
+    scenes: updatedScenes,
+    storageVideoDir,
+    publicBaseUrl,
+  });
 }
 
 /**

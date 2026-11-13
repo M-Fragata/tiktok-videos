@@ -323,6 +323,17 @@ export const generateAudioSchema = z.object({
 });
 
 /**
+ * Regravação pontual de um único diálogo de uma cena (POST /api/videos/:id/regenerate-dialogue-audio)
+ */
+export const regenerateDialogueAudioSchema = z.object({
+  sceneIndex: z.number().int().min(0),
+  dialogueIndex: z.number().int().min(0),
+  speaker: z.enum(['protagonist', 'narrator', 'character']),
+  voiceId: z.string().optional(),
+  characterName: z.string().optional(),
+});
+
+/**
  * Schema legado para POST /api/generate-video
  */
 export const generateVideoSchema = z.object({

@@ -20,6 +20,7 @@ import {
   getSceneSfxList,
   resolveSfxAudioUrl,
   SfxItem,
+  DialogueItem,
   IdeationOption,
   injectAvatarConfigIntoPrompt,
   ProtagonistAgency,
@@ -468,6 +469,41 @@ export const Studio: React.FC = () => {
     });
   };
 
+  // Controle de recolhimento dos cards de cena na regravação de falas (Aba 4. Áudio - Padrão: todas recolhidas)
+  const [collapsedNarrationScenes, setCollapsedNarrationScenes] = useState<
+    Record<number, boolean>
+  >(() => {
+    if (!id) return {};
+    try {
+      const saved = localStorage.getItem(`studio_collapsed_narration_scenes_${id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      /* ignore storage error */
+    }
+    return {};
+  });
+
+  const toggleNarrationSceneCollapse = (sceneIndex: number) => {
+    setCollapsedNarrationScenes((prev) => {
+      const current = prev[sceneIndex] !== undefined ? prev[sceneIndex] : true;
+      const next = {
+        ...prev,
+        [sceneIndex]: !current,
+      };
+      if (id) {
+        try {
+          localStorage.setItem(
+            `studio_collapsed_narration_scenes_${id}`,
+            JSON.stringify(next)
+          );
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!id) return;
     try {
@@ -511,6 +547,13 @@ export const Studio: React.FC = () => {
         setCollapsedSfxScenes(JSON.parse(savedSfxScenes));
       } else {
         setCollapsedSfxScenes({});
+      }
+
+      const savedNarrationScenes = localStorage.getItem(`studio_collapsed_narration_scenes_${id}`);
+      if (savedNarrationScenes) {
+        setCollapsedNarrationScenes(JSON.parse(savedNarrationScenes));
+      } else {
+        setCollapsedNarrationScenes({});
       }
     } catch {
       /* ignore storage error */
@@ -1535,6 +1578,66 @@ export const Studio: React.FC = () => {
         };
       })
     );
+  };
+
+  const [regeneratingDialogueKey, setRegeneratingDialogueKey] = useState<
+    string | null
+  >(null);
+
+  /**
+   * Regrava cirurgicamente uma única frase/diálogo na ElevenLabs e atualiza áudio e legendas
+   */
+  const handleRegenerateDialogueAudio = async (
+    sceneIndex: number,
+    dialogueIndex: number,
+    dialogue: DialogueItem
+  ) => {
+    if (!id) return;
+    const key = `${sceneIndex}-${dialogueIndex}`;
+    setRegeneratingDialogueKey(key);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch(`/api/videos/${id}/regenerate-dialogue-audio`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sceneIndex,
+          dialogueIndex,
+          speaker: dialogue.speaker,
+          voiceId: dialogue.voiceId,
+          characterName: dialogue.characterName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao regravar fala na ElevenLabs');
+      }
+
+      setAudioSrc(data.audioUrl);
+      if (Array.isArray(data.subtitles)) {
+        setSubtitles(data.subtitles);
+      }
+      if (Array.isArray(data.sceneTimings)) {
+        setSceneTimings(data.sceneTimings);
+      }
+      if (Array.isArray(data.scenes)) {
+        setScenes(data.scenes);
+      }
+      setSuccessMsg(
+        `Fala #${dialogueIndex + 1} da Cena #${sceneIndex + 1} regravada e áudio sincronizado com sucesso!`
+      );
+    } catch (err: unknown) {
+      console.error('[Regenerate Dialogue Error]', err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao regravar fala na ElevenLabs'
+      );
+    } finally {
+      setRegeneratingDialogueKey(null);
+    }
   };
 
   const toggleSceneCollapse = (sceneIndex: number) => {
@@ -4179,6 +4282,269 @@ export const Studio: React.FC = () => {
                           </>
                         )}
                       </button>
+
+                      {/* NOVO BLOCO: Regravação Pontual de Falas por Cena */}
+                      {audioGenerated && (
+                        <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                              <span>💬</span>
+                              <span>Regravação de Frases por Cena</span>
+                            </span>
+                            <span className="text-[9px] text-teal-400 font-medium">
+                              Cirúrgico (ElevenLabs)
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+                            {scenes.map((scene, sceneIdx) => {
+                              const dialogues = getSceneDialogues(scene);
+                              const isCollapsed =
+                                collapsedNarrationScenes[sceneIdx] !== undefined
+                                  ? collapsedNarrationScenes[sceneIdx]
+                                  : true;
+                              const sceneTiming = sceneTimings[sceneIdx];
+                              const sceneDuration = sceneTiming
+                                ? Math.max(
+                                    0.5,
+                                    Number(
+                                      (
+                                        sceneTiming.endSecond -
+                                        sceneTiming.startSecond
+                                      ).toFixed(1)
+                                    )
+                                  )
+                                : 4.0;
+
+                              return (
+                                <div
+                                  key={`narration-scene-${sceneIdx}`}
+                                  className="rounded-xl border border-white/[0.06] bg-[#16161b] p-2.5 space-y-2 transition-all hover:border-white/[0.12]"
+                                >
+                                  {/* Cabeçalho Accordion da Cena */}
+                                  <div
+                                    onClick={() =>
+                                      toggleNarrationSceneCollapse(sceneIdx)
+                                    }
+                                    className={`flex cursor-pointer flex-col gap-1 select-none transition-colors ${
+                                      isCollapsed
+                                        ? ''
+                                        : 'border-b border-white/[0.04] pb-2'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1">
+                                          <span>🎬</span>
+                                          <span>Cena #{sceneIdx + 1}</span>
+                                        </span>
+                                        <span
+                                          className="inline-flex items-center gap-0.5 rounded bg-[#1e2029] border border-white/[0.06] px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-300"
+                                          title={`Duração estimada desta cena: ~${sceneDuration.toFixed(1)}s`}
+                                        >
+                                          ⏱️ ~{sceneDuration.toFixed(1)}s
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-medium text-slate-400">
+                                          {dialogues.length}{' '}
+                                          {dialogues.length === 1
+                                            ? 'fala'
+                                            : 'falas'}
+                                        </span>
+                                        <span
+                                          className={`text-[10px] font-bold text-slate-400 transition-transform duration-200 inline-block ${
+                                            isCollapsed ? '' : 'rotate-180'
+                                          }`}
+                                        >
+                                          ▼
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <span
+                                      className="text-[10px] text-slate-400 line-clamp-1 truncate"
+                                      title={scene.text}
+                                    >
+                                      {scene.text || 'Sem fala'}
+                                    </span>
+                                  </div>
+
+                                  {/* Conteúdo Expandido com Lista de Falas */}
+                                  {!isCollapsed && (
+                                    <div className="space-y-2.5 pt-0.5">
+                                      {dialogues.map((dialogue, dIdx) => {
+                                        const isCharacter =
+                                          dialogue.speaker === 'character';
+                                        const currentCharVoice =
+                                          voiceCatalog.characters.find(
+                                            (v) => v.id === dialogue.voiceId
+                                          ) || voiceCatalog.characters[0];
+                                        const rolePreviewUrl =
+                                          dialogue.speaker === 'protagonist'
+                                            ? voiceCatalog.protagonist
+                                                .preview_url
+                                            : dialogue.speaker === 'narrator'
+                                              ? voiceCatalog.narrator
+                                                  .preview_url
+                                              : currentCharVoice?.preview_url;
+                                        const roleVoiceName =
+                                          dialogue.speaker === 'protagonist'
+                                            ? voiceCatalog.protagonist.name
+                                            : dialogue.speaker === 'narrator'
+                                              ? voiceCatalog.narrator.name
+                                              : currentCharVoice?.name;
+
+                                        const isThisRegenerating =
+                                          regeneratingDialogueKey ===
+                                          `${sceneIdx}-${dIdx}`;
+
+                                        return (
+                                          <div
+                                            key={
+                                              dialogue.id ||
+                                              `dlg-${sceneIdx}-${dIdx}`
+                                            }
+                                            className="rounded-lg bg-[#111115] p-2.5 border border-white/[0.04] space-y-2"
+                                          >
+                                            {/* Linha 1: Seletor de Orador & Preview de Voz */}
+                                            <div className="space-y-1.5">
+                                              <div className="flex items-center gap-1.5">
+                                                <select
+                                                  value={dialogue.speaker}
+                                                  onChange={(e) =>
+                                                    handleUpdateDialogueInStudio(
+                                                      sceneIdx,
+                                                      dialogue.id,
+                                                      'speaker',
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  className="flex-1 rounded-md border border-[#30303c] bg-[#1a1a22] px-2 py-1.5 text-[11px] font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
+                                                >
+                                                  <option value="protagonist">
+                                                    🧑 Protagonista
+                                                  </option>
+                                                  <option value="character">
+                                                    🎭 Personagem
+                                                  </option>
+                                                  <option value="narrator">
+                                                    🎙️ Narrador
+                                                  </option>
+                                                </select>
+                                                <VoicePreviewButton
+                                                  previewUrl={rolePreviewUrl}
+                                                  voiceName={roleVoiceName}
+                                                />
+                                              </div>
+
+                                              {/* Se for Personagem: Dropdown de Vozes e Nome */}
+                                              {isCharacter && (
+                                                <div className="space-y-1 rounded bg-[#181820] p-1.5 border border-[#2a2a36]">
+                                                  <select
+                                                    value={
+                                                      dialogue.voiceId ||
+                                                      currentCharVoice?.id
+                                                    }
+                                                    onChange={(e) =>
+                                                      handleUpdateDialogueInStudio(
+                                                        sceneIdx,
+                                                        dialogue.id,
+                                                        'voiceId',
+                                                        e.target.value
+                                                      )
+                                                    }
+                                                    title="Voz do Personagem (ElevenLabs)"
+                                                    className="w-full rounded border border-[#323242] bg-[#22222d] px-1.5 py-1 text-[10px] font-semibold text-slate-200 focus:border-amber-500 focus:outline-none"
+                                                  >
+                                                    {voiceCatalog.characters.map(
+                                                      (v) => (
+                                                        <option
+                                                          key={v.id}
+                                                          value={v.id}
+                                                        >
+                                                          {v.gender === 'female'
+                                                            ? '👩'
+                                                            : '👨'}{' '}
+                                                          {v.name} (
+                                                          {v.gender === 'female'
+                                                            ? 'Fem'
+                                                            : 'Masc'}
+                                                          )
+                                                        </option>
+                                                      )
+                                                    )}
+                                                  </select>
+
+                                                  <input
+                                                    type="text"
+                                                    value={
+                                                      dialogue.characterName ||
+                                                      ''
+                                                    }
+                                                    onChange={(e) =>
+                                                      handleUpdateDialogueInStudio(
+                                                        sceneIdx,
+                                                        dialogue.id,
+                                                        'characterName',
+                                                        e.target.value
+                                                      )
+                                                    }
+                                                    placeholder="Nome do Personagem (ex: Cleópatra)"
+                                                    className="w-full rounded border border-[#323242] bg-[#14141a] px-1.5 py-0.5 text-[10px] text-amber-200 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Linha 2: Texto da Fala (Apenas Leitura Estilizada) */}
+                                            <div className="rounded bg-[#16161c] border border-white/[0.04] p-2 text-[11px] text-slate-200 leading-relaxed font-normal italic select-text">
+                                              "{dialogue.text || '(Sem fala)'}"
+                                            </div>
+
+                                            {/* Linha 3: Botão Regravar Frase */}
+                                            <div className="flex justify-end pt-0.5">
+                                              <button
+                                                type="button"
+                                                disabled={
+                                                  isThisRegenerating ||
+                                                  !dialogue.text?.trim()
+                                                }
+                                                onClick={() =>
+                                                  void handleRegenerateDialogueAudio(
+                                                    sceneIdx,
+                                                    dIdx,
+                                                    dialogue
+                                                  )
+                                                }
+                                                title="Regravar cirurgicamente esta frase na ElevenLabs e atualizar o áudio e as legendas"
+                                                className="flex items-center gap-1.5 rounded-lg border border-teal-500/40 bg-teal-500/15 px-3 py-1.5 text-[11px] font-bold text-teal-300 transition hover:bg-teal-500/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                                              >
+                                                {isThisRegenerating ? (
+                                                  <>
+                                                    <span className="h-2.5 w-2.5 animate-spin rounded-full border border-teal-300 border-t-transparent" />
+                                                    <span>Regravando...</span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <span>🎙️</span>
+                                                    <span>Regravar Frase</span>
+                                                  </>
+                                                )}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

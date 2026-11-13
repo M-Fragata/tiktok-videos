@@ -15,6 +15,7 @@ import {
   listVideosController,
   listVoicesController,
   promoteSfxController,
+  regenerateDialogueAudioController,
   renderVideoController,
   rerenderVideoController,
   reviewFinalScriptController,
@@ -48,6 +49,10 @@ videoRoutes.post(
   uploadSceneImageController
 );
 videoRoutes.post('/videos/:id/generate-audio', generateAudioController);
+videoRoutes.post(
+  '/videos/:id/regenerate-dialogue-audio',
+  regenerateDialogueAudioController
+);
 videoRoutes.put('/videos/:id/storyboard', saveStoryboardController);
 videoRoutes.patch('/videos/:id/title', updateVideoTitleController);
 videoRoutes.delete('/videos/:id', deleteVideoController);
