@@ -1149,13 +1149,79 @@ export const Studio: React.FC = () => {
     sfxIndex: number,
     newVolume: number
   ) => {
+    const clampedVolume = Math.min(1, Math.max(0, Math.round(newVolume * 100) / 100));
     setScenes((prev) =>
       prev.map((scene, idx) => {
         if (idx !== sceneIndex) return scene;
         const currentList: SfxItem[] = getSceneSfxList(scene);
-        const updatedList: SfxItem[] = currentList.map((item: SfxItem, sIdx: number) =>
-          sIdx === sfxIndex ? { ...item, suggested_volume: newVolume } : item
-        );
+        const updatedList: SfxItem[] =
+          currentList.length > 0
+            ? currentList.map((item: SfxItem, sIdx: number) =>
+                sIdx === sfxIndex ? { ...item, suggested_volume: clampedVolume } : item
+              )
+            : [
+                {
+                  sound_prompt: scene.sfx_prompt || 'Efeito sonoro',
+                  match_score: 90,
+                  start_time_sec: 0,
+                  duration_sec: 2.0,
+                  suggested_volume: clampedVolume,
+                  sfx_key:
+                    scene.sfx_suggestion && scene.sfx_suggestion !== 'none'
+                      ? scene.sfx_suggestion
+                      : undefined,
+                  audio_url: scene.custom_sfx_url || null,
+                },
+              ];
+        return {
+          ...scene,
+          sfx_list: updatedList,
+        };
+      })
+    );
+  };
+
+  /**
+   * Atualiza o timing (início na cena ou duração) de um efeito específico dentro de uma cena
+   */
+  const handleUpdateSceneSfxTiming = (
+    sceneIndex: number,
+    sfxIndex: number,
+    updates: { start_time_sec?: number; duration_sec?: number }
+  ) => {
+    setScenes((prev) =>
+      prev.map((scene, idx) => {
+        if (idx !== sceneIndex) return scene;
+        const currentList: SfxItem[] = getSceneSfxList(scene);
+        const updatedList: SfxItem[] =
+          currentList.length > 0
+            ? currentList.map((item: SfxItem, sIdx: number) =>
+                sIdx === sfxIndex
+                  ? {
+                      ...item,
+                      ...(updates.start_time_sec !== undefined
+                        ? { start_time_sec: updates.start_time_sec }
+                        : {}),
+                      ...(updates.duration_sec !== undefined
+                        ? { duration_sec: updates.duration_sec }
+                        : {}),
+                    }
+                  : item
+              )
+            : [
+                {
+                  sound_prompt: scene.sfx_prompt || 'Efeito sonoro',
+                  match_score: 90,
+                  start_time_sec: updates.start_time_sec ?? 0,
+                  duration_sec: updates.duration_sec ?? 2.0,
+                  suggested_volume: 0.35,
+                  sfx_key:
+                    scene.sfx_suggestion && scene.sfx_suggestion !== 'none'
+                      ? scene.sfx_suggestion
+                      : undefined,
+                  audio_url: scene.custom_sfx_url || null,
+                },
+              ];
         return {
           ...scene,
           sfx_list: updatedList,
@@ -1185,7 +1251,8 @@ export const Studio: React.FC = () => {
    */
   const handleGenerateSceneSfx = async (
     sceneIndex: number,
-    promptText: string
+    promptText: string,
+    durationSeconds?: number
   ) => {
     if (!id || !promptText.trim()) return;
     setGeneratingSfxSceneIndex(sceneIndex);
@@ -1196,6 +1263,7 @@ export const Studio: React.FC = () => {
         body: JSON.stringify({
           sceneIndex,
           sfxPrompt: promptText.trim(),
+          ...(durationSeconds ? { durationSeconds } : {}),
         }),
       });
 
@@ -1222,6 +1290,7 @@ export const Studio: React.FC = () => {
                         ...item,
                         sound_prompt: promptText.trim(),
                         audio_url: audioUrl,
+                        ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
                       }
                     : item
                 )
@@ -1230,7 +1299,7 @@ export const Studio: React.FC = () => {
                     sound_prompt: promptText.trim(),
                     match_score: 95,
                     start_time_sec: 0,
-                    duration_sec: 2.5,
+                    duration_sec: durationSeconds || 2.5,
                     suggested_volume: 0.35,
                     audio_url: audioUrl,
                   },
@@ -4237,8 +4306,31 @@ export const Studio: React.FC = () => {
                             const isPlaying = playingSfxPreview === previewKey;
                             const currentVolume =
                               activeSfxItem?.suggested_volume ?? 0.35;
+                            const currentStartTime =
+                              activeSfxItem?.start_time_sec ?? 0;
+                            const currentDuration =
+                              activeSfxItem?.duration_sec ?? 2.0;
                             const isGeneratingThisSfx =
                               generatingSfxSceneIndex === sceneIdx;
+
+                            const sceneTiming = sceneTimings[sceneIdx];
+                            const sceneDuration = sceneTiming
+                              ? Math.max(
+                                  0.5,
+                                  Number(
+                                    (
+                                      sceneTiming.endSecond -
+                                      sceneTiming.startSecond
+                                    ).toFixed(1)
+                                  )
+                                )
+                              : 4.0;
+
+                            const hasSfxConfigured =
+                              hasActiveAudio ||
+                              (scene.sfx_suggestion &&
+                                scene.sfx_suggestion !== 'none') ||
+                              Boolean(scene.sfx_prompt?.trim());
 
                             return (
                               <div
@@ -4247,12 +4339,20 @@ export const Studio: React.FC = () => {
                               >
                                 {/* Cabeçalho da Cena */}
                                 <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
-                                  <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1.5">
-                                    <span>🎬</span>
-                                    <span>Cena #{sceneIdx + 1}</span>
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1.5">
+                                      <span>🎬</span>
+                                      <span>Cena #{sceneIdx + 1}</span>
+                                    </span>
+                                    <span
+                                      className="inline-flex items-center gap-0.5 rounded bg-[#1e2029] border border-white/[0.06] px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-300"
+                                      title={`Duração estimada desta cena: ~${sceneDuration.toFixed(1)}s`}
+                                    >
+                                      ⏱️ ~{sceneDuration.toFixed(1)}s
+                                    </span>
+                                  </div>
                                   <span
-                                    className="text-[10px] text-slate-400 line-clamp-1 max-w-[200px] truncate"
+                                    className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate"
                                     title={scene.text}
                                   >
                                     {scene.text || 'Sem fala'}
@@ -4366,29 +4466,257 @@ export const Studio: React.FC = () => {
                                     )}
                                   </div>
 
-                                  {hasActiveAudio && (
-                                    <div className="rounded-lg bg-[#111115] p-2 space-y-1 border border-white/[0.04]">
-                                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                        <span>Volume do Efeito</span>
-                                        <span className="font-mono text-amber-400 font-bold">
-                                          {Math.round(currentVolume * 100)}%
-                                        </span>
+                                  {/* Controles de Sound Design: Volume, Início e Duração */}
+                                  {hasSfxConfigured && (
+                                    <div className="space-y-2 pt-1 border-t border-white/[0.04]">
+                                      {/* Slider 1: Volume do Efeito (Apenas se áudio audível/resolvido) */}
+                                      {hasActiveAudio && (
+                                        <div className="rounded-lg bg-[#111115] p-2 space-y-1.5 border border-white/[0.04]">
+                                          <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                            <span className="flex items-center gap-1 font-medium">
+                                              <span>🔊</span>
+                                              <span>Volume do Efeito</span>
+                                            </span>
+                                            <span className="font-mono text-amber-400 font-bold">
+                                              {Math.round(currentVolume * 100)}%
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUpdateSceneSfxVolume(
+                                                  sceneIdx,
+                                                  0,
+                                                  Math.max(
+                                                    0,
+                                                    Number(
+                                                      (
+                                                        currentVolume - 0.01
+                                                      ).toFixed(2)
+                                                    )
+                                                  )
+                                                )
+                                              }
+                                              title="Diminuir volume em 1%"
+                                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                            >
+                                              -
+                                            </button>
+                                            <input
+                                              type="range"
+                                              min="0"
+                                              max="1"
+                                              step="0.01"
+                                              value={currentVolume}
+                                              onChange={(e) =>
+                                                handleUpdateSceneSfxVolume(
+                                                  sceneIdx,
+                                                  0,
+                                                  parseFloat(e.target.value)
+                                                )
+                                              }
+                                              className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleUpdateSceneSfxVolume(
+                                                  sceneIdx,
+                                                  0,
+                                                  Math.min(
+                                                    1,
+                                                    Number(
+                                                      (
+                                                        currentVolume + 0.01
+                                                      ).toFixed(2)
+                                                    )
+                                                  )
+                                                )
+                                              }
+                                              title="Aumentar volume em 1%"
+                                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Slider 2: Início na Cena (Offset) */}
+                                      <div className="rounded-lg bg-[#111115] p-2 space-y-1.5 border border-white/[0.04]">
+                                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                          <span className="flex items-center gap-1 font-medium">
+                                            <span>⏱️</span>
+                                            <span>Início na Cena</span>
+                                          </span>
+                                          <span className="font-mono text-cyan-400 font-bold">
+                                            {currentStartTime.toFixed(1)}s
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  start_time_sec: Math.max(
+                                                    0,
+                                                    Number(
+                                                      (
+                                                        currentStartTime - 0.5
+                                                      ).toFixed(1)
+                                                    )
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            title="Antecipar início em 0.5s"
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="range"
+                                            min="0"
+                                            max={Math.max(1, sceneDuration)}
+                                            step="0.1"
+                                            value={Math.min(
+                                              currentStartTime,
+                                              Math.max(1, sceneDuration)
+                                            )}
+                                            onChange={(e) =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  start_time_sec: parseFloat(
+                                                    e.target.value
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            className="w-full accent-cyan-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  start_time_sec: Math.min(
+                                                    Math.max(1, sceneDuration),
+                                                    Number(
+                                                      (
+                                                        currentStartTime + 0.5
+                                                      ).toFixed(1)
+                                                    )
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            title="Atrasar início em 0.5s"
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
                                       </div>
-                                      <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={currentVolume}
-                                        onChange={(e) =>
-                                          handleUpdateSceneSfxVolume(
-                                            sceneIdx,
-                                            0,
-                                            parseFloat(e.target.value)
-                                          )
-                                        }
-                                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
-                                      />
+
+                                      {/* Slider 3: Duração do Efeito */}
+                                      <div className="rounded-lg bg-[#111115] p-2 space-y-1.5 border border-white/[0.04]">
+                                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                          <span className="flex items-center gap-1 font-medium">
+                                            <span>⏳</span>
+                                            <span>Duração do Efeito</span>
+                                          </span>
+                                          <span className="font-mono text-purple-400 font-bold">
+                                            {currentDuration.toFixed(1)}s
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  duration_sec: Math.max(
+                                                    0.5,
+                                                    Number(
+                                                      (
+                                                        currentDuration - 0.5
+                                                      ).toFixed(1)
+                                                    )
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            title="Diminuir duração em 0.5s"
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="range"
+                                            min="0.5"
+                                            max={Math.max(
+                                              10,
+                                              Math.ceil(sceneDuration)
+                                            )}
+                                            step="0.1"
+                                            value={Math.min(
+                                              currentDuration,
+                                              Math.max(
+                                                10,
+                                                Math.ceil(sceneDuration)
+                                              )
+                                            )}
+                                            onChange={(e) =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  duration_sec: parseFloat(
+                                                    e.target.value
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            className="w-full accent-purple-500 cursor-pointer h-1.5 bg-[#252530] rounded-lg"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleUpdateSceneSfxTiming(
+                                                sceneIdx,
+                                                0,
+                                                {
+                                                  duration_sec: Math.min(
+                                                    Math.max(
+                                                      10,
+                                                      Math.ceil(sceneDuration)
+                                                    ),
+                                                    Number(
+                                                      (
+                                                        currentDuration + 0.5
+                                                      ).toFixed(1)
+                                                    )
+                                                  ),
+                                                }
+                                              )
+                                            }
+                                            title="Aumentar duração em 0.5s"
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#252530] text-[11px] font-bold text-slate-300 hover:bg-[#333342] hover:text-white transition active:scale-95 border border-white/[0.04]"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -4422,7 +4750,8 @@ export const Studio: React.FC = () => {
                                       onClick={() =>
                                         void handleGenerateSceneSfx(
                                           sceneIdx,
-                                          scene.sfx_prompt || ''
+                                          scene.sfx_prompt || '',
+                                          currentDuration
                                         )
                                       }
                                       title="Gerar efeito sonoro exclusivo com a ElevenLabs Sound Effects"

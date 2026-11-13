@@ -1190,7 +1190,12 @@ export async function generateSceneSfxController(
       const updatedSfxList = existingList.length > 0
         ? existingList.map((item, itemIdx) =>
             itemIdx === 0
-              ? { ...item, sound_prompt: sfxPrompt, audio_url: publicSfxUrl }
+              ? {
+                  ...item,
+                  sound_prompt: sfxPrompt,
+                  audio_url: publicSfxUrl,
+                  ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
+                }
               : item
           )
         : [
