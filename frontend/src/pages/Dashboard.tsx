@@ -208,20 +208,22 @@ export const Dashboard: React.FC = () => {
       const json: TikTokDashboardPayload = await res.json();
       setData(json);
 
-      // Se há um vídeo selecionado no modal, atualiza sua referência
-      if (selectedVideo) {
-        const updated = json.videos.find((v) => v.id === selectedVideo.id);
+      // Se há um vídeo selecionado no modal, atualiza sua referência sem reabrir se fechado
+      setSelectedVideo((prev) => {
+        if (!prev) return null;
+        const updated = json.videos.find((v) => v.id === prev.id);
         if (updated) {
-          setSelectedVideo(updated);
           setSelectedStudioLinkId(updated.localVideoId || '');
+          return updated;
         }
-      }
+        return prev;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar dados do TikTok');
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [selectedVideo]);
+  }, []);
 
   useEffect(() => {
     void loadDashboard();
@@ -243,13 +245,15 @@ export const Dashboard: React.FC = () => {
       setSuccessToast('Dados atualizados com sucesso da API do TikTok!');
       setTimeout(() => setSuccessToast(null), 4000);
 
-      if (selectedVideo) {
-        const updated = updatedData.videos.find((v) => v.id === selectedVideo.id);
+      setSelectedVideo((prev) => {
+        if (!prev) return null;
+        const updated = updatedData.videos.find((v) => v.id === prev.id);
         if (updated) {
-          setSelectedVideo(updated);
           setSelectedStudioLinkId(updated.localVideoId || '');
+          return updated;
         }
-      }
+        return prev;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao sincronizar com TikTok');
     } finally {
@@ -900,15 +904,19 @@ export const Dashboard: React.FC = () => {
 
       {/* ─── 3. MODAL DE DETALHES & CONTROLE DA PUBLICAÇÃO ─── */}
       {selectedVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={handleCloseVideoModal}
+        >
           <div
             className="relative w-full max-w-4xl max-h-[90vh] rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl overflow-hidden flex flex-col md:flex-row custom-scrollbar"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Botão Fechar */}
             <button
+              type="button"
               onClick={handleCloseVideoModal}
-              className="absolute top-4 right-4 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition"
+              className="absolute top-4 right-4 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer"
             >
               ✕
             </button>
@@ -917,11 +925,13 @@ export const Dashboard: React.FC = () => {
             <div className="w-full md:w-5/12 bg-black flex flex-col items-center justify-center p-4 relative min-h-[420px]">
               {selectedVideo.embedLink ? (
                 <iframe
+                  key={selectedVideo.id}
                   src={selectedVideo.embedLink}
                   title={selectedVideo.title || 'TikTok Embed'}
                   className="w-full h-[520px] rounded-xl border border-slate-800 shadow-lg"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
                 />
               ) : selectedVideo.coverImageUrl ? (
                 <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-xl overflow-hidden border border-slate-800 shadow-lg">

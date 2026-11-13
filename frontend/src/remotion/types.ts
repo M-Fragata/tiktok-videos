@@ -481,6 +481,16 @@ export interface VoiceCatalog {
   characters: VoiceDefinition[];
 }
 
+export interface SfxItem {
+  sound_prompt: string;
+  match_score: number;
+  start_time_sec: number;
+  duration_sec: number;
+  suggested_volume: number;
+  sfx_key?: string;
+  audio_url?: string | null;
+}
+
 export interface StoryboardScene {
   id?: string;
   speaker?: SpeakerType;
@@ -489,6 +499,7 @@ export interface StoryboardScene {
   avatarSprite: AvatarSpritePath;
   visual_description?: string;
   imagePrompt: string;
+  sfx_list?: SfxItem[];
   sfx_suggestion?: string;
   sfx_prompt?: string;
   sfx_label?: string;
@@ -496,6 +507,57 @@ export interface StoryboardScene {
   candidateImages: string[];
   selectedImage: string | null;
 }
+
+export const getSceneSfxList = (
+  scene: Partial<StoryboardScene> | null | undefined
+): SfxItem[] => {
+  if (!scene) return [];
+  if (Array.isArray(scene.sfx_list) && scene.sfx_list.length > 0) {
+    return scene.sfx_list;
+  }
+  // Fallback retrocompatível transparente para cenas legadas
+  const key = scene.sfx_suggestion?.trim();
+  const hasAudioUrl = Boolean(scene.custom_sfx_url);
+  if (hasAudioUrl || (key && key !== 'none')) {
+    return [
+      {
+        sound_prompt:
+          scene.sfx_prompt || scene.sfx_label || key || 'Efeito sonoro',
+        match_score: 90,
+        start_time_sec: 0,
+        duration_sec: 1.5,
+        suggested_volume: 0.35,
+        sfx_key: key && key !== 'none' ? key : 'whoosh',
+        audio_url: scene.custom_sfx_url || null,
+      },
+    ];
+  }
+  return [];
+};
+
+export const resolveSfxAudioUrl = (sfx: SfxItem): string => {
+  if (sfx.audio_url) {
+    return resolveAssetSrc(sfx.audio_url);
+  }
+  if (sfx.sfx_key) {
+    const matched = SFX_OPTIONS.find((opt) => opt.value === sfx.sfx_key);
+    if (matched?.file) {
+      return resolveAssetSrc(matched.file);
+    }
+    return resolveAssetSrc(`bgm/effects/${sfx.sfx_key}.mp3`);
+  }
+  // Fallback por palavra-chave se não houver sfx_key
+  const promptLower = (sfx.sound_prompt || '').toLowerCase();
+  for (const opt of SFX_OPTIONS) {
+    if (opt.value !== 'none' && opt.file) {
+      const slugClean = opt.value.replace(/-/g, ' ');
+      if (promptLower.includes(opt.value) || promptLower.includes(slugClean)) {
+        return resolveAssetSrc(opt.file);
+      }
+    }
+  }
+  return resolveAssetSrc('bgm/effects/whoosh.mp3');
+};
 
 export const getSceneDialogues = (
   scene: Partial<StoryboardScene> | null | undefined
@@ -577,6 +639,8 @@ export type TimeMachineVideoProps = {
   bgmVibe?: BgmVibe;
   bgmVolume?: number;
   sfxEnabled?: boolean;
+  globalSfxMultiplier?: number;
+  autoDucking?: boolean;
   subtitles?: SubtitleItem[];
   subtitleStyle?: SubtitleStyleConfig;
   avatarTimeline?: AvatarSegment[];
@@ -668,6 +732,8 @@ export const defaultTimeMachineProps: TimeMachineVideoProps = {
   backgroundSrc: 'background.jpg',
   backgroundTimeline: DEFAULT_BACKGROUND_TIMELINE,
   audioSrc: 'audio.mp3',
+  sfxEnabled: true,
+  globalSfxMultiplier: 1.0,
   subtitles: DEFAULT_SUBTITLES,
   subtitleStyle: DEFAULT_SUBTITLE_STYLE,
   avatarTimeline: DEFAULT_AVATAR_TIMELINE,

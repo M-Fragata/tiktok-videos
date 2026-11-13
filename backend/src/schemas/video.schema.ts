@@ -144,6 +144,48 @@ export const dialogueItemSchema = z.object({
   text: z.string().default(''),
 });
 
+export const sfxItemSchema = z.object({
+  sound_prompt: z
+    .string()
+    .describe(
+      "Prompt descritivo para gerar ou buscar o som (ex: 'vento ártico uivando', 'estalo de graveto')."
+    ),
+  match_score: z
+    .number()
+    .min(0)
+    .max(100)
+    .describe('De 0 a 100, o quão essencial e perfeito é este som para a cena.'),
+  start_time_sec: z
+    .number()
+    .describe(
+      'Tempo de INÍCIO do som (em segundos) relativo ao começo da cena (ex: 0.0, 1.5, 2.2).'
+    ),
+  duration_sec: z
+    .number()
+    .describe(
+      'DURAÇÃO do som (em segundos). Ex: 0.5 para impactos, 3.0 para sons contínuos.'
+    ),
+  suggested_volume: z
+    .number()
+    .min(0.1)
+    .max(1.0)
+    .describe(
+      'Volume ideal do som (ex: 0.15 para ambientes discretos, 0.8 para ações fortes).'
+    ),
+  sfx_key: z
+    .string()
+    .optional()
+    .describe(
+      'Identificador ou slug da biblioteca local de estúdio, se houver correspondência.'
+    ),
+  audio_url: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('URL pública do arquivo gerado por IA ou estático.'),
+});
+export type SfxItemInput = z.infer<typeof sfxItemSchema>;
+
 export const storyboardSceneSchema = z.object({
   id: z.string().optional(),
   speaker: speakerTypeSchema.optional().default('protagonist'),
@@ -152,6 +194,12 @@ export const storyboardSceneSchema = z.object({
   avatarSprite: z.string().min(1, 'O sprite do avatar é obrigatório'),
   visual_description: z.string().optional().default(''),
   imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
+  sfx_list: z
+    .array(sfxItemSchema)
+    .default([])
+    .describe(
+      'Lista de efeitos sonoros. Retorne [] se a cena se sustentar apenas com diálogo/BGM, ou adicione de 1 a 3 sons se cruciais para a ação.'
+    ),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),
   sfx_label: z.string().optional().default(''),
@@ -299,6 +347,8 @@ export const renderVideoSchema = z.object({
   bgmVibe: bgmVibeSchema.optional().default('epic'),
   bgmVolume: z.number().min(0).max(1).optional().default(0.1),
   sfxEnabled: z.boolean().optional().default(true),
+  globalSfxMultiplier: z.number().min(0).max(2).optional().default(1.0),
+  autoDucking: z.boolean().optional().default(true),
   subtitles: z.array(subtitleItemSchema).optional(),
   subtitleStyle: subtitleStyleSchema.optional(),
   avatarTimeline: z.array(avatarSegmentSchema).optional(),
@@ -337,6 +387,7 @@ export const reviewFinalScriptSceneSchema = z.object({
   avatarSprite: z.string().optional(),
   visual_description: z.string().optional().default(''),
   imagePrompt: z.string().optional().default(''),
+  sfx_list: z.array(sfxItemSchema).optional().default([]),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),
   sfx_label: z.string().optional().default(''),

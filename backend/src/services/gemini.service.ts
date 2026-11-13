@@ -1,6 +1,7 @@
-import { listAllSfxOptions, type SfxOption } from './sfx-library.service.ts';
+import { listAllSfxOptions } from './sfx-library.service.ts';
 import { getCharacterVoicesPromptPart } from './voice-catalog.service.ts';
 import { ScriptPromptBuilder } from '../prompts/prompt-builder.ts';
+import { formatSfxInstructions } from '../prompts/prompt-blocks.ts';
 import { saveTempIdeationPrompt } from './script-bible.service.ts';
 import type {
   ContentBalance,
@@ -67,6 +68,16 @@ export interface DialogueItem {
   text: string;
 }
 
+export interface SfxItem {
+  sound_prompt: string;
+  match_score: number;
+  start_time_sec: number;
+  duration_sec: number;
+  suggested_volume: number;
+  sfx_key?: string;
+  audio_url?: string | null;
+}
+
 export interface ScriptScene {
   id?: string;
   speaker?: SpeakerType;
@@ -75,6 +86,7 @@ export interface ScriptScene {
   avatarSprite: AvatarSprite;
   visual_description?: string;
   imagePrompt: string;
+  sfx_list?: SfxItem[];
   sfx_suggestion?: string;
   sfx_prompt?: string;
   sfx_label?: string;
@@ -301,34 +313,55 @@ const DURATION_RULES: Record<
   },
 };
 
-function formatSfxInstructions(availableSfx: SfxOption[]): {
-  systemPromptPart: string;
-  enumSlugs: string[];
-} {
-  const optionsWithoutNone = availableSfx.filter((o) => o.value !== 'none');
-  const itemsText = optionsWithoutNone
-    .map(
-      (o) =>
-        `   - "${o.value}": ${o.label}${o.prompt ? ` (${o.prompt})` : ''}${o.isCustom ? ' [Efeito Sonoro Salvo na Biblioteca]' : ''}`
-    )
-    .join('\n');
-
-  const systemPromptPart = `2. EFEITOS SONOROS POR CENA ("sfx_suggestion"):
-   A nossa biblioteca de áudio possui efeitos cirúrgicos. Para CADA cena, escolhe ESTRITAMENTE um dos seguintes identificadores (ou "none"):
-${itemsText}
-   - "none": Se a cena não precisa de efeito sonoro no corte.
-
-3. PROMPT DE DESIGN DE SOM TEXT-TO-SFX ("sfx_prompt"):
-   Para CADA cena, deves escrever um prompt acústico descritivo e expressivo em INGLÊS no campo "sfx_prompt" (1 a 2 frases curtas) pronto para a API de Sound Effects da ElevenLabs. Descreva o timbre, reverberação, distância e ação física do som.
-
-4. TÍTULO CURTO DO EFEITO SONORO EM PORTUGUÊS COM EMOJI ("sfx_label"):
-   Para CADA cena, gera um título curto e expressivo em português com 1 emoji inicial relevante descrevendo o som (ex: "🏃 Corrida na Areia", "🪵 Porta Antiga Rangendo", "⚔️ Espada Cortando o Ar"). Se usares um som prévio da biblioteca, podes usar o próprio rótulo dele.`;
-
-  const enumSlugs = Array.from(
-    new Set([...availableSfx.map((o) => o.value), 'none'])
-  );
-
-  return { systemPromptPart, enumSlugs };
+function buildSfxListResponseSchema(enumSlugs: string[]) {
+  return {
+    type: 'ARRAY',
+    description:
+      'Lista de efeitos sonoros. Retorne [] se a cena se sustentar apenas com diálogo/BGM, ou adicione de 1 a 3 sons se cruciais para a ação.',
+    items: {
+      type: 'OBJECT',
+      properties: {
+        sound_prompt: {
+          type: 'STRING',
+          description:
+            "Prompt descritivo em inglês para o som (ex: 'howling arctic wind', 'cracking wood underfoot').",
+        },
+        match_score: {
+          type: 'NUMBER',
+          description:
+            'De 0 a 100, o quão essencial e perfeito é este som para a cena (> 80).',
+        },
+        start_time_sec: {
+          type: 'NUMBER',
+          description:
+            'Tempo de início do som em segundos relativo ao começo da cena (ex: 0.0, 1.5).',
+        },
+        duration_sec: {
+          type: 'NUMBER',
+          description:
+            'Duração do som em segundos (ex: 0.5 para impactos rápidos, 3.0 para ambientes).',
+        },
+        suggested_volume: {
+          type: 'NUMBER',
+          description:
+            'Volume ideal do som (0.1 a 0.2 para ambientes, 0.7 a 1.0 para impactos).',
+        },
+        sfx_key: {
+          type: 'STRING',
+          enum: enumSlugs,
+          description:
+            'Identificador ou slug da biblioteca de efeitos de estúdio, se houver correspondência.',
+        },
+      },
+      required: [
+        'sound_prompt',
+        'match_score',
+        'start_time_sec',
+        'duration_sec',
+        'suggested_volume',
+      ],
+    },
+  };
 }
 
 const VIRAL_PACING_INSTRUCTION = `DIRETRIZES DE MONTAGEM CINEMATOGRÁFICA E RITMO VIRAL (RETENÇÃO ALTA):
@@ -464,6 +497,7 @@ Retorne APENAS um objeto JSON válido neste formato exato:
             imagePrompt: {
               type: 'STRING',
             },
+            sfx_list: buildSfxListResponseSchema(enumSlugs),
             sfx_suggestion: {
               type: 'STRING',
               enum: enumSlugs,
@@ -633,6 +667,7 @@ export async function generateTimeMachineIdeation(
       imagePrompt: {
         type: 'STRING',
       },
+      sfx_list: buildSfxListResponseSchema(enumSlugs),
       sfx_suggestion: {
         type: 'STRING',
         enum: enumSlugs,
@@ -881,6 +916,7 @@ export async function generateSingleScenePrompt(params: {
 }): Promise<{
   imagePrompt: string;
   visual_description: string;
+  sfx_list?: SfxItem[];
   sfx_suggestion: string;
   sfx_label: string;
   sfx_prompt: string;
@@ -911,6 +947,7 @@ export async function generateSingleScenePrompt(params: {
     properties: {
       imagePrompt: { type: 'STRING' },
       visual_description: { type: 'STRING' },
+      sfx_list: buildSfxListResponseSchema(enumSlugs),
       sfx_suggestion: { type: 'STRING', enum: enumSlugs },
       sfx_label: { type: 'STRING' },
       sfx_prompt: { type: 'STRING' },
@@ -929,6 +966,7 @@ export async function generateSingleScenePrompt(params: {
   const { parsed } = await callGeminiWithRetry<{
     imagePrompt: string;
     visual_description: string;
+    sfx_list?: SfxItem[];
     sfx_suggestion: string;
     sfx_label: string;
     sfx_prompt: string;
@@ -951,6 +989,7 @@ export interface FinalScriptSceneInput {
   avatarSprite?: AvatarSprite;
   visual_description?: string;
   imagePrompt?: string;
+  sfx_list?: SfxItem[];
   sfx_suggestion?: string;
   sfx_prompt?: string;
   sfx_label?: string;
@@ -1059,6 +1098,7 @@ export async function reviewAndEnrichFinalScript(params: {
             },
             visual_description: { type: 'STRING' },
             imagePrompt: { type: 'STRING' },
+            sfx_list: buildSfxListResponseSchema(enumSlugs),
             sfx_suggestion: { type: 'STRING', enum: enumSlugs },
             sfx_label: { type: 'STRING' },
             sfx_prompt: { type: 'STRING' },
@@ -1131,6 +1171,7 @@ export async function reviewAndEnrichFinalScript(params: {
         incomingDialogues.map((d) => d.text).join(' ') ||
         reviewedScene.text ||
         '',
+      sfx_list: reviewedScene.sfx_list || originalInput?.sfx_list || [],
       sfx_label: reviewedScene.sfx_label || originalInput?.sfx_label || '',
       custom_sfx_url: originalInput?.custom_sfx_url ?? null,
     };

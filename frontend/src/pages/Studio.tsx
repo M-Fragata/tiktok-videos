@@ -47,7 +47,13 @@ import {
   SelectedFinalSceneItem,
 } from '../components/IdeationDressingRoomTab';
 
-type InspectorTab = 'briefing' | 'storyboard' | 'subtitles';
+type InspectorTab =
+  | 'briefing'
+  | 'storyboard'
+  | 'subtitles'
+  | 'audio'
+  | 'extra1'
+  | 'extra2';
 
 const SUGGESTED_THEMES = [
   'A Erupção do Vesúvio em Pompeia (79 d.C.)',
@@ -92,6 +98,9 @@ function computeRenderSignature(params: {
   backgroundTimeline: BackgroundSegment[];
   audioSrc: string;
   bgmVibe: BgmVibe;
+  bgmVolume?: number;
+  globalSfxMultiplier?: number;
+  autoDucking?: boolean;
   subtitles: SubtitleItem[];
   subtitleStyle: SubtitleStyleConfig;
   avatarTimeline: AvatarSegment[];
@@ -113,6 +122,9 @@ function computeRenderSignature(params: {
     })),
     audioSrc: params.audioSrc,
     bgmVibe: params.bgmVibe,
+    bgmVolume: params.bgmVolume ?? 0.1,
+    globalSfxMultiplier: params.globalSfxMultiplier ?? 1.0,
+    autoDucking: params.autoDucking ?? true,
     subtitles: params.subtitles.map((s) => ({
       text: s.text,
       frameStart: s.frameStart,
@@ -224,6 +236,11 @@ export const Studio: React.FC = () => {
     DEFAULT_SUBTITLE_STYLE
   );
   const [avatarTimeline, setAvatarTimeline] = useState<AvatarSegment[]>([]);
+
+  // Estados de Mixagem Global de Áudio (Aba Inferior "Áudio")
+  const [globalSfxMultiplier, setGlobalSfxMultiplier] = useState<number>(1.0);
+  const [bgmVolume, setBgmVolume] = useState<number>(0.1);
+  const [autoDucking, setAutoDucking] = useState<boolean>(true);
 
   // Biblioteca de Efeitos Sonoros Reutilizáveis (Padrões + CustomSfx)
   const [sfxLibraryOptions, setSfxLibraryOptions] =
@@ -351,6 +368,15 @@ export const Studio: React.FC = () => {
 
     if (props.bgmVibe) {
       setBgmVibe(props.bgmVibe);
+    }
+    if (props.bgmVolume !== undefined) {
+      setBgmVolume(props.bgmVolume);
+    }
+    if (props.globalSfxMultiplier !== undefined) {
+      setGlobalSfxMultiplier(props.globalSfxMultiplier);
+    }
+    if (props.autoDucking !== undefined) {
+      setAutoDucking(props.autoDucking);
     }
 
     if (props.storyboard) {
@@ -1406,6 +1432,10 @@ export const Studio: React.FC = () => {
       backgroundTimeline: assembledBackgroundTimeline,
       audioSrc,
       bgmVibe: effectiveBgmVibe,
+      bgmVolume,
+      sfxEnabled: true,
+      globalSfxMultiplier,
+      autoDucking,
       subtitles: subtitlesToPersist,
       subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
@@ -1687,6 +1717,9 @@ export const Studio: React.FC = () => {
       backgroundTimeline: effectiveBackgroundTimeline,
       audioSrc,
       bgmVibe: effectiveBgmVibe,
+      bgmVolume,
+      globalSfxMultiplier,
+      autoDucking,
       subtitles: effectiveSubtitles,
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
@@ -1698,6 +1731,9 @@ export const Studio: React.FC = () => {
     backgroundSrc,
     audioSrc,
     effectiveBgmVibe,
+    bgmVolume,
+    globalSfxMultiplier,
+    autoDucking,
     effectiveSubtitles,
     subtitleStyle,
     effectiveAvatarTimeline,
@@ -3590,48 +3626,211 @@ export const Studio: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Rodapé Fixo da Sidebar Esquerda: Botões "Gravar Narração" e "Montar Vídeo" */}
-          <div className="shrink-0 border-t border-[#2c2c32]/60 bg-[#141418] p-3.5 space-y-2.5">
-            {audioGenerated && audioSrc && (
-              <div className="flex items-center justify-between gap-2 rounded-lg bg-[#1c1c22] px-3 py-1.5 border border-white/[0.05]">
-                <span className="text-[11px] font-medium text-emerald-400">
-                  ✓ Narração Pronta
-                </span>
-                <audio
-                  controls
-                  src={resolveAssetSrc(audioSrc)}
-                  className="h-6 max-w-[190px]"
-                />
+            {/* ==============================================================
+                ABA 4: ÁUDIO & MIXAGEM (Narração + SFX Multiplier + BGM + Auto-Ducking)
+               ============================================================== */}
+            {activeTab === 'audio' && (
+              <div className="space-y-4">
+                {/* Cabeçalho da Seção de Áudio */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🎵</span>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-100">
+                        Mixagem & Narração
+                      </h2>
+                      <p className="text-[11px] text-slate-400">
+                        Ajuste os volumes globais da música, efeitos e grave a narração
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1. Card de Narração Multi-Voz (ElevenLabs) */}
+                <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <span>🎙️</span>
+                      <span>Narração</span>
+                    </span>
+                  </div>
+
+                  {audioGenerated && audioSrc ? (
+                    <div className="rounded-lg bg-[#141418] p-2 border border-white/[0.05]">
+                      <audio
+                        controls
+                        src={resolveAssetSrc(audioSrc)}
+                        className="w-full h-8"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                      Nenhum áudio gerado ainda.
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateAudio}
+                    disabled={isGeneratingAudio || !hasScript}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#2c2c32] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-[#2a2a32] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isGeneratingAudio ? (
+                      <>
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+                        <span>Gravando Narração...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🎙️</span>
+                        <span>{audioGenerated ? 'Regravar Narração' : 'Gravar Narração'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* 2. Card de Mixagem Global de Áudio */}
+                <div className="rounded-xl border border-[#2c2c32] bg-[#1c1c22] p-3.5 space-y-4">
+                  <div className="border-b border-[#2c2c32]/60 pb-2">
+                    <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                      <span>🎚️</span>
+                      <span>Mixer de Áudio</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Mudanças afetam a reprodução no player e a renderização final do MP4
+                    </p>
+                  </div>
+
+                  {/* Slider: SFX Multiplier */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <span>💥</span>
+                        <span>Intensidade dos Efeitos (SFX)</span>
+                      </span>
+                      <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
+                        {globalSfxMultiplier.toFixed(1)}x
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value={globalSfxMultiplier}
+                      onChange={(e) => setGlobalSfxMultiplier(parseFloat(e.target.value))}
+                      className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                      <span>0.0x (Mudo)</span>
+                      <span>1.0x (Padrão)</span>
+                      <span>2.0x (Máximo)</span>
+                    </div>
+                  </div>
+
+                  {/* Slider: BGM Volume */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <span>🎶</span>
+                        <span>Volume da Música de Fundo (BGM)</span>
+                      </span>
+                      <span className="rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-400">
+                        {Math.round(bgmVolume * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={bgmVolume}
+                      onChange={(e) => setBgmVolume(parseFloat(e.target.value))}
+                      className="w-full accent-amber-500 cursor-pointer h-1.5 bg-[#2a2a32] rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                      <span>0%</span>
+                      <span>10% (Padrão)</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+
+                  {/* Toggle: Auto-Ducking */}
+                  <div className="flex items-center justify-between pt-1 border-t border-[#2c2c32]/60">
+                    <div className="space-y-0.5 pr-3">
+                      <div className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                        <span>🔉</span>
+                        <span>Reduzir música nas falas</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        Abaixa suavemente o volume da musica em momentos de diálogo.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoDucking}
+                      onClick={() => setAutoDucking((prev) => !prev)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        autoDucking ? 'bg-amber-500' : 'bg-[#2a2a32]'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                          autoDucking ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
+          </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
+          {/* ==============================================================
+              BLOCO C: Rodapé Fixo da Sidebar (Abas Inferiores + CTA Global)
+             ============================================================== */}
+          <div className="shrink-0 flex flex-col mt-auto border-t border-[#2c2c32]/60 bg-[#141418]">
+            {/* Linha 1 (Abas Inferiores - Idêntico ao Nav de Cima com Border Top) */}
+            <div className="grid grid-cols-3 border-b border-[#2c2c32]/60 bg-[#151519] px-2 shrink-0">
               <button
                 type="button"
-                onClick={handleGenerateAudio}
-                disabled={isGeneratingAudio || !hasScript}
-                className="flex items-center justify-center gap-2 rounded-xl border border-[#2c2c32] bg-[#222228] py-2.5 px-3 text-xs font-semibold text-slate-100 transition hover:border-white/20 hover:bg-[#2a2a32] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => setActiveTab('audio')}
+                className={`flex items-center justify-center gap-1.5 border-t-2 py-3.5 px-3 text-xs font-semibold transition-all -mt-[1px] ${
+                  activeTab === 'audio'
+                    ? 'border-amber-500 text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
               >
-                {isGeneratingAudio ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
-                    <span>Gravando...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>🎙️</span>
-                    <span>Gravar Narração</span>
-                  </>
-                )}
+                <span className="text-[13px]">🎵</span>
+                <span>Áudio</span>
               </button>
+              <button
+                type="button"
+                disabled
+                className="flex items-center justify-center gap-1.5 border-t-2 border-transparent py-3.5 px-3 text-xs text-slate-500 opacity-50 cursor-not-allowed select-none -mt-[1px]"
+              >
+                <span className="text-[12px]">🔒</span>
+                <span>Em breve</span>
+              </button>
+              <button
+                type="button"
+                disabled
+                className="flex items-center justify-center gap-1.5 border-t-2 border-transparent py-3.5 px-3 text-xs text-slate-500 opacity-50 cursor-not-allowed select-none -mt-[1px]"
+              >
+                <span className="text-[12px]">🔒</span>
+                <span>Em breve</span>
+              </button>
+            </div>
 
+            {/* Linha 2 (CTA Principal Global) */}
+            <div className="p-3.5">
               <button
                 type="button"
                 onClick={handleAssembleVideo}
                 disabled={!hasScript}
-                className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-2.5 px-3 text-xs font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <span>🎬</span>
                 <span>Montar Vídeo</span>
@@ -3707,8 +3906,10 @@ export const Studio: React.FC = () => {
                     backgroundTimeline: effectiveBackgroundTimeline,
                     audioSrc,
                     bgmVibe: effectiveBgmVibe,
-                    bgmVolume: 0.1,
+                    bgmVolume,
                     sfxEnabled: true,
+                    globalSfxMultiplier,
+                    autoDucking,
                     subtitles: effectiveSubtitles,
                     subtitleStyle,
                     avatarTimeline: effectiveAvatarTimeline,

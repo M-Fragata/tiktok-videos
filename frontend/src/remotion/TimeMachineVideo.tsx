@@ -20,6 +20,8 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
   bgmVibe = 'epic',
   bgmVolume = 0.1,
   sfxEnabled = true,
+  globalSfxMultiplier = 1.0,
+  autoDucking = true,
   subtitles = DEFAULT_SUBTITLES,
   subtitleStyle = DEFAULT_SUBTITLE_STYLE,
   avatarTimeline = DEFAULT_AVATAR_TIMELINE,
@@ -43,6 +45,8 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
         bgmVibe={effectiveBgmVibe}
         bgmVolume={bgmVolume}
         sfxEnabled={sfxEnabled}
+        globalSfxMultiplier={globalSfxMultiplier}
+        autoDucking={autoDucking}
         backgroundTimeline={backgroundTimeline}
         scenes={storyboard?.scenes}
       />

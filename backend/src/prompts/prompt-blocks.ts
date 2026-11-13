@@ -213,16 +213,23 @@ export function formatSfxInstructions(availableSfx: SfxOption[]): {
     )
     .join('\n');
 
-  const systemPromptPart = `2. EFEITOS SONOROS POR CENA ("sfx_suggestion"):
-   A nossa biblioteca de áudio possui efeitos cirúrgicos. Para CADA cena, escolhe ESTRITAMENTE um dos seguintes identificadores (ou "none"):
+  const systemPromptPart = `DIRETRIZES DE DESIGN DE SOM (SFX) & LISTA DINÂMICA ("sfx_list"):
+Você atua como Diretor de Áudio cinematográfico. Adicione efeitos sonoros ao array "sfx_list" de cada cena APENAS se a cena exigir (ações físicas pontuais, comédia, transições marcantes ou clima ambiente). Se a cena não precisar de sons extras além da narração e da música de fundo (BGM), retorne um array vazio [].
+
+REGRAS DE OURO DO DESIGN DE SOM:
+1. GERAÇÃO LIVRE: Descreva no "sound_prompt" o efeito acústico exato que deseja em INGLÊS (timbre, reverberação, distância e ação física), sem se limitar ao banco local de sons.
+2. SILÊNCIO E DINÂMICA: A atmosfera deve ser dinâmica. Tens total liberdade para deixar a cena em silêncio absoluto de SFX (retornando "sfx_list": []) para aumentar o foco no diálogo, criar tensão narrativa ou destacar uma pausa cômica.
+3. FILTRO DE QUALIDADE ("match_score"): Use apenas sons com match_score > 80%. De 0 a 100, avalie o quão essencial e perfeito é este som para a cena.
+4. TIMING DE PRECISÃO ("start_time_sec"): Calcule o início do som (em segundos) relativo ao começo da cena, imaginando o ritmo da fala (aprox. 2.5 palavras por segundo). Exemplo: se o personagem tropeça ou cai na 4ª palavra da fala, inicie o som perto de 1.5s.
+5. DURAÇÃO ("duration_sec"): Impactos, socos, tropeços e transições duram entre 0.3s e 1.0s. Climas contínuos de ambiente duram o tempo da cena (ex: 2.5s a 4.0s).
+6. CONTROLE DE VOLUME ("suggested_volume"): Proteja a inteligibilidade das vozes! Ambientes contínuos devem ser discretos (0.1 a 0.2). Use volumes altos (0.7 a 1.0) apenas para impactos secos e rápidos em pausas de diálogo.
+7. VÍNCULO COM O CATÁLOGO LOCAL ("sfx_key"): Se o som corresponder a um efeito existente no nosso catálogo de estúdio listado abaixo, preencha "sfx_key" com o identificador correspondente. Se for um som inédito para geração via IA, omita "sfx_key" (ou null):
 ${itemsText}
-   - "none": Se a cena não precisa de efeito sonoro no corte.
 
-3. PROMPT DE DESIGN DE SOM TEXT-TO-SFX ("sfx_prompt"):
-   Para CADA cena, deves escrever um prompt acústico descritivo e expressivo em INGLÊS no campo "sfx_prompt" (1 a 2 frases curtas) pronto para a API de Sound Effects da ElevenLabs. Descreva o timbre, reverberação, distância e ação física do som.
-
-4. TÍTULO CURTO DO EFEITO SONORO EM PORTUGUÊS COM EMOJI ("sfx_label"):
-   Para CADA cena, gera um título curto e expressivo em português com 1 emoji inicial relevante descrevendo o som (ex: "🏃 Corrida na Areia", "🪵 Porta Antiga Rangendo", "⚔️ Espada Cortando o Ar"). Se usares um som prévio da biblioteca, podes usar o próprio rótulo dele.`;
+CAMPOS DE RETROCOMPATIBILIDADE POR CENA:
+- "sfx_suggestion": Se houver correspondência com o catálogo acima, use o slug escolhido (ou "whoosh", ou "none" se sfx_list for vazio).
+- "sfx_prompt": O mesmo sound_prompt principal do efeito mais proeminente da cena (em inglês).
+- "sfx_label": Título curto em português com 1 emoji relevante (ex: "💨 Transição Rápida", "🛑 Quebra de 4ª Parede", "👣 Passos em Pedra").`;
 
   const enumSlugs = Array.from(
     new Set([...availableSfx.map((o) => o.value), 'none'])
@@ -260,6 +267,16 @@ export const FEW_SHOT_IDEATION_EXAMPLE = `EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA O
       "avatarSprite": "avatars/avatar_shocked.png",
       "visual_description": "Gizé sob sol escaldante: o protagonista no topo da Esfinge apontando chocado para gravuras antigas.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
+      "sfx_list": [
+        {
+          "sound_prompt": "Abrupt comedic vinyl record scratch sudden stop in dusty air",
+          "match_score": 95,
+          "start_time_sec": 1.2,
+          "duration_sec": 0.6,
+          "suggested_volume": 0.75,
+          "sfx_key": "record-scratch"
+        }
+      ],
       "sfx_suggestion": "record-scratch",
       "sfx_label": "🛑 Quebra de 4ª Parede",
       "sfx_prompt": "Abrupt comedic vinyl record scratch sudden stop..."
@@ -274,9 +291,10 @@ export const FEW_SHOT_IDEATION_EXAMPLE = `EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA O
       "avatarSprite": "avatars/avatar_confused.png",
       "visual_description": "O protagonista coça a cabeça confuso enquanto tropas napoleônicas marcham ao fundo.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
-      "sfx_suggestion": "cartoon-blink",
-      "sfx_label": "👀 Efeito Cômico",
-      "sfx_prompt": "Playful cartoon eye blink sound effect..."
+      "sfx_list": [],
+      "sfx_suggestion": "none",
+      "sfx_label": "🔇 Foco no Diálogo",
+      "sfx_prompt": ""
     },
     {
       "speaker": "narrator",
@@ -288,6 +306,16 @@ export const FEW_SHOT_IDEATION_EXAMPLE = `EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA O
       "avatarSprite": "avatars/avatar_determined.png",
       "visual_description": "O protagonista desenrola um pergaminho antigo de 1737 mostrando a Esfinge sem o nariz no deserto.",
       "imagePrompt": "Mixed media 2D/3D illustration...",
+      "sfx_list": [
+        {
+          "sound_prompt": "Ancient paper unfurling sound effect with soft desert wind",
+          "match_score": 88,
+          "start_time_sec": 0.2,
+          "duration_sec": 1.8,
+          "suggested_volume": 0.25,
+          "sfx_key": "footsteps-stone"
+        }
+      ],
       "sfx_suggestion": "footsteps-stone",
       "sfx_label": "👣 Passos em Pedra",
       "sfx_prompt": "Ancient paper unfurling sound effect with soft desert wind..."
