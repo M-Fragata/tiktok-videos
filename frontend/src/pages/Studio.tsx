@@ -2624,14 +2624,25 @@ export const Studio: React.FC = () => {
 
     effectiveSubtitles.forEach((sub, globalIndex) => {
       let targetIdx = -1;
-      const mid = (sub.frameStart + sub.frameEnd) / 2;
 
-      // 1. Tenta verificar se o ponto médio da legenda está dentro da cena
-      for (let i = 0; i < effectiveBackgroundTimeline.length; i++) {
-        const seg = effectiveBackgroundTimeline[i];
-        if (mid >= seg.frameStart && mid <= seg.frameEnd) {
-          targetIdx = i;
-          break;
+      // 0. Prioridade máxima: vínculo explícito por sceneIndex
+      if (
+        typeof sub.sceneIndex === 'number' &&
+        sub.sceneIndex >= 0 &&
+        sub.sceneIndex < groups.length
+      ) {
+        targetIdx = sub.sceneIndex;
+      }
+
+      // 1. Se não tiver sceneIndex definido, tenta pelo ponto médio dentro da cena
+      if (targetIdx === -1) {
+        const mid = (sub.frameStart + sub.frameEnd) / 2;
+        for (let i = 0; i < effectiveBackgroundTimeline.length; i++) {
+          const seg = effectiveBackgroundTimeline[i];
+          if (mid >= seg.frameStart && mid <= seg.frameEnd) {
+            targetIdx = i;
+            break;
+          }
         }
       }
 
@@ -2892,12 +2903,17 @@ export const Studio: React.FC = () => {
             frameEnd: blockEnd,
             text: rawWords.join(' '),
             words: assignedWords,
+            sceneIndex: sceneIdx,
           });
         }
       }
 
       // Estende cada bloco confortavelmente até o início do próximo bloco ou até o fim da fala da cena
       const sceneTiming = sceneTimings[sceneIdx];
+      const bgSegment = effectiveBackgroundTimeline[sceneIdx];
+      const maxAllowedSceneEnd = bgSegment
+        ? bgSegment.frameEnd
+        : sceneTiming?.frameEnd;
       const sceneEndFrame = sceneTiming
         ? sceneTiming.frameEnd
         : normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
@@ -2920,6 +2936,11 @@ export const Studio: React.FC = () => {
               sceneEndFrame
             );
           }
+        }
+
+        // Clamp estrito: nenhum bloco pode ultrapassar o limite final da cena
+        if (maxAllowedSceneEnd && updatedSceneBlocks[i].frameEnd > maxAllowedSceneEnd) {
+          updatedSceneBlocks[i].frameEnd = maxAllowedSceneEnd;
         }
       }
 
@@ -2963,6 +2984,7 @@ export const Studio: React.FC = () => {
       sceneSubtitleGroups,
       sceneMasterWordMap,
       sceneTimings,
+      effectiveBackgroundTimeline,
       videoRecord,
     ]
   );
@@ -3219,32 +3241,74 @@ export const Studio: React.FC = () => {
 
   const handleAddSubtitleBlock = (sceneIdx: number) => {
     const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
+    const bgSegment = effectiveBackgroundTimeline[sceneIdx];
     const sceneTiming = sceneTimings[sceneIdx];
-    const defaultFrameStart =
-      group && group.items.length > 0
-        ? group.items[group.items.length - 1].sub.frameEnd + 1
-        : sceneTiming
-          ? sceneTiming.frameStart
-          : 0;
+
+    // Limites estritos da cena atual
+    const sceneStart = bgSegment
+      ? bgSegment.frameStart
+      : sceneTiming
+        ? sceneTiming.frameStart
+        : 0;
+    const sceneEnd = bgSegment
+      ? bgSegment.frameEnd
+      : sceneTiming
+        ? sceneTiming.frameEnd
+        : sceneStart + 120;
+
+    let newStart: number;
+    let newEnd: number;
+
+    if (group && group.items.length > 0) {
+      const lastItem = group.items[group.items.length - 1];
+      const lastEnd = lastItem.sub.frameEnd;
+
+      if (lastEnd + 15 <= sceneEnd) {
+        // Cabe um novo bloco de pelo menos 15 frames após o último bloco
+        newStart = lastEnd + 1;
+        newEnd = Math.min(sceneEnd, newStart + 30);
+      } else {
+        // O último bloco já ocupa o fim da cena: reparte os frames finais da cena com o novo bloco
+        const splitFrame = Math.max(
+          lastItem.sub.frameStart + 10,
+          sceneEnd - 25
+        );
+        lastItem.sub.frameEnd = Math.max(
+          lastItem.sub.frameStart + 1,
+          splitFrame - 1
+        );
+        newStart = splitFrame;
+        newEnd = sceneEnd;
+      }
+    } else {
+      // Cena sem blocos: inicia no primeiro frame da cena
+      newStart = sceneStart;
+      newEnd = Math.min(sceneEnd, sceneStart + 30);
+    }
 
     const newBlock: SubtitleItem = {
       text: '',
-      frameStart: defaultFrameStart,
-      frameEnd: defaultFrameStart + 30,
+      frameStart: newStart,
+      frameEnd: newEnd,
+      sceneIndex: sceneIdx,
       words: [],
     };
 
     setSubtitles((prev) => {
       const base = prev.length > 0 ? prev : effectiveSubtitles;
       if (!group || group.items.length === 0) {
-        const insertIdx = base.findIndex((s) => s.frameStart >= defaultFrameStart);
+        const insertIdx = base.findIndex((s) => s.frameStart >= newStart);
         if (insertIdx === -1) return [...base, newBlock];
         const copy = [...base];
         copy.splice(insertIdx, 0, newBlock);
         return copy;
       } else {
-        const lastGlobalIndex = Math.max(...group.items.map((i) => i.globalIndex));
+        const lastGlobalIndex = Math.max(
+          ...group.items.map((i) => i.globalIndex)
+        );
         const copy = [...base];
+        const prevItem = group.items[group.items.length - 1];
+        copy[prevItem.globalIndex] = { ...prevItem.sub };
         copy.splice(lastGlobalIndex + 1, 0, newBlock);
         return copy;
       }
@@ -3331,10 +3395,24 @@ export const Studio: React.FC = () => {
       return next;
     });
 
-    const subtitlesToPersist = finalSubtitles.map((sub) => ({
-      ...sub,
-      words: ensureSubtitleWordTimings(sub),
-    }));
+    const subtitlesToPersist = finalSubtitles.map((sub) => {
+      let resolvedSceneIndex = sub.sceneIndex;
+      if (resolvedSceneIndex === undefined) {
+        const mid = (sub.frameStart + sub.frameEnd) / 2;
+        for (let i = 0; i < assembledBackgroundTimeline.length; i++) {
+          const seg = assembledBackgroundTimeline[i];
+          if (mid >= seg.frameStart && mid <= seg.frameEnd) {
+            resolvedSceneIndex = i;
+            break;
+          }
+        }
+      }
+      return {
+        ...sub,
+        sceneIndex: resolvedSceneIndex,
+        words: ensureSubtitleWordTimings(sub),
+      };
+    });
 
     // Sincroniza o texto das falas das cenas com as legendas consolidadas da Aba 3
     const synchronizedScenes: StoryboardScene[] = scenes.map((sc, sIdx) => {
@@ -5514,7 +5592,7 @@ export const Studio: React.FC = () => {
                                         className="inline-flex items-center gap-1 rounded-lg border border-dashed border-white/[0.12] bg-white/[0.02] px-2.5 py-1 text-[10px] font-medium text-slate-400 hover:border-amber-500/40 hover:text-amber-300 transition"
                                       >
                                         <span>+</span>
-                                        <span>Novo Bloco na Cena #{group.sceneIndex + 1}</span>
+                                        <span>Novo Bloco</span>
                                       </button>
                                     </div>
                                   </div>
