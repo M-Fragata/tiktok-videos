@@ -504,6 +504,41 @@ export const Studio: React.FC = () => {
     });
   };
 
+  // Controle de recolhimento dos cards de cena em Legendas (Aba 3. Legendas - Padrão: todas recolhidas)
+  const [collapsedSubtitleScenes, setCollapsedSubtitleScenes] = useState<
+    Record<number, boolean>
+  >(() => {
+    if (!id) return {};
+    try {
+      const saved = localStorage.getItem(`studio_collapsed_subtitle_scenes_${id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      /* ignore storage error */
+    }
+    return {};
+  });
+
+  const toggleSubtitleSceneCollapse = (sceneIndex: number) => {
+    setCollapsedSubtitleScenes((prev) => {
+      const current = prev[sceneIndex] !== undefined ? prev[sceneIndex] : true;
+      const next = {
+        ...prev,
+        [sceneIndex]: !current,
+      };
+      if (id) {
+        try {
+          localStorage.setItem(
+            `studio_collapsed_subtitle_scenes_${id}`,
+            JSON.stringify(next)
+          );
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!id) return;
     try {
@@ -554,6 +589,13 @@ export const Studio: React.FC = () => {
         setCollapsedNarrationScenes(JSON.parse(savedNarrationScenes));
       } else {
         setCollapsedNarrationScenes({});
+      }
+
+      const savedSubtitleScenes = localStorage.getItem(`studio_collapsed_subtitle_scenes_${id}`);
+      if (savedSubtitleScenes) {
+        setCollapsedSubtitleScenes(JSON.parse(savedSubtitleScenes));
+      } else {
+        setCollapsedSubtitleScenes({});
       }
     } catch {
       /* ignore storage error */
@@ -2411,6 +2453,119 @@ export const Studio: React.FC = () => {
     return [];
   }, [subtitles, scenes, effectiveBackgroundTimeline]);
 
+  interface SceneSubtitleGroup {
+    sceneIndex: number;
+    scene?: StoryboardScene;
+    durationSeconds: number;
+    items: Array<{
+      sub: SubtitleItem;
+      globalIndex: number;
+    }>;
+  }
+
+  const sceneSubtitleGroups = useMemo<SceneSubtitleGroup[]>(() => {
+    if (scenes.length === 0) {
+      if (effectiveSubtitles.length === 0) return [];
+      return [
+        {
+          sceneIndex: 0,
+          durationSeconds: effectiveTotalFrames / 30,
+          items: effectiveSubtitles.map((sub, globalIndex) => ({
+            sub,
+            globalIndex,
+          })),
+        },
+      ];
+    }
+
+    const groups: SceneSubtitleGroup[] = scenes.map((scene, idx) => {
+      const sceneTiming = sceneTimings[idx];
+      const durationSeconds = sceneTiming
+        ? Math.max(
+            0.5,
+            Number((sceneTiming.endSecond - sceneTiming.startSecond).toFixed(1))
+          )
+        : effectiveBackgroundTimeline[idx]
+          ? Math.max(
+              0.5,
+              Number(
+                (
+                  (effectiveBackgroundTimeline[idx].frameEnd -
+                    effectiveBackgroundTimeline[idx].frameStart +
+                    1) /
+                  30
+                ).toFixed(1)
+              )
+            )
+          : 4.0;
+
+      return {
+        sceneIndex: idx,
+        scene,
+        durationSeconds,
+        items: [],
+      };
+    });
+
+    effectiveSubtitles.forEach((sub, globalIndex) => {
+      let targetIdx = -1;
+      const mid = (sub.frameStart + sub.frameEnd) / 2;
+
+      // 1. Tenta verificar se o ponto médio da legenda está dentro da cena
+      for (let i = 0; i < effectiveBackgroundTimeline.length; i++) {
+        const seg = effectiveBackgroundTimeline[i];
+        if (mid >= seg.frameStart && mid <= seg.frameEnd) {
+          targetIdx = i;
+          break;
+        }
+      }
+
+      // 2. Se não encontrou pelo meio, tenta pelo frameStart
+      if (targetIdx === -1) {
+        for (let i = 0; i < effectiveBackgroundTimeline.length; i++) {
+          const seg = effectiveBackgroundTimeline[i];
+          if (sub.frameStart >= seg.frameStart && sub.frameStart <= seg.frameEnd) {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+
+      // 3. Fallback: encontra a cena mais próxima
+      if (targetIdx === -1 && effectiveBackgroundTimeline.length > 0) {
+        let minDist = Infinity;
+        for (let i = 0; i < effectiveBackgroundTimeline.length; i++) {
+          const seg = effectiveBackgroundTimeline[i];
+          const dist = Math.min(
+            Math.abs(sub.frameStart - seg.frameStart),
+            Math.abs(sub.frameStart - seg.frameEnd)
+          );
+          if (dist < minDist) {
+            minDist = dist;
+            targetIdx = i;
+          }
+        }
+      }
+
+      if (targetIdx < 0 || targetIdx >= groups.length) {
+        targetIdx = Math.max(
+          0,
+          Math.min(groups.length - 1, targetIdx === -1 ? 0 : targetIdx)
+        );
+      }
+
+      groups[targetIdx].items.push({ sub, globalIndex });
+    });
+
+    return groups;
+  }, [
+    scenes,
+    sceneTimings,
+    effectiveBackgroundTimeline,
+    effectiveSubtitles,
+    effectiveTotalFrames,
+  ]);
+
   // Assinatura reativa do estado atual do vídeo no Studio (para detectar se o MP4 existente está atualizado)
   const currentRenderSignature = useMemo(() => {
     return computeRenderSignature({
@@ -4123,79 +4278,157 @@ export const Studio: React.FC = () => {
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1.5 custom-scrollbar">
-                          {effectiveSubtitles.map((sub, index) => {
-                            const isCurrentBlock =
-                              index === activeSubtitleIndexAtPlayhead;
+                        <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1.5 custom-scrollbar">
+                          {sceneSubtitleGroups.map((group) => {
+                            const isCollapsed =
+                              collapsedSubtitleScenes[group.sceneIndex] !== undefined
+                                ? collapsedSubtitleScenes[group.sceneIndex]
+                                : true;
+                            const hasActiveSubtitle = group.items.some(
+                              (item) => item.globalIndex === activeSubtitleIndexAtPlayhead
+                            );
+
                             return (
                               <div
-                                key={index}
-                                className={`rounded-xl border p-3.5 transition-all space-y-2 ${
-                                  isCurrentBlock
-                                    ? 'bg-[#26262e] border-amber-500/50 shadow-sm'
-                                    : 'bg-[#18181c] border-white/[0.04] hover:border-white/[0.1]'
+                                key={`subtitle-scene-${group.sceneIndex}`}
+                                className={`rounded-xl border bg-[#16161b] p-3 space-y-2.5 transition-all ${
+                                  hasActiveSubtitle
+                                    ? 'border-amber-500/40'
+                                    : 'border-white/[0.06] hover:border-white/[0.12]'
                                 }`}
                               >
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => seekToFrame(sub.frameStart)}
-                                    title="Ir para este trecho no Player"
-                                    className="shrink-0 rounded-md bg-[#121214] border border-[#2c2c32] px-2 py-1 font-mono text-[10px] font-bold text-amber-400 hover:border-amber-500/50"
-                                  >
-                                    #{index + 1}
-                                  </button>
+                                {/* Cabeçalho Clicável da Cena (Accordion) */}
+                                <div
+                                  onClick={() => toggleSubtitleSceneCollapse(group.sceneIndex)}
+                                  className={`flex cursor-pointer flex-col gap-1 select-none transition-colors ${
+                                    isCollapsed ? '' : 'border-b border-white/[0.04] pb-2'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                                        <span>🎬</span>
+                                        <span>Cena #{group.sceneIndex + 1}</span>
+                                      </span>
+                                      <span
+                                        className="inline-flex items-center gap-0.5 rounded bg-[#1e2029] border border-white/[0.06] px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-300"
+                                        title={`Duração estimada desta cena: ~${group.durationSeconds.toFixed(1)}s`}
+                                      >
+                                        ~{group.durationSeconds.toFixed(1)}s
+                                      </span>
+                                    </div>
 
-                                  <input
-                                    type="text"
-                                    value={sub.text}
-                                    onChange={(e) =>
-                                      handleSubtitleChange(
-                                        index,
-                                        'text',
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-1.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
-                                  />
-                                </div>
-
-                                {/* Informação de Frame Mono-espaçada abaixo do Input */}
-                                <div className="flex items-center justify-between pl-1">
-                                  <span className="font-mono text-[10px] text-slate-400 opacity-60">
-                                    Frames: {sub.frameStart}f – {sub.frameEnd}f (
-                                    {(sub.frameStart / 30).toFixed(1)}s –{' '}
-                                    {(sub.frameEnd / 30).toFixed(1)}s)
-                                  </span>
-
-                                  <div className="flex items-center gap-1 font-mono text-[10px]">
-                                    <input
-                                      type="number"
-                                      value={sub.frameStart}
-                                      onChange={(e) =>
-                                        handleSubtitleChange(
-                                          index,
-                                          'frameStart',
-                                          Number(e.target.value)
-                                        )
-                                      }
-                                      className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
-                                    />
-                                    <span className="text-slate-600">-</span>
-                                    <input
-                                      type="number"
-                                      value={sub.frameEnd}
-                                      onChange={(e) =>
-                                        handleSubtitleChange(
-                                          index,
-                                          'frameEnd',
-                                          Number(e.target.value)
-                                        )
-                                      }
-                                      className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[9px] font-medium text-slate-400">
+                                        {group.items.length}{' '}
+                                        {group.items.length === 1 ? 'bloco' : 'blocos'}
+                                      </span>
+                                      <span
+                                        className={`text-[10px] font-bold text-slate-400 transition-transform duration-200 inline-block ${
+                                          isCollapsed ? '' : 'rotate-180'
+                                        }`}
+                                      >
+                                        ▼
+                                      </span>
+                                    </div>
                                   </div>
+
+                                  {group.scene?.text && (
+                                    <span
+                                      className="text-[10px] text-slate-400 line-clamp-1 truncate"
+                                      title={group.scene.text}
+                                    >
+                                      {group.scene.text}
+                                    </span>
+                                  )}
                                 </div>
+
+                                {/* Conteúdo Expandido com Lista de Blocos de Fala da Cena */}
+                                {!isCollapsed && (
+                                  <div className="space-y-2 pt-0.5">
+                                    {group.items.length === 0 ? (
+                                      <p className="text-[11px] text-slate-500 italic py-1 pl-1">
+                                        Nenhum bloco de fala nesta cena.
+                                      </p>
+                                    ) : (
+                                      group.items.map(({ sub, globalIndex }) => {
+                                        const isCurrentBlock =
+                                          globalIndex === activeSubtitleIndexAtPlayhead;
+                                        return (
+                                          <div
+                                            key={globalIndex}
+                                            className={`rounded-xl border p-3.5 transition-all space-y-2 ${
+                                              isCurrentBlock
+                                                ? 'bg-[#26262e] border-amber-500/50 shadow-sm'
+                                                : 'bg-[#18181c] border-white/[0.04] hover:border-white/[0.1]'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => seekToFrame(sub.frameStart)}
+                                                title="Ir para este trecho no Player"
+                                                className="shrink-0 rounded-md bg-[#121214] border border-[#2c2c32] px-2 py-1 font-mono text-[10px] font-bold text-amber-400 hover:border-amber-500/50"
+                                              >
+                                                #{globalIndex + 1}
+                                              </button>
+
+                                              <input
+                                                type="text"
+                                                value={sub.text}
+                                                onChange={(e) =>
+                                                  handleSubtitleChange(
+                                                    globalIndex,
+                                                    'text',
+                                                    e.target.value
+                                                  )
+                                                }
+                                                className="w-full rounded-lg border border-[#2c2c32]/80 bg-[#121214] px-3 py-1.5 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
+                                              />
+                                            </div>
+
+                                            {/* Informação de Frame Mono-espaçada abaixo do Input */}
+                                            <div className="flex items-center justify-between pl-1">
+                                              <span className="font-mono text-[10px] text-slate-400 opacity-60">
+                                                Frames: {sub.frameStart}f – {sub.frameEnd}f (
+                                                {(sub.frameStart / 30).toFixed(1)}s –{' '}
+                                                {(sub.frameEnd / 30).toFixed(1)}s)
+                                              </span>
+
+                                              <div className="flex items-center gap-1 font-mono text-[10px]">
+                                                <input
+                                                  type="number"
+                                                  value={sub.frameStart}
+                                                  onChange={(e) =>
+                                                    handleSubtitleChange(
+                                                      globalIndex,
+                                                      'frameStart',
+                                                      Number(e.target.value)
+                                                    )
+                                                  }
+                                                  className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
+                                                />
+                                                <span className="text-slate-600">-</span>
+                                                <input
+                                                  type="number"
+                                                  value={sub.frameEnd}
+                                                  onChange={(e) =>
+                                                    handleSubtitleChange(
+                                                      globalIndex,
+                                                      'frameEnd',
+                                                      Number(e.target.value)
+                                                    )
+                                                  }
+                                                  className="w-14 rounded border border-[#2c2c32] bg-[#121214] px-1.5 py-0.5 text-center text-slate-300 focus:border-amber-500 focus:outline-none"
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -4292,7 +4525,7 @@ export const Studio: React.FC = () => {
                               <span>Regravação de Frases por Cena</span>
                             </span>
                             <span className="text-[9px] text-teal-400 font-medium">
-                              Cirúrgico (ElevenLabs)
+                              Ajuste Fino
                             </span>
                           </div>
 
@@ -4342,7 +4575,7 @@ export const Studio: React.FC = () => {
                                           className="inline-flex items-center gap-0.5 rounded bg-[#1e2029] border border-white/[0.06] px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-300"
                                           title={`Duração estimada desta cena: ~${sceneDuration.toFixed(1)}s`}
                                         >
-                                          ⏱️ ~{sceneDuration.toFixed(1)}s
+                                          ~{sceneDuration.toFixed(1)}s
                                         </span>
                                       </div>
 
