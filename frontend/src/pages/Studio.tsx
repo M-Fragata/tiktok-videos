@@ -4338,7 +4338,7 @@ export const Studio: React.FC = () => {
                                 className="rounded-xl border border-white/[0.06] bg-[#16161b] p-3 space-y-2.5"
                               >
                                 {/* Cabeçalho da Cena */}
-                                <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
+                                <div className="flex flex-col justify-between border-b border-white/[0.04] pb-1.5">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-[11px] font-bold text-teal-400 flex items-center gap-1.5">
                                       <span>🎬</span>
@@ -4352,7 +4352,7 @@ export const Studio: React.FC = () => {
                                     </span>
                                   </div>
                                   <span
-                                    className="text-[10px] text-slate-400 line-clamp-1 max-w-[170px] truncate"
+                                    className="text-[10px] text-slate-400"
                                     title={scene.text}
                                   >
                                     {scene.text || 'Sem fala'}
