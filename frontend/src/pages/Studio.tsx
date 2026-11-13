@@ -1731,24 +1731,42 @@ export const Studio: React.FC = () => {
       }
 
       setAudioSrc(data.audioUrl);
-      if (Array.isArray(data.subtitles)) {
-        setSubtitles(data.subtitles);
-        setSceneMasterWordMap((prev) => {
-          const next = { ...prev };
-          delete next[sceneIndex];
-          return next;
-        });
-        setSyncedSceneBlocksMap((prev) => {
-          const next = { ...prev };
-          delete next[sceneIndex];
-          return next;
-        });
-      }
-      if (Array.isArray(data.sceneTimings)) {
-        setSceneTimings(data.sceneTimings);
+      if (data.durationInFrames) {
+        setDurationInFrames(data.durationInFrames);
       }
       if (Array.isArray(data.scenes)) {
         setScenes(data.scenes);
+      }
+      const incomingTimings = Array.isArray(data.sceneTimings)
+        ? (data.sceneTimings as SceneFrameTiming[])
+        : [];
+      if (incomingTimings.length > 0) {
+        setSceneTimings(incomingTimings);
+
+        // Auto-recalcula os cortes visuais das cenas para a nova duração exata da narração
+        const updatedBgTimeline: BackgroundSegment[] = (
+          data.scenes || scenes
+        ).map((sc: StoryboardScene, idx: number) => {
+          const t = incomingTimings[idx];
+          return {
+            imageSrc: sc.selectedImage || 'background.jpg',
+            frameStart: t ? t.frameStart : 0,
+            frameEnd: t ? t.frameEnd : 450,
+          };
+        });
+        setBackgroundTimeline(updatedBgTimeline);
+      }
+
+      if (Array.isArray(data.subtitles)) {
+        const { reconciledSubtitles, newMasterMap, newSyncedMap } =
+          reconcileSubtitlesWithExistingBlocks(
+            data.subtitles,
+            incomingTimings.length > 0 ? incomingTimings : sceneTimings,
+            subtitles.length > 0 ? subtitles : effectiveSubtitles
+          );
+        setSubtitles(reconciledSubtitles);
+        setSceneMasterWordMap(newMasterMap);
+        setSyncedSceneBlocksMap(newSyncedMap);
       }
       setSuccessMsg(
         `Fala #${dialogueIndex + 1} da Cena #${sceneIndex + 1} regravada e áudio sincronizado com sucesso!`
@@ -2164,12 +2182,40 @@ export const Studio: React.FC = () => {
       if (narration) {
         setAudioSrc(narration.audioUrl);
         setDurationInFrames(narration.durationInFrames);
-        setSubtitles(narration.subtitles || []);
-        setSceneMasterWordMap({});
-        setSyncedSceneBlocksMap({});
+        const incomingTimings = Array.isArray(narration.sceneTimings)
+          ? (narration.sceneTimings as SceneFrameTiming[])
+          : [];
+        setSceneTimings(incomingTimings);
+
+        // Auto-recalcula cortes visuais das cenas para a nova duração exata da narração
+        if (incomingTimings.length > 0) {
+          const updatedBgTimeline: BackgroundSegment[] = scenes.map(
+            (sc, idx) => {
+              const t = incomingTimings[idx];
+              return {
+                imageSrc: sc.selectedImage || 'background.jpg',
+                frameStart: t ? t.frameStart : 0,
+                frameEnd: t ? t.frameEnd : 450,
+              };
+            }
+          );
+          setBackgroundTimeline(updatedBgTimeline);
+        }
+
         setAvatarTimeline(narration.avatarTimeline || []);
-        setSceneTimings(narration.sceneTimings || []);
         setAudioGenerated(true);
+
+        if (Array.isArray(narration.subtitles)) {
+          const { reconciledSubtitles, newMasterMap, newSyncedMap } =
+            reconcileSubtitlesWithExistingBlocks(
+              narration.subtitles,
+              incomingTimings,
+              subtitles.length > 0 ? subtitles : effectiveSubtitles
+            );
+          setSubtitles(reconciledSubtitles);
+          setSceneMasterWordMap(newMasterMap);
+          setSyncedSceneBlocksMap(newSyncedMap);
+        }
       }
 
       if (data.video) {
@@ -2745,6 +2791,234 @@ export const Studio: React.FC = () => {
 
     setSuccessMsg('Legenda sincronizada com o áudio da cena!');
   };
+
+  /**
+   * Reconcilia as legendas retornadas pela ElevenLabs com os blocos de legenda existentes,
+   * preservando a organização de quebras e blocos customizados pelo usuário na Aba Legendas.
+   */
+  const reconcileSubtitlesWithExistingBlocks = useCallback(
+    (
+      incomingSubtitles: SubtitleItem[],
+      incomingSceneTimings: SceneFrameTiming[],
+      _currentExistingSubtitles: SubtitleItem[]
+    ): {
+      reconciledSubtitles: SubtitleItem[];
+      newMasterMap: Record<number, SubtitleWordTiming[]>;
+      newSyncedMap: Record<number, string>;
+    } => {
+      const newMasterMap: Record<number, SubtitleWordTiming[]> = {};
+      const newSyncedMap: Record<number, string> = {};
+
+      // 1. Extrai as palavras novas da ElevenLabs por cena
+      incomingSceneTimings.forEach((timing, sIdx) => {
+        const sceneWords: SubtitleWordTiming[] = [];
+        incomingSubtitles.forEach((sub) => {
+          const mid = (sub.frameStart + sub.frameEnd) / 2;
+          if (mid >= timing.frameStart - 8 && mid <= timing.frameEnd + 8) {
+            if (sub.words && sub.words.length > 0) {
+              sceneWords.push(...sub.words);
+            }
+          }
+        });
+        sceneWords.sort((a, b) => a.frameStart - b.frameStart);
+        newMasterMap[sIdx] = sceneWords;
+      });
+
+      const reconciledSubtitles: SubtitleItem[] = [];
+
+      // 2. Para cada cena, verifica se é possível preservar os blocos do usuário
+      incomingSceneTimings.forEach((timing, sIdx) => {
+        const sceneMasterWords = newMasterMap[sIdx] || [];
+        const incomingSceneSubs = incomingSubtitles.filter((sub) => {
+          const mid = (sub.frameStart + sub.frameEnd) / 2;
+          return mid >= timing.frameStart - 8 && mid <= timing.frameEnd + 8;
+        });
+
+        // Localiza os blocos existentes da cena anterior
+        const existingGroup = sceneSubtitleGroups.find(
+          (g) => g.sceneIndex === sIdx
+        );
+        const existingBlocks =
+          existingGroup && existingGroup.items.length > 0
+            ? existingGroup.items.map((it) => it.sub)
+            : [];
+
+        if (existingBlocks.length > 0 && sceneMasterWords.length > 0) {
+          const userText = existingBlocks
+            .map((b) => b.text.trim())
+            .filter(Boolean)
+            .join(' ');
+          const userWords = userText
+            .split(/\s+/)
+            .filter(Boolean)
+            .map(normalizeSubtitleWord);
+          const newWords = sceneMasterWords.map((w) =>
+            normalizeSubtitleWord(w.word)
+          );
+
+          // Verifica se pelo menos 60% das palavras coincidem (mesma fala com voz/tom diferente)
+          let matchCount = 0;
+          userWords.forEach((uw) => {
+            if (
+              newWords.some(
+                (nw) => nw === uw || nw.startsWith(uw) || uw.startsWith(nw)
+              )
+            ) {
+              matchCount++;
+            }
+          });
+          const isCompatible =
+            userWords.length > 0 && matchCount / userWords.length >= 0.6;
+
+          if (isCompatible) {
+            const normalizedMaster = sceneMasterWords.map((mw) => ({
+              ...mw,
+              norm: normalizeSubtitleWord(mw.word),
+            }));
+
+            let masterPointer = 0;
+            const updatedBlocks: SubtitleItem[] = [];
+
+            for (let bIdx = 0; bIdx < existingBlocks.length; bIdx++) {
+              const block = existingBlocks[bIdx];
+              const rawWords = block.text.trim().split(/\s+/).filter(Boolean);
+              if (rawWords.length === 0) continue;
+
+              const assignedWords: SubtitleWordTiming[] = [];
+
+              for (const rawW of rawWords) {
+                const normW = normalizeSubtitleWord(rawW);
+                let matchedIdx = -1;
+
+                for (let m = masterPointer; m < normalizedMaster.length; m++) {
+                  if (normalizedMaster[m].norm === normW) {
+                    matchedIdx = m;
+                    break;
+                  }
+                }
+
+                if (matchedIdx === -1 && normW.length >= 2) {
+                  for (let m = masterPointer; m < normalizedMaster.length; m++) {
+                    const mn = normalizedMaster[m].norm;
+                    if (mn.startsWith(normW) || normW.startsWith(mn)) {
+                      matchedIdx = m;
+                      break;
+                    }
+                  }
+                }
+
+                if (matchedIdx >= 0) {
+                  const mw = normalizedMaster[matchedIdx];
+                  assignedWords.push({
+                    word: rawW,
+                    frameStart: mw.frameStart,
+                    frameEnd: mw.frameEnd,
+                  });
+                  masterPointer = matchedIdx + 1;
+                } else {
+                  const prevW = assignedWords[assignedWords.length - 1];
+                  const fbStart = prevW
+                    ? prevW.frameEnd + 1
+                    : normalizedMaster[masterPointer]?.frameStart ??
+                      timing.frameStart;
+                  const fbEnd = fbStart + 12;
+                  assignedWords.push({
+                    word: rawW,
+                    frameStart: fbStart,
+                    frameEnd: fbEnd,
+                  });
+                }
+              }
+
+              // Se for o último bloco da cena e restaram masterWords não consumidas
+              if (
+                bIdx === existingBlocks.length - 1 &&
+                masterPointer < normalizedMaster.length &&
+                assignedWords.length > 0
+              ) {
+                const lastMaster =
+                  normalizedMaster[normalizedMaster.length - 1];
+                if (
+                  lastMaster.frameEnd >
+                  assignedWords[assignedWords.length - 1].frameEnd
+                ) {
+                  assignedWords[assignedWords.length - 1].frameEnd =
+                    lastMaster.frameEnd;
+                }
+              }
+
+              if (assignedWords.length > 0) {
+                const bStart = assignedWords[0].frameStart;
+                const bEnd = Math.max(
+                  bStart + 1,
+                  assignedWords[assignedWords.length - 1].frameEnd
+                );
+                updatedBlocks.push({
+                  frameStart: bStart,
+                  frameEnd: bEnd,
+                  text: rawWords.join(' '),
+                  words: assignedWords,
+                });
+              }
+            }
+
+            // Estende confortavelmente os blocos para evitar sumiços precoces
+            for (let i = 0; i < updatedBlocks.length; i++) {
+              if (i < updatedBlocks.length - 1) {
+                const nextStart = updatedBlocks[i + 1].frameStart;
+                if (nextStart > updatedBlocks[i].frameStart) {
+                  updatedBlocks[i].frameEnd = Math.max(
+                    updatedBlocks[i].frameEnd,
+                    nextStart - 1
+                  );
+                }
+              } else {
+                if (timing.frameEnd > updatedBlocks[i].frameStart) {
+                  updatedBlocks[i].frameEnd = Math.max(
+                    updatedBlocks[i].frameEnd,
+                    timing.frameEnd
+                  );
+                }
+              }
+            }
+
+            // Previne sobreposição de frames
+            for (let i = 0; i < updatedBlocks.length - 1; i++) {
+              if (
+                updatedBlocks[i].frameEnd >= updatedBlocks[i + 1].frameStart
+              ) {
+                updatedBlocks[i].frameEnd = Math.max(
+                  updatedBlocks[i].frameStart,
+                  updatedBlocks[i + 1].frameStart - 1
+                );
+              }
+            }
+
+            reconciledSubtitles.push(...updatedBlocks);
+            newSyncedMap[sIdx] = getSceneBlocksSignature(
+              updatedBlocks.map((b) => ({ sub: b, globalIndex: 0 }))
+            );
+            return;
+          }
+        }
+
+        // Se não é compatível ou é cena nova, usa os blocos vindos da ElevenLabs
+        reconciledSubtitles.push(...incomingSceneSubs);
+        newSyncedMap[sIdx] = getSceneBlocksSignature(
+          incomingSceneSubs.map((b) => ({ sub: b, globalIndex: 0 }))
+        );
+      });
+
+      reconciledSubtitles.sort((a, b) => a.frameStart - b.frameStart);
+
+      return {
+        reconciledSubtitles,
+        newMasterMap,
+        newSyncedMap,
+      };
+    },
+    [sceneSubtitleGroups, getSceneBlocksSignature]
+  );
 
   const handleAddSubtitleBlock = (sceneIdx: number) => {
     const group = sceneSubtitleGroups.find((g) => g.sceneIndex === sceneIdx);
