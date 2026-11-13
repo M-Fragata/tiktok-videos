@@ -559,10 +559,6 @@ export const Dashboard: React.FC = () => {
                 </span>
                 <span className="text-sm font-medium">TikTok</span>
               </div>
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Ativo
-              </span>
             </button>
 
             {/* YouTube Shorts (Em breve) */}
@@ -578,9 +574,6 @@ export const Dashboard: React.FC = () => {
                 </span>
                 <span className="text-sm font-medium">YouTube Shorts</span>
               </div>
-              <span className="rounded-md bg-slate-800/80 px-2 py-0.5 text-[9px] font-bold text-slate-400">
-                Em breve
-              </span>
             </div>
 
             {/* Instagram Reels (Em breve) */}
@@ -596,9 +589,6 @@ export const Dashboard: React.FC = () => {
                 </span>
                 <span className="text-sm font-medium">Instagram Reels</span>
               </div>
-              <span className="rounded-md bg-slate-800/80 px-2 py-0.5 text-[9px] font-bold text-slate-400">
-                Em breve
-              </span>
             </div>
           </nav>
         </div>
@@ -612,15 +602,7 @@ export const Dashboard: React.FC = () => {
             <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            Voltar ao Início
-          </button>
-
-          <button
-            onClick={handleCreateDraft}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-3.5 py-2.5 text-xs font-bold text-slate-950 shadow-md shadow-amber-500/10 hover:from-amber-400 hover:to-amber-500 active:scale-95 transition"
-          >
-            <span className="text-base font-black leading-none">+</span>
-            Nova História
+            Início
           </button>
         </div>
       </aside>
