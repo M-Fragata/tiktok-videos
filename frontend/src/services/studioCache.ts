@@ -18,6 +18,7 @@ export function clearStudioVideoCache(videoId?: string): void {
         `studio_audio_narration_collapsed_${videoId}`,
         `studio_audio_mixer_collapsed_${videoId}`,
         `studio_audio_sfx_collapsed_${videoId}`,
+        `studio_collapsed_sfx_scenes_${videoId}`,
         `ideation_avatar_open_${videoId}`,
         `ideation_script_gen_open_${videoId}`,
         `ideation_final_script_open_${videoId}`,
