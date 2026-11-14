@@ -149,7 +149,7 @@ function renderDeltaBadge(delta: number) {
       </span>
     );
   }
-  return <span className="text-[11px] font-medium text-slate-500">0 estável</span>;
+  
 }
 
 /**
@@ -287,7 +287,7 @@ export const Dashboard: React.FC = () => {
   // Modal de Detalhe e Controle
   const [selectedVideo, setSelectedVideo] = useState<TikTokVideoItem | null>(null);
   const [selectedStudioLinkId, setSelectedStudioLinkId] = useState<string>('');
-  const [isLinking, setIsLinking] = useState<boolean>(false);
+  const [_isLinking, _setIsLinking] = useState<boolean>(false);
 
   // Controle de vídeo (video.manage)
   const [manageCaption, setManageCaption] = useState<string>('');
@@ -401,10 +401,10 @@ export const Dashboard: React.FC = () => {
   };
 
   // Vincular / Desvincular vídeo do Studio
-  const handleSaveVideoLink = async () => {
+  const _handleSaveVideoLink = async () => {
     if (!selectedVideo) return;
     try {
-      setIsLinking(true);
+      _setIsLinking(true);
       const res = await fetch(`/api/tiktok/videos/${selectedVideo.id}/link`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -428,7 +428,7 @@ export const Dashboard: React.FC = () => {
         text: err instanceof Error ? err.message : 'Erro ao vincular',
       });
     } finally {
-      setIsLinking(false);
+      _setIsLinking(false);
     }
   };
 
@@ -545,11 +545,10 @@ export const Dashboard: React.FC = () => {
             {/* TikTok Tab (Ativo) */}
             <button
               onClick={() => setActivePlatform('tiktok')}
-              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${
-                activePlatform === 'tiktok'
-                  ? 'bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md shadow-black/40 border border-slate-700/80'
-                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-              }`}
+              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${activePlatform === 'tiktok'
+                ? 'bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md shadow-black/40 border border-slate-700/80'
+                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                }`}
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black text-white font-black text-xs shadow-inner shadow-white/10 border border-slate-700">
@@ -737,11 +736,10 @@ export const Dashboard: React.FC = () => {
                       disabled={isSyncing}
                       title="Sincronizar dados"
                       aria-label="Sincronizar dados"
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition active:scale-95 disabled:opacity-50 ${
-                        isSyncing
-                          ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
-                          : 'border-slate-800 bg-slate-900/80 text-slate-400 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-400'
-                      }`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition active:scale-95 disabled:opacity-50 ${isSyncing
+                        ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                        : 'border-slate-800 bg-slate-900/80 text-slate-400 hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-400'
+                        }`}
                     >
                       <svg
                         className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`}
@@ -771,11 +769,13 @@ export const Dashboard: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                     </div>
-                    <div className="text-2xl font-black text-white">
-                      {data.account.followerCount.toLocaleString('pt-BR')}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {renderDeltaBadge(data.account.followerDelta)}
+                    <div className="flex gap-2">
+                      <div className="text-2xl font-black text-white">
+                        {data.account.followerCount.toLocaleString('pt-BR')}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {renderDeltaBadge(data.account.followerDelta)}
+                      </div>
                     </div>
                   </div>
 
@@ -787,11 +787,13 @@ export const Dashboard: React.FC = () => {
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                       </svg>
                     </div>
-                    <div className="text-2xl font-black text-white">
-                      {data.account.likesCount.toLocaleString('pt-BR')}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {renderDeltaBadge(data.account.likesDelta)}
+                    <div className="flex gap-2">
+                      <div className="text-2xl font-black text-white">
+                        {data.account.likesCount.toLocaleString('pt-BR')}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {renderDeltaBadge(data.account.likesDelta)}
+                      </div>
                     </div>
                   </div>
 
@@ -804,11 +806,13 @@ export const Dashboard: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     </div>
-                    <div className="text-2xl font-black text-white">
-                      {data.account.totalViews.toLocaleString('pt-BR')}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {renderDeltaBadge(data.account.totalViewsDelta)}
+                    <div className="flex gap-2">
+                      <div className="text-2xl font-black text-white">
+                        {data.account.totalViews.toLocaleString('pt-BR')}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {renderDeltaBadge(data.account.totalViewsDelta)}
+                      </div>
                     </div>
                   </div>
 
@@ -823,9 +827,6 @@ export const Dashboard: React.FC = () => {
                     <div className="text-2xl font-black text-emerald-400">
                       {data.account.averageEngagementRate}%
                     </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      (likes+com+sh)/views
-                    </div>
                   </div>
 
                   {/* Vídeos Públicos */}
@@ -836,11 +837,13 @@ export const Dashboard: React.FC = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
                       </svg>
                     </div>
-                    <div className="text-2xl font-black text-white">
-                      {data.account.videoCount.toLocaleString('pt-BR')}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      {renderDeltaBadge(data.account.videoDelta)}
+                    <div className="flex gap-2">
+                      <div className="text-2xl font-black text-white">
+                        {data.account.videoCount.toLocaleString('pt-BR')}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {renderDeltaBadge(data.account.videoDelta)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -929,22 +932,6 @@ export const Dashboard: React.FC = () => {
                           {/* Duração */}
                           <div className="absolute top-2.5 right-2.5 rounded-md bg-black/80 backdrop-blur px-2 py-0.5 text-[10px] font-mono font-bold text-white border border-white/10">
                             {formatDuration(video.duration)}
-                          </div>
-
-                          {/* Badge de Vínculo com Studio */}
-                          <div className="absolute top-2.5 left-2.5">
-                            {video.localVideo ? (
-                              <span className="flex items-center gap-1 rounded-md bg-emerald-950/90 backdrop-blur px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/40 shadow">
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                </svg>
-                                Studio
-                              </span>
-                            ) : (
-                              <span className="rounded-md bg-slate-900/80 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-slate-400 border border-slate-700">
-                                Sem vínculo
-                              </span>
-                            )}
                           </div>
 
                           {/* Hover Play Icon */}
@@ -1075,8 +1062,8 @@ export const Dashboard: React.FC = () => {
             <div className="w-full md:w-7/12 p-6 flex flex-col justify-between overflow-y-auto max-h-[85vh] space-y-6">
               <div>
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                  <span>Publicado em: {formatDate(selectedVideo.createTime)}</span>
-                  <span className="font-mono">Duração: {formatDuration(selectedVideo.duration)}</span>
+                  <span>{formatDate(selectedVideo.createTime)}</span>
+                  <span className="font-mono">{formatDuration(selectedVideo.duration)}</span>
                 </div>
 
                 <h3 className="text-base font-bold text-white mb-2 leading-snug">
@@ -1112,91 +1099,6 @@ export const Dashboard: React.FC = () => {
                       {selectedVideo.engagementRate}%
                     </div>
                   </div>
-                </div>
-
-                {/* Histórico de Crescimento (Snapshots) */}
-                {selectedVideo.snapshots.length > 1 && (
-                  <div className="mb-4">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                      Histórico de Sincronizações (Snapshots)
-                    </h4>
-                    <div className="max-h-28 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/70 p-2 text-[11px] font-mono space-y-1">
-                      {selectedVideo.snapshots.map((snap, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-slate-300 py-0.5 border-b border-slate-800/50 last:border-0">
-                          <span className="text-slate-500">{formatDate(snap.recordedAt)}</span>
-                          <span className="text-white font-bold">{snap.viewCount} views</span>
-                          <span className="text-pink-400">{snap.likeCount} likes</span>
-                          <span className="text-cyan-400">{snap.commentCount} com</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ─── INTEGRAÇÃO COM STUDIO (VINCULAÇÃO) ─── */}
-                <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      Vínculo com Projeto do Studio (Remotion)
-                    </h4>
-                    {selectedVideo.localVideo && (
-                      <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/30">
-                        Vinculado
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-[11px] text-slate-400">
-                    Vincule esta publicação ao vídeo correspondente criado no Studio para rastrear a história e assets utilizados.
-                  </p>
-
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedStudioLinkId}
-                      onChange={(e) => setSelectedStudioLinkId(e.target.value)}
-                      className="flex-1 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-amber-500 focus:outline-none"
-                    >
-                      <option value="">-- Selecione um projeto do Studio --</option>
-                      {data?.studioVideos.map((sv) => (
-                        <option key={sv.id} value={sv.id}>
-                          {sv.theme} ({sv.status})
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      onClick={handleSaveVideoLink}
-                      disabled={isLinking}
-                      className="rounded-xl bg-slate-800 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition disabled:opacity-50"
-                    >
-                      {isLinking ? 'Salvando...' : 'Salvar'}
-                    </button>
-                  </div>
-
-                  {selectedVideo.localVideo && (
-                    <div className="pt-1 flex items-center justify-between">
-                      <span className="text-xs text-slate-300 font-medium truncate max-w-[240px]">
-                        {selectedVideo.localVideo.theme}
-                      </span>
-                      <button
-                        onClick={() => {
-                          if (selectedVideo.localVideoId) {
-                            clearStudioVideoCache(selectedVideo.localVideoId);
-                          }
-                          navigate(`/video/${selectedVideo.localVideoId}`);
-                        }}
-                        className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition flex items-center gap-1"
-                      >
-                        <span>Abrir no Studio</span>
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* ─── CONTROLE DA PUBLICAÇÃO (video.manage) ─── */}
@@ -1252,13 +1154,12 @@ export const Dashboard: React.FC = () => {
 
                   {manageMessage && (
                     <div
-                      className={`rounded-xl p-3 text-xs border ${
-                        manageMessage.type === 'success'
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                          : manageMessage.type === 'info'
-                            ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
-                            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                      }`}
+                      className={`rounded-xl p-3 text-xs border ${manageMessage.type === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : manageMessage.type === 'info'
+                          ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                        }`}
                     >
                       {manageMessage.text}
                     </div>

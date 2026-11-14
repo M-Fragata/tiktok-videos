@@ -214,22 +214,43 @@ export function formatSfxInstructions(availableSfx: SfxOption[]): {
     .join('\n');
 
   const systemPromptPart = `DIRETRIZES DE DESIGN DE SOM (SFX) & LISTA DINÂMICA ("sfx_list"):
-Você atua como Diretor de Áudio cinematográfico. Adicione efeitos sonoros ao array "sfx_list" de cada cena APENAS se a cena exigir (ações físicas pontuais, comédia, transições marcantes ou clima ambiente). Se a cena não precisar de sons extras além da narração e da música de fundo (BGM), retorne um array vazio [].
+Você atua como um Diretor de Áudio de cinema e curador de som para vídeos virais. Adicione efeitos sonoros ao array "sfx_list" de cada cena com base em uma taxonomia de 2 papéis bem definidos: "Ação" (impactos pontuais, foley, comédia física ou crescendo de tensão) e "Ambiente" (som contínuo de atmosfera/soundscape do local).
 
-REGRAS DE OURO DO DESIGN DE SOM:
-1. GERAÇÃO LIVRE: Descreva no "sound_prompt" o efeito acústico exato que deseja em INGLÊS (timbre, reverberação, distância e ação física), sem se limitar ao banco local de sons.
-2. SILÊNCIO E DINÂMICA: A atmosfera deve ser dinâmica. Tens total liberdade para deixar a cena em silêncio absoluto de SFX (retornando "sfx_list": []) para aumentar o foco no diálogo, criar tensão narrativa ou destacar uma pausa cômica.
-3. FILTRO DE QUALIDADE ("match_score"): Use apenas sons com match_score > 80%. De 0 a 100, avalie o quão essencial e perfeito é este som para a cena.
-4. TIMING DE PRECISÃO ("start_time_sec"): Calcule o início do som (em segundos) relativo ao começo da cena, imaginando o ritmo da fala (aprox. 2.5 palavras por segundo). Exemplo: se o personagem tropeça ou cai na 4ª palavra da fala, inicie o som perto de 1.5s.
-5. DURAÇÃO ("duration_sec"): Impactos, socos, tropeços e transições duram entre 0.3s e 1.0s. Climas contínuos de ambiente duram o tempo da cena (ex: 2.5s a 4.0s).
-6. CONTROLE DE VOLUME ("suggested_volume"): Proteja a inteligibilidade das vozes! Ambientes contínuos devem ser discretos (0.1 a 0.2). Use volumes altos (0.7 a 1.0) apenas para impactos secos e rápidos em pausas de diálogo.
-7. VÍNCULO COM O CATÁLOGO LOCAL ("sfx_key"): Se o som corresponder a um efeito existente no nosso catálogo de estúdio listado abaixo, preencha "sfx_key" com o identificador correspondente. Se for um som inédito para geração via IA, omita "sfx_key" (ou null):
+PROCESSO OBRIGATÓRIO DE CRIAÇÃO EM 2 ETAPAS:
+ETAPA 1: Escreva primeiro o roteiro e diálogos orgânicos completos de todas as cenas, amarrando as piadas, reações e fatos históricos.
+ETAPA 2: Com a história INTEIRA fechada, revise cena a cena o sound design com CAUSALIDADE ESTRITA. NUNCA gere efeitos desconexos do diálogo!
+* Exemplo Proibido: se o Billy espanta um animal com um espirro, o som da cena DEVE ser o espirro do Billy ("loud comical human sneeze echoing with sudden startled silence"), e JAMAIS um galho quebrando genérico.
+* Se os personagens acendem uma fogueira, a cena deve ter o som de Ação da faísca/pederneira E o som de Ambiente do fogo estalando continuamente.
+
+TAXONOMIA E ENGENHARIA ACÚSTICA PARA ELEVENLABS:
+1. EFEITO DE AÇÃO ("slot": "action"):
+   - Propósito: Impactos físicos, foley de objetos (pedra lascando, espada, flecha), tropeços cômicos, reações pontuais OU momentos de clímax/tensão.
+   - Engenharia de Prompt em Inglês:
+     * Para Impactos/Foley: Use termos como "crisp, punchy upfront foley, close mic, dry recording, clear physical sound, instant attack, no silence".
+     * Para Tensão/Clímax (especialmente na última cena ou momentos de perigo iminente): Descreva uma evolução temporal com CRESCENDO, por exemplo: "steadily accelerating heartbeat thumps increasing in volume, tempo and pitch, building heavy suspense until an abrupt cutoff cliffhanger".
+   - Timing ("start_time_sec"): Exato no segundo em que a ação/fala ocorre (ritmo aprox. 2.5 palavras por segundo).
+   - Duração ("duration_sec"): 0.5s a 2.5s para impactos normais; para efeitos de crescendo de tensão, use a duração até o final da cena.
+   - Volume ("suggested_volume"): 0.75 a 0.95 (som claro, presente e impactante).
+
+2. EFEITO DE AMBIENTE ("slot": "ambient"):
+   - Propósito: Som de fundo contínuo da atmosfera histórica (vento ártico uivando, fogueira estalando, floresta noturna com grilos, caverna úmida com gotejamento, murmúrio de multidão romana).
+   - Engenharia de Prompt em Inglês:
+     * Termos obrigatórios: "seamless steady continuous background bed, natural room tone, steady level, no silent gaps or abrupt pauses".
+   - Timing ("start_time_sec"): Sempre 0.0 (inicia junto com a cena).
+   - Duração ("duration_sec"): DEVE cobrir toda a cena (ex: 4.0s a 8.0s), para que venha da IA na duração exata sem necessidade de repetições forçadas.
+   - Volume ("suggested_volume"): 0.35 a 0.50 (imersivo e audível, complementando a trilha BGM sem abafar as falas).
+
+3. SILÊNCIO INTENCIONAL:
+   - Se a cena não precisar de som ambiente ou se sustentar apenas no diálogo/BGM, não invente som desnecessário. Retorne "sfx_list": [] ou apenas o som pontual que for estritamente relevante.
+
+VÍNCULO COM O CATÁLOGO LOCAL ("sfx_key"):
+Se o som corresponder a um efeito existente no nosso catálogo de estúdio listado abaixo, preencha "sfx_key" com o identificador correspondente. Se for um som inédito para síntese com IA, omita "sfx_key" (ou null):
 ${itemsText}
 
 CAMPOS DE RETROCOMPATIBILIDADE POR CENA:
 - "sfx_suggestion": Se houver correspondência com o catálogo acima, use o slug escolhido (ou "whoosh", ou "none" se sfx_list for vazio).
-- "sfx_prompt": O mesmo sound_prompt principal do efeito mais proeminente da cena (em inglês).
-- "sfx_label": Título curto em português com 1 emoji relevante (ex: "💨 Transição Rápida", "🛑 Quebra de 4ª Parede", "👣 Passos em Pedra").`;
+- "sfx_prompt": O sound_prompt do som de Ação principal (em inglês).
+- "sfx_label": Título curto em português com 1 emoji relevante (ex: "💥 Espirro Cômico", "🌿 Vento Ártico", "🔥 Fogueira Estalando", "💓 Tensão Crescente").`;
 
   const enumSlugs = Array.from(
     new Set([...availableSfx.map((o) => o.value), 'none'])

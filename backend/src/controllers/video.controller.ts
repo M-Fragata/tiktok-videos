@@ -1347,7 +1347,7 @@ export async function generateSceneSfxController(
     return;
   }
 
-  const { sceneIndex, sfxPrompt, durationSeconds } = parsedBody.data;
+  const { sceneIndex, sfxPrompt, durationSeconds, sfxSlot = 'action' } = parsedBody.data;
 
   try {
     const video = await prisma.video.findUnique({ where: { id } });
@@ -1357,12 +1357,12 @@ export async function generateSceneSfxController(
     }
 
     console.log(
-      `[ElevenLabs SFX] Gerando efeito sonoro para a cena #${sceneIndex + 1}: "${sfxPrompt}"...`
+      `[ElevenLabs SFX] Gerando efeito sonoro (${sfxSlot}) para a cena #${sceneIndex + 1}: "${sfxPrompt}"...`
     );
 
     const sfxBuffer = await generateSoundEffect({
       prompt: sfxPrompt,
-      durationSeconds: durationSeconds || 2.5,
+      durationSeconds: durationSeconds || (sfxSlot === 'ambient' ? 5.0 : 2.5),
     });
 
     const storageDir = path.resolve(process.cwd(), 'storage', id);
@@ -1370,14 +1370,14 @@ export async function generateSceneSfxController(
       fs.mkdirSync(storageDir, { recursive: true });
     }
 
-    const sfxFileName = `sfx_scene_${sceneIndex}_${Date.now()}.mp3`;
+    const sfxFileName = `sfx_scene_${sceneIndex}_${sfxSlot}_${Date.now()}.mp3`;
     const sfxFilePath = path.join(storageDir, sfxFileName);
     fs.writeFileSync(sfxFilePath, sfxBuffer);
 
     // Mede a duração real do áudio gerado via ffprobe para calibração precisa do slider
     const realAudioDurationSec = await probeAudioDurationSeconds(
       sfxFilePath,
-      durationSeconds || 2.5
+      durationSeconds || (sfxSlot === 'ambient' ? 5.0 : 2.5)
     );
 
     const publicBaseUrl = getPublicBaseUrl();
@@ -1395,38 +1395,58 @@ export async function generateSceneSfxController(
     const baseScenes = currentStoryboard.scenes || currentProps.scenes || [];
     const updatedScenes = baseScenes.map((scene, idx) => {
       if (idx !== sceneIndex) return scene;
-      const existingList = Array.isArray(scene.sfx_list) && scene.sfx_list.length > 0 ? scene.sfx_list : [];
-      const updatedSfxList = existingList.length > 0
-        ? existingList.map((item, itemIdx) =>
-            itemIdx === 0
-              ? {
-                  ...item,
-                  sound_prompt: sfxPrompt,
-                  audio_url: publicSfxUrl,
-                  original_duration_sec: realAudioDurationSec,
-                  playback_rate: item.playback_rate ?? 1.0,
-                  ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
-                }
-              : item
-          )
-        : [
-            {
-              sound_prompt: sfxPrompt,
-              match_score: 95,
-              start_time_sec: 0,
-              duration_sec: durationSeconds || realAudioDurationSec,
-              suggested_volume: 0.35,
-              audio_url: publicSfxUrl,
-              original_duration_sec: realAudioDurationSec,
-              playback_rate: 1.0,
-            },
-          ];
+      const rawList = Array.isArray(scene.sfx_list) ? [...scene.sfx_list] : [];
+
+      let updatedSfxList: typeof rawList;
+      const targetSlotIndex = rawList.findIndex((item) => item.slot === sfxSlot);
+
+      const newItem = {
+        slot: sfxSlot,
+        sound_prompt: sfxPrompt,
+        match_score: 95,
+        start_time_sec: sfxSlot === 'ambient' ? 0 : 0.5,
+        duration_sec: durationSeconds || realAudioDurationSec,
+        suggested_volume: sfxSlot === 'ambient' ? 0.45 : 0.85,
+        audio_url: publicSfxUrl,
+        original_duration_sec: realAudioDurationSec,
+        playback_rate: 1.0,
+      };
+
+      if (targetSlotIndex >= 0) {
+        updatedSfxList = rawList.map((item, itemIdx) =>
+          itemIdx === targetSlotIndex
+            ? {
+                ...item,
+                slot: sfxSlot,
+                sound_prompt: sfxPrompt,
+                audio_url: publicSfxUrl,
+                original_duration_sec: realAudioDurationSec,
+                playback_rate: item.playback_rate ?? 1.0,
+                ...(durationSeconds ? { duration_sec: durationSeconds } : {}),
+              }
+            : item
+        );
+      } else if (rawList.length === 0) {
+        updatedSfxList = [newItem];
+      } else {
+        // Insere o som no array de forma organizada (action no índice 0, ambient no índice 1)
+        if (sfxSlot === 'action') {
+          updatedSfxList = [newItem, ...rawList];
+        } else {
+          updatedSfxList = [...rawList, newItem];
+        }
+      }
+
+      const actionItem = updatedSfxList.find((s) => s.slot === 'action') || updatedSfxList[0];
+      const ambientItem = updatedSfxList.find((s) => s.slot === 'ambient');
 
       return {
         ...scene,
-        sfx_prompt: sfxPrompt,
-        custom_sfx_url: publicSfxUrl,
+        sfx_prompt: actionItem?.sound_prompt || sfxPrompt,
+        custom_sfx_url: actionItem?.audio_url || publicSfxUrl,
         sfx_list: updatedSfxList,
+        sfx_action: actionItem || null,
+        sfx_ambient: ambientItem || null,
       };
     });
 

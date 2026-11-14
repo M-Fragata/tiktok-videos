@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import ffmpeg from 'fluent-ffmpeg';
 import type { ScriptScene, SpeakerType } from './gemini.service.ts';
 import {
@@ -1028,6 +1029,77 @@ export async function regenerateSingleDialogueNarration({
 }
 
 /**
+ * Pós-processa o áudio gerado pela ElevenLabs Sound Effects via FFmpeg:
+ * 1. Remove silêncio inicial morto (silencedetect + atrim) para evitar engasgos e delay no loop;
+ * 2. Normaliza o ganho e volume acústico (loudnorm) para presença e clareza no vídeo.
+ */
+async function optimizeSoundEffectAudio(rawBuffer: Buffer): Promise<Buffer> {
+  const tmpDir = os.tmpdir();
+  const uid = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const tmpIn = path.join(tmpDir, `sfx_raw_${uid}.mp3`);
+  const tmpOut = path.join(tmpDir, `sfx_opt_${uid}.mp3`);
+
+  try {
+    fs.writeFileSync(tmpIn, rawBuffer);
+
+    // 1. Detecta silêncio no início via silencedetect
+    let silenceStartOffset = 0;
+    await new Promise<void>((resolve) => {
+      ffmpeg(tmpIn)
+        .audioFilters('silencedetect=noise=-40dB:d=0.03')
+        .output('NUL')
+        .format('null')
+        .on('stderr', (line: string) => {
+          const matchEnd = line.match(/silence_end:\s*([\d.]+)/);
+          if (matchEnd && silenceStartOffset === 0) {
+            const endSec = parseFloat(matchEnd[1]);
+            if (endSec > 0.02 && endSec < 2.0) {
+              silenceStartOffset = endSec;
+            }
+          }
+        })
+        .on('end', () => resolve())
+        .on('error', () => resolve())
+        .run();
+    });
+
+    // 2. Aplica corte do silêncio inicial (se detectado) + normalização de loudness
+    const filters: string[] = [];
+    if (silenceStartOffset > 0.02) {
+      filters.push(`atrim=start=${silenceStartOffset.toFixed(3)}`);
+    }
+    filters.push('loudnorm=I=-16:TP=-1.5:LRA=11');
+
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(tmpIn)
+        .audioFilters(filters)
+        .audioCodec('libmp3lame')
+        .save(tmpOut)
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err));
+    });
+
+    if (fs.existsSync(tmpOut) && fs.statSync(tmpOut).size > 0) {
+      return fs.readFileSync(tmpOut);
+    }
+    return rawBuffer;
+  } catch (err) {
+    console.warn(
+      '[ElevenLabs] Falha ao pós-processar SFX com FFmpeg, usando áudio original:',
+      err
+    );
+    return rawBuffer;
+  } finally {
+    try {
+      if (fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn);
+      if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+    } catch {
+      // Ignora erro de limpeza temporária
+    }
+  }
+}
+
+/**
  * Gera um efeito sonoro sintético personalizado com a ElevenLabs Sound Effects API
  * Endpoint: POST https://api.elevenlabs.io/v1/sound-generation
  */
@@ -1069,5 +1141,6 @@ export async function generateSoundEffect({
   }
 
   const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  const rawBuffer = Buffer.from(arrayBuffer);
+  return optimizeSoundEffectAudio(rawBuffer);
 }

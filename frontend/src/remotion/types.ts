@@ -410,8 +410,8 @@ export type SubtitleFontFamily =
   | 'impact'
   | 'grotesque'
   | 'script'
+  
   | 'montserrat';
-
 export interface SubtitleStyleConfig {
   animationType: SubtitleAnimationType;
   fontFamily: SubtitleFontFamily;
@@ -483,6 +483,8 @@ export interface VoiceCatalog {
 }
 
 export interface SfxItem {
+  slot?: 'action' | 'ambient';
+  label?: string;
   sound_prompt: string;
   match_score: number;
   start_time_sec: number;
@@ -503,6 +505,8 @@ export interface StoryboardScene {
   visual_description?: string;
   imagePrompt: string;
   sfx_list?: SfxItem[];
+  sfx_action?: SfxItem | null;
+  sfx_ambient?: SfxItem | null;
   sfx_suggestion?: string;
   sfx_prompt?: string;
   sfx_label?: string;
@@ -511,29 +515,69 @@ export interface StoryboardScene {
   selectedImage: string | null;
 }
 
+export const getSceneActionSfx = (
+  scene: Partial<StoryboardScene> | null | undefined
+): SfxItem | null => {
+  if (!scene) return null;
+  if (scene.sfx_action) {
+    return { ...scene.sfx_action, slot: 'action' };
+  }
+  if (Array.isArray(scene.sfx_list) && scene.sfx_list.length > 0) {
+    const found = scene.sfx_list.find((s) => s.slot === 'action');
+    if (found) return found;
+    return scene.sfx_list[0];
+  }
+  const key = scene.sfx_suggestion?.trim();
+  const hasAudioUrl = Boolean(scene.custom_sfx_url);
+  if (hasAudioUrl || (key && key !== 'none') || scene.sfx_prompt) {
+    return {
+      slot: 'action',
+      label: scene.sfx_label || undefined,
+      sound_prompt:
+        scene.sfx_prompt || scene.sfx_label || key || 'Efeito de ação',
+      match_score: 90,
+      start_time_sec: 0,
+      duration_sec: 1.5,
+      suggested_volume: 0.8,
+      sfx_key: key && key !== 'none' ? key : undefined,
+      audio_url: scene.custom_sfx_url || null,
+    };
+  }
+  return null;
+};
+
+export const getSceneAmbientSfx = (
+  scene: Partial<StoryboardScene> | null | undefined
+): SfxItem | null => {
+  if (!scene) return null;
+  if (scene.sfx_ambient) {
+    return { ...scene.sfx_ambient, slot: 'ambient' };
+  }
+  if (Array.isArray(scene.sfx_list) && scene.sfx_list.length > 1) {
+    const found = scene.sfx_list.find((s) => s.slot === 'ambient');
+    if (found) return found;
+    return scene.sfx_list[1];
+  }
+  return null;
+};
+
 export const getSceneSfxList = (
   scene: Partial<StoryboardScene> | null | undefined
 ): SfxItem[] => {
   if (!scene) return [];
+  const action = getSceneActionSfx(scene);
+  const ambient = getSceneAmbientSfx(scene);
+  const items: SfxItem[] = [];
+  if (action && (action.sound_prompt?.trim() || action.audio_url || action.sfx_key)) {
+    items.push(action);
+  }
+  if (ambient && (ambient.sound_prompt?.trim() || ambient.audio_url || ambient.sfx_key)) {
+    items.push(ambient);
+  }
+  if (items.length > 0) return items;
+
   if (Array.isArray(scene.sfx_list) && scene.sfx_list.length > 0) {
     return scene.sfx_list;
-  }
-  // Fallback retrocompatível transparente para cenas legadas
-  const key = scene.sfx_suggestion?.trim();
-  const hasAudioUrl = Boolean(scene.custom_sfx_url);
-  if (hasAudioUrl || (key && key !== 'none')) {
-    return [
-      {
-        sound_prompt:
-          scene.sfx_prompt || scene.sfx_label || key || 'Efeito sonoro',
-        match_score: 90,
-        start_time_sec: 0,
-        duration_sec: 1.5,
-        suggested_volume: 0.35,
-        sfx_key: key && key !== 'none' ? key : undefined,
-        audio_url: scene.custom_sfx_url || null,
-      },
-    ];
   }
   return [];
 };

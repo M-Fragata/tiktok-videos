@@ -146,6 +146,8 @@ export const dialogueItemSchema = z.object({
 });
 
 export const sfxItemSchema = z.object({
+  slot: z.enum(['action', 'ambient']).optional(),
+  label: z.string().optional(),
   sound_prompt: z
     .string()
     .describe(
@@ -213,6 +215,8 @@ export const storyboardSceneSchema = z.object({
     .describe(
       'Lista de efeitos sonoros. Retorne [] se a cena se sustentar apenas com diálogo/BGM, ou adicione de 1 a 3 sons se cruciais para a ação.'
     ),
+  sfx_action: sfxItemSchema.nullable().optional(),
+  sfx_ambient: sfxItemSchema.nullable().optional(),
   sfx_suggestion: z.string().optional().default(''),
   sfx_prompt: z.string().optional().default(''),
   sfx_label: z.string().optional().default(''),
@@ -324,6 +328,7 @@ export const generateSceneSfxSchema = z.object({
     .string({ required_error: 'O prompt do SFX é obrigatório' })
     .min(2, 'O prompt do SFX deve ter pelo menos 2 caracteres'),
   durationSeconds: z.number().min(0.5).max(22).optional(),
+  sfxSlot: z.enum(['action', 'ambient']).optional().default('action'),
 });
 
 /**

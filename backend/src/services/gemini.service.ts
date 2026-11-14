@@ -317,14 +317,25 @@ function buildSfxListResponseSchema(enumSlugs: string[]) {
   return {
     type: 'ARRAY',
     description:
-      'Lista de efeitos sonoros. Retorne [] se a cena se sustentar apenas com diálogo/BGM, ou adicione de 1 a 3 sons se cruciais para a ação.',
+      'Lista de efeitos sonoros da cena. Máximo de 2 itens: um para "action" (impacto/crescendo) e um para "ambient" (soundscape contínuo). Retorne [] se desnecessário.',
     items: {
       type: 'OBJECT',
       properties: {
+        slot: {
+          type: 'STRING',
+          enum: ['action', 'ambient'],
+          description:
+            'Papel do som: "action" para impacto, foley, falha cômica ou crescendo de tensão; "ambient" para atmosfera/soundscape contínuo da cena.',
+        },
+        label: {
+          type: 'STRING',
+          description:
+            'Título curto em português com 1 emoji relevante (ex: "💥 Espirro Cômico", "🌿 Vento Ártico", "🔥 Fogueira Estalando").',
+        },
         sound_prompt: {
           type: 'STRING',
           description:
-            "Prompt descritivo em inglês para o som (ex: 'howling arctic wind', 'cracking wood underfoot').",
+            "Prompt acústico detalhado em inglês para a ElevenLabs (ex: 'crisp upfront punchy foley of...', 'seamless steady continuous background bed of...').",
         },
         match_score: {
           type: 'NUMBER',
@@ -334,17 +345,17 @@ function buildSfxListResponseSchema(enumSlugs: string[]) {
         start_time_sec: {
           type: 'NUMBER',
           description:
-            'Tempo de início do som em segundos relativo ao começo da cena (ex: 0.0, 1.5).',
+            'Tempo de início do som em segundos relativo ao começo da cena (0.0 para ambiente; timing da fala para ação).',
         },
         duration_sec: {
           type: 'NUMBER',
           description:
-            'Duração do som em segundos (ex: 0.5 para impactos rápidos, 3.0 para ambientes).',
+            'Duração do som em segundos (0.5s a 2.5s para ação; duração total da cena para ambiente).',
         },
         suggested_volume: {
           type: 'NUMBER',
           description:
-            'Volume ideal do som (0.1 a 0.2 para ambientes, 0.7 a 1.0 para impactos).',
+            'Volume ideal do som (0.35 a 0.50 para ambiente contínuo, 0.75 a 0.95 para ação forte).',
         },
         sfx_key: {
           type: 'STRING',
