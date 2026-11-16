@@ -402,6 +402,8 @@ export interface SubtitleItem {
   text: string;
   words?: SubtitleWordTiming[];
   sceneIndex?: number;
+  speaker?: 'protagonist' | 'character' | 'narrator';
+  characterGender?: 'male' | 'female';
 }
 
 export type SubtitleAnimationType = 'karaoke' | 'pop' | 'hormozi';
@@ -412,6 +414,39 @@ export type SubtitleFontFamily =
   | 'script'
   
   | 'montserrat';
+
+export type SpeakerStyleKey =
+  | 'protagonist'
+  | 'narrator'
+  | 'character_male'
+  | 'character_female';
+
+export interface SpeakerStylePair {
+  primaryColor: string;
+  highlightColor: string;
+}
+
+export type SpeakerStylesConfig = Record<SpeakerStyleKey, SpeakerStylePair>;
+
+export const DEFAULT_SPEAKER_STYLES: SpeakerStylesConfig = {
+  protagonist: {
+    primaryColor: '#FFFFFF',
+    highlightColor: '#EF4444', // Vermelho
+  },
+  narrator: {
+    primaryColor: '#FFFFFF',
+    highlightColor: '#FBBF24', // Amarelo
+  },
+  character_male: {
+    primaryColor: '#FFFFFF',
+    highlightColor: '#38BDF8', // Azul
+  },
+  character_female: {
+    primaryColor: '#FFFFFF',
+    highlightColor: '#F472B6', // Rosa
+  },
+};
+
 export interface SubtitleStyleConfig {
   animationType: SubtitleAnimationType;
   fontFamily: SubtitleFontFamily;
@@ -423,6 +458,7 @@ export interface SubtitleStyleConfig {
   hasBackground: boolean;
   positionX: number;
   positionY: number;
+  speakerStyles?: SpeakerStylesConfig;
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
@@ -430,12 +466,13 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   fontFamily: 'montserrat',
   fontSize: 54,
   primaryColor: '#FFFFFF',
-  highlightColor: '#FBBF24',
+  highlightColor: '#EF4444',
   hasShadow: true,
   hasStroke: true,
   hasBackground: false,
   positionX: 50,
   positionY: 92,
+  speakerStyles: DEFAULT_SPEAKER_STYLES,
 };
 
 export interface AvatarSegment {
@@ -624,6 +661,95 @@ export const getSceneFullText = (
     .join(' ');
 };
 
+export const KNOWN_FEMALE_VOICE_IDS = new Set([
+  '21m00Tcm4TlvDq8ikWAM', // Rachel
+  'EXAVITQu4vr4xnSDxMaL', // Bella / Sarah
+  'AZnzlk1XvdvUeBnXmlld', // Domi
+  'MF3mGyEYCl7XYWbV9V6O', // Elli
+  'cgSgspJ2msm6clMCkdW9', // Jessica
+  'hpp4J3VqNfWAUOO0d1Us', // Bella
+  'Xb7hH8MSUJpSbSDYk0k2', // Alice
+]);
+
+function normalizeSubtitleTextForMatching(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim();
+}
+
+export function resolveSpeakerForSubtitle(
+  sub: Partial<SubtitleItem>,
+  scene?: Partial<StoryboardScene> | null
+): { speaker: SpeakerType; characterGender?: 'male' | 'female' } {
+  // 1. Se já possui speaker definido no próprio bloco, preserva
+  if (sub.speaker) {
+    const isFemale = sub.characterGender === 'female';
+    return {
+      speaker: sub.speaker,
+      ...(sub.speaker === 'character' ? { characterGender: isFemale ? 'female' : 'male' } : {}),
+    };
+  }
+
+  // 2. Se não temos a cena, fallback seguro para protagonista
+  if (!scene) {
+    return { speaker: 'protagonist' };
+  }
+
+  const dialogues = getSceneDialogues(scene);
+  if (dialogues.length === 1) {
+    const d = dialogues[0];
+    const spk = (d.speaker as SpeakerType) || (scene.speaker as SpeakerType) || 'protagonist';
+    const isFemale = Boolean(d.voiceId && KNOWN_FEMALE_VOICE_IDS.has(d.voiceId));
+    return {
+      speaker: spk,
+      ...(spk === 'character' ? { characterGender: isFemale ? 'female' : 'male' } : {}),
+    };
+  }
+
+  // 3. Múltiplos diálogos: encontra o melhor diálogo que corresponde ao texto do bloco
+  const textNorm = normalizeSubtitleTextForMatching(sub.text || '');
+  const subWords = textNorm.split(/\s+/).filter(Boolean);
+
+  let bestScore = -1;
+  let bestDialogue = dialogues[0];
+
+  dialogues.forEach((d) => {
+    const dNorm = normalizeSubtitleTextForMatching(d.text || '');
+    const dWordsSet = new Set(dNorm.split(/\s+/).filter(Boolean));
+
+    let score: number;
+
+    if (dNorm.includes(textNorm) && textNorm.length > 0) {
+      score = 200 + textNorm.length;
+      if (dNorm.startsWith(textNorm)) {
+        score += 50;
+      }
+    } else {
+      let matches = 0;
+      subWords.forEach((bw) => {
+        if (dWordsSet.has(bw)) matches++;
+      });
+      const ratio = subWords.length > 0 ? matches / subWords.length : 0;
+      score = matches * 10 + ratio * 20;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestDialogue = d;
+    }
+  });
+
+  const spk = (bestDialogue.speaker as SpeakerType) || (scene.speaker as SpeakerType) || 'protagonist';
+  const isFemale = Boolean(bestDialogue.voiceId && KNOWN_FEMALE_VOICE_IDS.has(bestDialogue.voiceId));
+  return {
+    speaker: spk,
+    ...(spk === 'character' ? { characterGender: isFemale ? 'female' : 'male' } : {}),
+  };
+}
+
 export type NarrativeArchitecture =
   | 'in_media_res'
   | 'myth_buster'
@@ -642,12 +768,34 @@ export interface NarrativePlan {
   loop_opening_fragment?: string;
 }
 
+export interface ThumbnailTextConfig {
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  textColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  position?: 'top' | 'center' | 'bottom' | 'custom';
+  xPercent?: number; // 0 a 100% (padrão 50)
+  yPercent?: number; // 0 a 100% (padrão 50)
+}
+
+export interface ThumbnailConfig {
+  prompt?: string;
+  titleHook?: string;
+  selectedImage?: string | null;
+  candidateImages?: string[];
+  textConfig?: ThumbnailTextConfig;
+}
+
 export interface IdeationOption {
   id: NarrativeArchitecture | string;
   title: string;
   badge?: string;
   description?: string;
   bgmVibe?: BgmVibe;
+  thumbnail_prompt?: string;
+  thumbnail_title_hook?: string;
   narrative_plan?: NarrativePlan;
   scenes: StoryboardScene[];
 }
@@ -661,14 +809,18 @@ export interface StoryboardState {
   avatarConfig?: AvatarConfig;
   ideationOptions?: IdeationOption[];
   bgmVibe?: BgmVibe;
+  thumbnailConfig?: ThumbnailConfig;
   episodeFormat?: EpisodeFormat;
   seriesContext?: SeriesContext;
   protagonistAgency?: ProtagonistAgency;
   contentBalance?: ContentBalance;
+  narrative_plan?: NarrativePlan;
+  description?: string;
 }
 
 export type TimeMachineVideoProps = {
   theme: string;
+  title?: string;
   durationInFrames?: number;
   backgroundSrc?: string;
   backgroundTimeline?: BackgroundSegment[];
@@ -683,6 +835,8 @@ export type TimeMachineVideoProps = {
   avatarTimeline?: AvatarSegment[];
   showAvatarOverlay?: boolean;
   storyboard?: StoryboardState;
+  thumbnailUrl?: string | null;
+  thumbnailConfig?: ThumbnailConfig;
 };
 
 export interface VideoRecord {
@@ -795,7 +949,18 @@ export const ensureSubtitleWordTimings = (
   }
 
   if (item.words && item.words.length === rawWords.length) {
-    return item.words;
+    const isMatching = item.words.every(
+      (w, idx) =>
+        normalizeSubtitleTextForMatching(w.word) ===
+        normalizeSubtitleTextForMatching(rawWords[idx])
+    );
+    const boundsMatch =
+      item.words[0]?.frameStart === item.frameStart &&
+      item.words[item.words.length - 1]?.frameEnd === item.frameEnd;
+
+    if (isMatching && boundsMatch) {
+      return item.words;
+    }
   }
 
   const totalFrames = Math.max(1, item.frameEnd - item.frameStart + 1);
@@ -818,16 +983,187 @@ export const ensureSubtitleWordTimings = (
   });
 };
 
+export const WEAK_END_WORDS = new Set([
+  // Preposições & Contrações
+  'de', 'do', 'da', 'dos', 'das',
+  'em', 'no', 'na', 'nos', 'nas',
+  'a', 'ao', 'aos', 'à', 'às',
+  'com', 'por', 'pelo', 'pela', 'pelos', 'pelas',
+  'para', 'pra', 'pro', 'pras', 'pros',
+  'sem', 'sob', 'sobre', 'até', 'contra', 'desde', 'entre',
+  'dum', 'duma', 'duns', 'dumas', 'num', 'numa', 'nuns', 'numas',
+  // Conjunções & Conectivos
+  'que', 'e', 'mas', 'ou', 'se', 'porque', 'pois', 'como', 'quando', 'enquanto',
+  // Artigos & Demonstrativos / Possessivos
+  'o', 'os', 'um', 'uma', 'uns', 'umas',
+  'meu', 'minha', 'meus', 'minhas',
+  'seu', 'sua', 'seus', 'suas',
+  'nosso', 'nossa', 'nossos', 'nossas',
+  'este', 'esta', 'estes', 'estas',
+  'esse', 'essa', 'esses', 'essas',
+  'aquele', 'aquela', 'aqueles', 'aquelas'
+]);
+
+export function isTerminalPunctuation(word: string): boolean {
+  return /[.!?…;:]+$/.test(word.trim());
+}
+
+export function isClausePausePunctuation(word: string): boolean {
+  return /[,–—]+$/.test(word.trim());
+}
+
+export function isWeakEndingWord(word: string): boolean {
+  const clean = word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  return WEAK_END_WORDS.has(clean);
+}
+
+function getItemWordText<T extends string | { word: string }>(item: T): string {
+  return typeof item === 'string' ? item : item.word;
+}
+
+export function splitClauseIntoSemanticChunks<T extends string | { word: string }>(words: T[]): T[][] {
+  const N = words.length;
+  if (N === 0) return [];
+  if (N <= 5) return [words];
+
+  // Se tem 6 palavras, divide em 3 + 3 caso a palavra divisora não seja fraca
+  if (N === 6) {
+    const wordAt2 = getItemWordText(words[2]);
+    if (!isWeakEndingWord(wordAt2)) {
+      return [words.slice(0, 3), words.slice(3)];
+    }
+    return [words];
+  }
+
+  const k = Math.max(2, Math.round(N / 4.2));
+
+  if (k === 2) {
+    let bestSplit = Math.round(N / 2);
+    let bestScore = -Infinity;
+
+    for (let split = 3; split <= N - 3; split++) {
+      let score = 0;
+      const leftLen = split;
+      const rightLen = N - split;
+
+      const diff = Math.abs(leftLen - rightLen);
+      score -= diff * 1.5;
+
+      if (leftLen > 5) score -= (leftLen - 5) * 1.0;
+      if (rightLen > 5) score -= (rightLen - 5) * 1.0;
+
+      const lastLeftWord = getItemWordText(words[split - 1]);
+      if (isWeakEndingWord(lastLeftWord)) {
+        score -= 5.0;
+      }
+
+      const nextWord = getItemWordText(words[split]);
+      if (isWeakEndingWord(nextWord)) {
+        score += 2.0;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestSplit = split;
+      }
+    }
+
+    return [words.slice(0, bestSplit), words.slice(bestSplit)];
+  }
+
+  // k >= 3:
+  let bestFirstSize = Math.round(N / k);
+  let bestFirstScore = -Infinity;
+
+  for (let size = 3; size <= Math.min(5, N - (k - 1) * 3); size++) {
+    let score = 0;
+    const remaining = N - size;
+    const remainingTarget = (k - 1) * 4;
+    score -= Math.abs(remaining - remainingTarget) * 1.2;
+
+    const endWord = getItemWordText(words[size - 1]);
+    if (isWeakEndingWord(endWord)) score -= 5.0;
+
+    const nextWord = getItemWordText(words[size]);
+    if (isWeakEndingWord(nextWord)) score += 2.0;
+
+    if (score > bestFirstScore) {
+      bestFirstScore = score;
+      bestFirstSize = size;
+    }
+  }
+
+  const firstChunk = words.slice(0, bestFirstSize);
+  const remainingChunks = splitClauseIntoSemanticChunks(words.slice(bestFirstSize));
+  return [firstChunk, ...remainingChunks];
+}
+
+export function splitWordsSemantically<T extends string | { word: string }>(words: T[]): T[][] {
+  if (!words || words.length === 0) return [];
+
+  const sentences: T[][] = [];
+  let currentSentence: T[] = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const item = words[i];
+    const text = getItemWordText(item);
+    currentSentence.push(item);
+    if (isTerminalPunctuation(text) || i === words.length - 1) {
+      sentences.push(currentSentence);
+      currentSentence = [];
+    }
+  }
+
+  const chunks: T[][] = [];
+
+  for (const sentence of sentences) {
+    if (sentence.length === 0) continue;
+
+    if (sentence.length <= 5) {
+      chunks.push(sentence);
+      continue;
+    }
+
+    const pauseIndices: number[] = [];
+    for (let i = 0; i < sentence.length - 1; i++) {
+      if (isClausePausePunctuation(getItemWordText(sentence[i]))) {
+        pauseIndices.push(i);
+      }
+    }
+
+    let chosenPause = -1;
+    for (const pIdx of pauseIndices) {
+      const leftLen = pIdx + 1;
+      const rightLen = sentence.length - leftLen;
+      if (leftLen >= 3 && rightLen >= 3) {
+        chosenPause = pIdx;
+        break;
+      }
+    }
+
+    if (chosenPause !== -1) {
+      const leftClause = sentence.slice(0, chosenPause + 1);
+      const rightClause = sentence.slice(chosenPause + 1);
+      chunks.push(...splitClauseIntoSemanticChunks(leftClause));
+      chunks.push(...splitClauseIntoSemanticChunks(rightClause));
+    } else {
+      chunks.push(...splitClauseIntoSemanticChunks(sentence));
+    }
+  }
+
+  return chunks;
+}
+
 /**
  * Divide uma fala longa (ex: texto bruto de uma cena no modo DRAFT antes de gravar áudio)
- * em blocos dinâmicos curtos de 3 a 4 palavras distribuídos ao longo de [frameStart, frameEnd],
+ * em blocos semânticos e equilibrados (3 a 5 palavras por tela, respeitando pontuações e pausas),
  * já com os tempos simulados por palavra para o efeito Karaokê / Pop / Hormozi.
  */
 export const splitSceneTextIntoSubtitleChunks = (
   text: string,
   frameStart: number,
   frameEnd: number,
-  wordsPerChunk = 4
+  _wordsPerChunk = 4
 ): SubtitleItem[] => {
   const cleanWords = text
     .trim()
@@ -838,11 +1174,7 @@ export const splitSceneTextIntoSubtitleChunks = (
     return [];
   }
 
-  const chunks: string[][] = [];
-  for (let i = 0; i < cleanWords.length; i += wordsPerChunk) {
-    chunks.push(cleanWords.slice(i, i + wordsPerChunk));
-  }
-
+  const chunks = splitWordsSemantically(cleanWords);
   const totalFrames = Math.max(chunks.length, frameEnd - frameStart + 1);
   const totalWords = cleanWords.length;
 

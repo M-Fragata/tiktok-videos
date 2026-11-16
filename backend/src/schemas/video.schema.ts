@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const speakerTypeSchema = z.enum([
+  'protagonist',
+  'character',
+  'narrator',
+]);
+
 export const subtitleWordTimingSchema = z.object({
   word: z.string().min(1),
   frameStart: z.number().int().min(0),
@@ -13,6 +19,8 @@ export const subtitleItemSchema = z
     text: z.string().min(1, 'O texto da legenda não pode estar vazio'),
     words: z.array(subtitleWordTimingSchema).optional(),
     sceneIndex: z.number().int().min(0).optional(),
+    speaker: speakerTypeSchema.optional(),
+    characterGender: z.enum(['male', 'female']).optional(),
   })
   .refine((data) => data.frameEnd >= data.frameStart, {
     message: 'frameEnd deve ser maior ou igual a frameStart',
@@ -33,6 +41,15 @@ export const subtitleStyleSchema = z.object({
   hasBackground: z.boolean().optional().default(false),
   positionX: z.number().min(5).max(95).optional().default(50),
   positionY: z.number().min(5).max(95).optional().default(88),
+  speakerStyles: z
+    .record(
+      z.string(),
+      z.object({
+        primaryColor: z.string().optional(),
+        highlightColor: z.string().optional(),
+      })
+    )
+    .optional(),
 });
 
 export const avatarSegmentSchema = z
@@ -58,12 +75,6 @@ export const backgroundSegmentSchema = z
     message: 'frameEnd deve ser maior ou igual a frameStart',
     path: ['frameEnd'],
   });
-
-export const speakerTypeSchema = z.enum([
-  'protagonist',
-  'character',
-  'narrator',
-]);
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
@@ -138,8 +149,11 @@ export const avatarConfigSchema = z.object({
 });
 
 export const dialogueItemSchema = z.object({
-  id: z.string().min(1),
-  speaker: speakerTypeSchema,
+  id: z
+    .string()
+    .optional()
+    .default(() => `dlg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
+  speaker: speakerTypeSchema.optional().default('protagonist'),
   characterName: z.string().optional(),
   voiceId: z.string().optional(),
   text: z.string().default(''),
@@ -253,9 +267,36 @@ export const ideationOptionSchema = z.object({
   badge: z.string().optional(),
   description: z.string().optional(),
   bgmVibe: bgmVibeSchema.optional(),
+  thumbnail_prompt: z.string().optional(),
+  thumbnail_title_hook: z.string().optional(),
   narrative_plan: narrativePlanSchema.optional(),
   scenes: z.array(storyboardSceneSchema).default([]),
 });
+
+export const thumbnailTextConfigSchema = z.object({
+  text: z.string().optional().default(''),
+  fontFamily: z.string().optional().default('Komika Axis'),
+  fontSize: z.number().optional().default(64),
+  textColor: z.string().optional().default('#EF4444'),
+  strokeColor: z.string().optional().default('#000000'),
+  strokeWidth: z.number().optional().default(12),
+  position: z
+    .enum(['top', 'center', 'bottom', 'custom'])
+    .optional()
+    .default('center'),
+  xPercent: z.number().min(0).max(100).optional().default(50),
+  yPercent: z.number().min(0).max(100).optional().default(50),
+});
+export type ThumbnailTextConfig = z.infer<typeof thumbnailTextConfigSchema>;
+
+export const thumbnailConfigSchema = z.object({
+  prompt: z.string().optional().default(''),
+  titleHook: z.string().optional().default(''),
+  selectedImage: z.string().nullable().optional().default(null),
+  candidateImages: z.array(z.string()).optional().default([]),
+  textConfig: thumbnailTextConfigSchema.optional().default({}),
+});
+export type ThumbnailConfig = z.infer<typeof thumbnailConfigSchema>;
 
 export const sceneFrameTimingSchema = z.object({
   sceneIndex: z.number().int().min(0),
@@ -274,10 +315,13 @@ export const storyboardStateSchema = z.object({
   avatarConfig: avatarConfigSchema.optional(),
   ideationOptions: z.array(ideationOptionSchema).optional(),
   bgmVibe: bgmVibeSchema.optional().default('epic'),
+  thumbnailConfig: thumbnailConfigSchema.optional(),
   episodeFormat: episodeFormatSchema.optional(),
   seriesContext: seriesContextSchema.optional(),
   protagonistAgency: protagonistAgencySchema.optional(),
   contentBalance: contentBalanceSchema.optional(),
+  narrative_plan: narrativePlanSchema.optional(),
+  description: z.string().optional(),
 });
 
 /**
@@ -370,6 +414,7 @@ export const renderVideoSchema = z.object({
     .string({ required_error: 'O campo theme é obrigatório' })
     .min(3, 'O tema deve ter pelo menos 3 caracteres')
     .max(180, 'O tema deve ter no máximo 180 caracteres'),
+  title: z.string().optional(),
   durationInFrames: z.number().int().min(30).max(5400).optional(),
   backgroundSrc: z.string().optional().default('background.jpg'),
   backgroundTimeline: z.array(backgroundSegmentSchema).optional(),
@@ -384,7 +429,20 @@ export const renderVideoSchema = z.object({
   avatarTimeline: z.array(avatarSegmentSchema).optional(),
   showAvatarOverlay: z.boolean().optional().default(false),
   storyboard: storyboardStateSchema.optional(),
+  thumbnailUrl: z.string().nullable().optional(),
+  thumbnailConfig: thumbnailConfigSchema.optional(),
 });
+
+export const generateThumbnailSchema = z.object({
+  prompt: z.string().min(1, 'O prompt da thumbnail é obrigatório'),
+});
+
+export const uploadThumbnailSchema = z.object({
+  imageBase64: z.string().min(10, 'Imagem base64 inválida'),
+  fileName: z.string().optional(),
+});
+
+export const saveThumbnailConfigSchema = thumbnailConfigSchema;
 
 export const uploadSceneImageSchema = z.object({
   sceneIndex: z.number().int().min(0),
@@ -430,6 +488,7 @@ export const promoteSfxSchema = z.object({
   customSfxUrl: z.string().min(1, 'URL do áudio SFX obrigatória'),
   sfxPrompt: z.string().optional().default(''),
   sfxLabel: z.string().optional().default(''),
+  sfxSlot: z.enum(['action', 'ambient']).optional().default('action'),
 });
 export type PromoteSfxInput = z.infer<typeof promoteSfxSchema>;
 

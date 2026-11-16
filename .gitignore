@@ -7,6 +7,9 @@ backend/storage/*
 !backend/storage/.gitkeep
 !backend/storage/teste/
 !backend/storage/teste/**
+storage/
+temp_*
+backend/temp_*
 *.log
 *.tsbuildinfo
 *.db

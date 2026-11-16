@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '../lib/prisma.ts';
 import type { PromoteSfxInput, RenderVideoInput } from '../schemas/video.schema.ts';
+import { STORAGE_OUTPUT_DIR } from './remotion.service.ts';
 
 export interface SfxOption {
   value: string;
@@ -11,7 +12,7 @@ export interface SfxOption {
   isCustom?: boolean;
 }
 
-export const STORAGE_DIR = path.resolve(process.cwd(), 'storage');
+export const STORAGE_DIR = STORAGE_OUTPUT_DIR;
 export const FRONTEND_EFFECTS_DIR = path.resolve(
   import.meta.dirname,
   '../../../frontend/public/bgm/effects'
@@ -160,19 +161,29 @@ export async function listAllSfxOptions(): Promise<SfxOption[]> {
  * e registra no banco de dados CustomSfx.
  */
 export async function promoteSceneSfxToLibrary(input: PromoteSfxInput) {
-  const { videoId, sceneIndex, customSfxUrl, sfxPrompt, sfxLabel } = input;
+  const { videoId, sceneIndex, customSfxUrl, sfxPrompt, sfxLabel, sfxSlot = 'action' } = input;
 
   const video = await prisma.video.findUnique({ where: { id: videoId } });
   if (!video) {
     throw new Error('Vídeo não encontrado.');
   }
 
-  // 1. Localizar arquivo de origem
+  // 1. Localizar arquivo de origem (suporta URL absoluta http://.../storage/... ou relativa /storage/...)
   let relativePath = customSfxUrl;
-  if (relativePath.startsWith('/storage/')) {
-    relativePath = relativePath.replace(/^\/storage\//, '');
-  } else if (relativePath.startsWith('storage/')) {
-    relativePath = relativePath.replace(/^storage\//, '');
+  const normalizedSfxUrl = relativePath.replace(/\\/g, '/');
+  if (normalizedSfxUrl.includes('/storage/')) {
+    relativePath = normalizedSfxUrl.substring(
+      normalizedSfxUrl.indexOf('/storage/') + '/storage/'.length
+    );
+  } else if (normalizedSfxUrl.includes('storage/')) {
+    relativePath = normalizedSfxUrl.substring(
+      normalizedSfxUrl.indexOf('storage/') + 'storage/'.length
+    );
+  }
+
+  // Sanitizar query params se houver (ex: ?v=123)
+  if (relativePath.includes('?')) {
+    relativePath = relativePath.split('?')[0];
   }
 
   const sourceFilePath = path.join(STORAGE_DIR, relativePath);
@@ -239,20 +250,55 @@ export async function promoteSceneSfxToLibrary(input: PromoteSfxInput) {
     sceneTimings: [],
   };
 
+  const isAction = sfxSlot === 'action';
   const baseScenes = currentStoryboard.scenes || [];
   const updatedScenes = baseScenes.map((scene, idx) => {
     if (idx !== sceneIndex) return scene;
+
+    const rawList = Array.isArray(scene.sfx_list) ? [...scene.sfx_list] : [];
+    const updatedSfxList = rawList.map((item) => {
+      if (item.slot === sfxSlot) {
+        return {
+          ...item,
+          audio_url: null,
+          sfx_key: uniqueSlug,
+          label: displayLabel,
+        };
+      }
+      return item;
+    });
+
     return {
       ...scene,
-      sfx_suggestion: uniqueSlug,
-      sfx_label: displayLabel,
-      sfx_prompt: sfxPrompt || scene.sfx_prompt || '',
-      custom_sfx_url: null, // Promovido para a biblioteca global!
+      sfx_suggestion: isAction ? uniqueSlug : scene.sfx_suggestion,
+      sfx_label: isAction ? displayLabel : scene.sfx_label,
+      sfx_prompt: isAction ? (sfxPrompt || scene.sfx_prompt || '') : scene.sfx_prompt,
+      custom_sfx_url: isAction ? null : scene.custom_sfx_url,
+      sfx_list: updatedSfxList,
+      sfx_action:
+        isAction && scene.sfx_action
+          ? {
+              ...scene.sfx_action,
+              audio_url: null,
+              sfx_key: uniqueSlug,
+              label: displayLabel,
+            }
+          : scene.sfx_action,
+      sfx_ambient:
+        !isAction && scene.sfx_ambient
+          ? {
+              ...scene.sfx_ambient,
+              audio_url: null,
+              sfx_key: uniqueSlug,
+              label: displayLabel,
+            }
+          : scene.sfx_ambient,
     };
   });
 
   const updatedProps: RenderVideoInput = {
     ...currentProps,
+    scenes: updatedScenes,
     storyboard: {
       ...currentStoryboard,
       scenes: updatedScenes,

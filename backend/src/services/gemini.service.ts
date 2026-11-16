@@ -178,6 +178,23 @@ export function buildAvatarPromptDescriptor(
   return `2D cartoon stickman protagonist with a smooth round white head, a distinct solid white capsule torso with smooth thickness outlined in clean ${strokeColor} ink (NOT a stick-line torso), thin stick-figure arms and legs, ${hair} in vibrant ${hairColor} color, ${headAccessory}${neckPhrase}`;
 }
 
+/**
+ * Expressão regular para detectar e remover onomatopeias e sons de impacto mecânico
+ * escritos no texto que seriam lidos de forma literal pelo sintetizador de voz (TTS).
+ */
+const ONOMATOPOEIA_CLEANUP_REGEX =
+  /\b(CRAQUE|POW|BOOM|BUM|CLANG|TCHIBUM|CABUM|CRASH|BANG|SPLASH|VRUM|PLOP|TOC-TOC|SMASH|KABOOM)[!?,.:;…\s-]*/gi;
+
+export function sanitizeDialogueText(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(ONOMATOPOEIA_CLEANUP_REGEX, '')
+    .replace(/\s*,\s*,/g, ',')
+    .replace(/^\s*[,;.-]\s*/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 const CANDIDATE_GEMINI_MODELS = [
   'gemini-3.8-flash',
 ] as const;
@@ -550,13 +567,13 @@ Retorne APENAS um objeto JSON válido neste formato exato:
         ? s.dialogues.map((d, dIdx) => ({
             id: d.id || `dlg_${idx}_${dIdx}`,
             speaker: d.speaker || 'protagonist',
-            text: d.text || '',
+            text: sanitizeDialogueText(d.text || ''),
           }))
         : [
             {
               id: `dlg_${idx}_0`,
               speaker: s.speaker || 'protagonist',
-              text: s.text || '',
+              text: sanitizeDialogueText(s.text || ''),
             },
           ];
 
@@ -564,7 +581,7 @@ Retorne APENAS um objeto JSON válido neste formato exato:
       ...s,
       dialogues: mappedDialogues,
       speaker: mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
-      text: mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
+      text: mappedDialogues.map((d) => d.text).join(' ') || '',
     };
   });
 
@@ -761,6 +778,16 @@ export async function generateTimeMachineIdeation(
             description: {
               type: 'STRING',
             },
+            thumbnail_prompt: {
+              type: 'STRING',
+              description:
+                'Prompt visual em inglês para a thumbnail (capa) do vídeo, com proporção 9:16 vertical, contraste alto e stickman Billy com expressão dramática em ambiente 3D histórico.',
+            },
+            thumbnail_title_hook: {
+              type: 'STRING',
+              description:
+                'Texto curto de impacto (2 a 5 palavras em MAIÚSCULAS) para estampar na capa do vídeo gerando curiosidade imediata.',
+            },
             bgmVibe: {
               type: 'STRING',
               enum: [
@@ -845,13 +872,13 @@ export async function generateTimeMachineIdeation(
           ? s.dialogues.map((d, dIdx) => ({
               id: d.id || `dlg_${opt.id}_${sIdx}_${dIdx}`,
               speaker: d.speaker || s.speaker || 'protagonist',
-              text: d.text || '',
+              text: sanitizeDialogueText(d.text || ''),
             }))
           : [
               {
                 id: `dlg_${opt.id}_${sIdx}_0`,
                 speaker: s.speaker || 'protagonist',
-                text: s.text || '',
+                text: sanitizeDialogueText(s.text || ''),
               },
             ];
 
@@ -859,7 +886,7 @@ export async function generateTimeMachineIdeation(
         ...s,
         dialogues: mappedDialogues,
         speaker: mappedDialogues[0]?.speaker || s.speaker || 'protagonist',
-        text: mappedDialogues.map((d) => d.text).join(' ') || s.text || '',
+        text: mappedDialogues.map((d) => d.text).join(' ') || '',
       };
     });
 
@@ -1154,10 +1181,13 @@ export async function reviewAndEnrichFinalScript(params: {
               d.characterName ||
               originalInput?.dialogues?.[dIdx]?.characterName,
             voiceId: d.voiceId || originalInput?.dialogues?.[dIdx]?.voiceId,
-            text: d.text || '',
+            text: sanitizeDialogueText(d.text || ''),
           }))
         : originalInput?.dialogues && originalInput.dialogues.length > 0
-          ? originalInput.dialogues
+          ? originalInput.dialogues.map((d) => ({
+              ...d,
+              text: sanitizeDialogueText(d.text || ''),
+            }))
           : [
               {
                 id: `dlg_${sIdx}_0`,
@@ -1167,7 +1197,9 @@ export async function reviewAndEnrichFinalScript(params: {
                   'protagonist',
                 characterName: originalInput?.dialogues?.[0]?.characterName,
                 voiceId: originalInput?.dialogues?.[0]?.voiceId,
-                text: reviewedScene.text || originalInput?.text || '',
+                text: sanitizeDialogueText(
+                  reviewedScene.text || originalInput?.text || ''
+                ),
               },
             ];
 
@@ -1184,6 +1216,8 @@ export async function reviewAndEnrichFinalScript(params: {
         '',
       sfx_list: reviewedScene.sfx_list || originalInput?.sfx_list || [],
       sfx_label: reviewedScene.sfx_label || originalInput?.sfx_label || '',
+      sfx_prompt: reviewedScene.sfx_prompt || originalInput?.sfx_prompt || '',
+      sfx_suggestion: reviewedScene.sfx_suggestion || originalInput?.sfx_suggestion || 'none',
       custom_sfx_url: originalInput?.custom_sfx_url ?? null,
     };
   });

@@ -7,9 +7,13 @@ import {
   useVideoConfig,
 } from 'remotion';
 import {
+  DEFAULT_SPEAKER_STYLES,
   DEFAULT_SUBTITLES,
   DEFAULT_SUBTITLE_STYLE,
   ensureSubtitleWordTimings,
+  resolveSpeakerForSubtitle,
+  SpeakerStylePair,
+  StoryboardScene,
   SubtitleFontFamily,
   SubtitleItem,
   SubtitleStyleConfig,
@@ -18,6 +22,42 @@ import {
 export interface SubtitlesProps {
   subtitles?: SubtitleItem[];
   subtitleStyle?: SubtitleStyleConfig;
+  scenes?: StoryboardScene[];
+}
+
+function resolveSubtitleColors(
+  sub: SubtitleItem,
+  styleConfig: SubtitleStyleConfig,
+  scenes?: StoryboardScene[]
+): { primaryColor: string; highlightColor: string } {
+  const styles = styleConfig.speakerStyles || DEFAULT_SPEAKER_STYLES;
+
+  const targetScene =
+    typeof sub.sceneIndex === 'number' && scenes && scenes[sub.sceneIndex]
+      ? scenes[sub.sceneIndex]
+      : undefined;
+
+  const { speaker: effectiveSpeaker, characterGender } =
+    resolveSpeakerForSubtitle(sub, targetScene);
+  const isFemale = characterGender === 'female';
+
+  let stylePair: SpeakerStylePair;
+  if (effectiveSpeaker === 'narrator') {
+    stylePair = styles.narrator || DEFAULT_SPEAKER_STYLES.narrator;
+  } else if (effectiveSpeaker === 'character') {
+    stylePair = isFemale
+      ? styles.character_female || DEFAULT_SPEAKER_STYLES.character_female
+      : styles.character_male || DEFAULT_SPEAKER_STYLES.character_male;
+  } else {
+    stylePair = styles.protagonist || DEFAULT_SPEAKER_STYLES.protagonist;
+  }
+
+  return {
+    primaryColor:
+      stylePair.primaryColor || styleConfig.primaryColor || '#FFFFFF',
+    highlightColor:
+      stylePair.highlightColor || styleConfig.highlightColor || '#EF4444',
+  };
 }
 
 const FONT_FAMILY_MAP: Record<SubtitleFontFamily, string> = {
@@ -30,6 +70,7 @@ const FONT_FAMILY_MAP: Record<SubtitleFontFamily, string> = {
 export const Subtitles: React.FC<SubtitlesProps> = ({
   subtitles = DEFAULT_SUBTITLES,
   subtitleStyle,
+  scenes,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -46,6 +87,11 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
   if (!currentSubtitle) {
     return null;
   }
+
+  const {
+    primaryColor: resolvedPrimaryColor,
+    highlightColor: resolvedHighlightColor,
+  } = resolveSubtitleColors(currentSubtitle, styleConfig, scenes);
 
   const wordTimings = ensureSubtitleWordTimings(currentSubtitle);
 
@@ -146,7 +192,7 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
             fontSize: styleConfig.fontSize,
             fontWeight: 900,
             lineHeight: 1.18,
-            color: styleConfig.primaryColor,
+            color: resolvedPrimaryColor,
             textAlign: 'center',
             textTransform: styleConfig.fontFamily === 'script' ? 'none' : 'uppercase',
             WebkitTextStroke:
@@ -169,8 +215,8 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
                 display: 'inline-block',
                 color:
                   activeWordIndex % 2 === 1
-                    ? styleConfig.highlightColor
-                    : styleConfig.primaryColor,
+                    ? resolvedHighlightColor
+                    : resolvedPrimaryColor,
               }}
             >
               {activeWordObj.word}
@@ -197,8 +243,8 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
                     style={{
                       display: 'inline-block',
                       color: isActive
-                        ? styleConfig.highlightColor
-                        : styleConfig.primaryColor,
+                        ? resolvedHighlightColor
+                        : resolvedPrimaryColor,
                       transform: `scale(${activeWordScale})`,
                     }}
                   >

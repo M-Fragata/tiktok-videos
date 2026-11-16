@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { clearStudioVideoCache } from '../services/studioCache';
+import { MultiPlatformView, SupportedSocialPlatform } from '../components/MultiPlatformView';
 
 interface AccountSnapshot {
   recordedAt: string;
@@ -273,7 +274,7 @@ export const Dashboard: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   // Estados principais
-  const [activePlatform, setActivePlatform] = useState<'tiktok' | 'youtube' | 'instagram'>('tiktok');
+  const [activePlatform, setActivePlatform] = useState<'tiktok' | SupportedSocialPlatform>('tiktok');
   const [data, setData] = useState<TikTokDashboardPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -308,12 +309,25 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Alerta de sucesso se redirecionado do login
+  // Alerta de sucesso se redirecionado do login ou erro via query params
   useEffect(() => {
     if (searchParams.get('tiktok') === 'connected') {
       setSuccessToast('Conta do TikTok autenticada e sincronizada com sucesso!');
       const t = setTimeout(() => setSuccessToast(null), 5000);
       return () => clearTimeout(t);
+    }
+    const tabParam = searchParams.get('tab');
+    if (
+      tabParam === 'youtube' ||
+      tabParam === 'instagram' ||
+      tabParam === 'kwai' ||
+      tabParam === 'tiktok'
+    ) {
+      setActivePlatform(tabParam);
+    }
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
     }
   }, [searchParams]);
 
@@ -542,13 +556,14 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <nav className="space-y-1.5">
-            {/* TikTok Tab (Ativo) */}
+            {/* TikTok Tab */}
             <button
               onClick={() => setActivePlatform('tiktok')}
-              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${activePlatform === 'tiktok'
-                ? 'bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md shadow-black/40 border border-slate-700/80'
-                : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-                }`}
+              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${
+                activePlatform === 'tiktok'
+                  ? 'bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md shadow-black/40 border border-slate-700/80'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black text-white font-black text-xs shadow-inner shadow-white/10 border border-slate-700">
@@ -558,37 +573,79 @@ export const Dashboard: React.FC = () => {
                 </span>
                 <span className="text-sm font-medium">TikTok</span>
               </div>
+              {data?.connected && (
+                <span
+                  className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400"
+                  title="Canal Conectado"
+                />
+              )}
             </button>
 
-            {/* YouTube Shorts (Em breve) */}
-            <div
-              title="Integração em desenvolvimento"
-              className="w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold text-slate-500 opacity-60 cursor-not-allowed border border-transparent"
+            {/* YouTube Shorts */}
+            <button
+              onClick={() => setActivePlatform('youtube')}
+              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${
+                activePlatform === 'youtube'
+                  ? 'bg-gradient-to-r from-red-950/60 to-slate-900 text-white shadow-md shadow-red-950/40 border border-red-800/60'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-950/40 text-red-500 border border-red-900/30">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-950/60 text-red-500 border border-red-800/50">
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                     <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                   </svg>
                 </span>
                 <span className="text-sm font-medium">YouTube Shorts</span>
               </div>
-            </div>
+              <span className="rounded-md bg-red-500/10 px-1.5 py-0.5 text-[10px] font-mono text-red-400 border border-red-500/20">
+                Shorts
+              </span>
+            </button>
 
-            {/* Instagram Reels (Em breve) */}
-            <div
-              title="Integração em desenvolvimento"
-              className="w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold text-slate-500 opacity-60 cursor-not-allowed border border-transparent"
+            {/* Instagram Reels */}
+            <button
+              onClick={() => setActivePlatform('instagram')}
+              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${
+                activePlatform === 'instagram'
+                  ? 'bg-gradient-to-r from-pink-950/60 to-purple-950/40 text-white shadow-md shadow-pink-950/40 border border-pink-800/60'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-950/40 text-pink-500 border border-pink-900/30">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-950/60 text-pink-400 border border-pink-800/50">
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                     <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" />
                   </svg>
                 </span>
                 <span className="text-sm font-medium">Instagram Reels</span>
               </div>
-            </div>
+              <span className="rounded-md bg-pink-500/10 px-1.5 py-0.5 text-[10px] font-mono text-pink-400 border border-pink-500/20">
+                Reels
+              </span>
+            </button>
+
+            {/* Kwai */}
+            <button
+              onClick={() => setActivePlatform('kwai')}
+              className={`w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-xs font-semibold transition-all ${
+                activePlatform === 'kwai'
+                  ? 'bg-gradient-to-r from-orange-950/60 to-slate-900 text-white shadow-md shadow-orange-950/40 border border-orange-800/60'
+                  : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-950/60 text-orange-400 border border-orange-800/50">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
+                  </svg>
+                </span>
+                <span className="text-sm font-medium">Kwai</span>
+              </div>
+              <span className="rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-mono text-orange-400 border border-orange-500/20">
+                Kwai
+              </span>
+            </button>
           </nav>
         </div>
 
@@ -614,7 +671,25 @@ export const Dashboard: React.FC = () => {
             <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <span>Painel de Performance</span>
               <span className="text-slate-500">/</span>
-              <span className="text-amber-400 text-sm font-semibold">TikTok</span>
+              <span
+                className={`text-sm font-semibold ${
+                  activePlatform === 'tiktok'
+                    ? 'text-cyan-400'
+                    : activePlatform === 'youtube'
+                      ? 'text-red-400'
+                      : activePlatform === 'instagram'
+                        ? 'text-pink-400'
+                        : 'text-orange-400'
+                }`}
+              >
+                {activePlatform === 'tiktok'
+                  ? 'TikTok'
+                  : activePlatform === 'youtube'
+                    ? 'YouTube Shorts'
+                    : activePlatform === 'instagram'
+                      ? 'Instagram Reels'
+                      : 'Kwai'}
+              </span>
             </h1>
           </div>
         </header>
@@ -648,6 +723,17 @@ export const Dashboard: React.FC = () => {
         <main className="flex-1 p-8 space-y-8 max-w-7xl mx-auto w-full">
           {isLoading && !data ? (
             <DashboardSkeleton />
+          ) : activePlatform !== 'tiktok' ? (
+            <MultiPlatformView
+              platform={activePlatform}
+              studioVideos={data?.studioVideos || []}
+              onNavigateStudio={() => navigate('/studio')}
+              onCopyEnv={(text) => {
+                void navigator.clipboard.writeText(text);
+                setSuccessToast('Variáveis de ambiente copiadas com sucesso!');
+                setTimeout(() => setSuccessToast(null), 3500);
+              }}
+            />
           ) : !data?.connected || !data?.account ? (
             <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800 text-amber-400 mb-4 border border-slate-700">

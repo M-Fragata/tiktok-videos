@@ -7,6 +7,7 @@ import {
   getNarratorVoice,
   getProtagonistVoice,
   getCharacterVoices,
+  findVoiceById,
 } from './voice-catalog.service.ts';
 
 const FPS = 30;
@@ -37,6 +38,9 @@ export interface SubtitleItem {
   frameEnd: number;
   text: string;
   words?: SubtitleWordTiming[];
+  sceneIndex?: number;
+  speaker?: SpeakerType;
+  characterGender?: 'male' | 'female';
 }
 
 export interface AvatarSegment {
@@ -159,6 +163,67 @@ function getAudioFileDurationSeconds(
   });
 }
 
+export const INTER_SCENE_PADDING_SECONDS = 0.45;
+export const INTER_SCENE_POST_ROLL_RATIO = 0.5;
+
+function createSilentWavBuffer(
+  durationSeconds: number,
+  sampleRate = 44100,
+  numChannels = 1
+): Buffer {
+  const bytesPerSample = 2;
+  const numSamples = Math.floor(durationSeconds * sampleRate);
+  const dataSize = numSamples * numChannels * bytesPerSample;
+  const buffer = Buffer.alloc(44 + dataSize);
+
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * numChannels * bytesPerSample, 28);
+  buffer.writeUInt16LE(numChannels * bytesPerSample, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  return buffer;
+}
+
+export async function ensureSilentMp3File(
+  filePath: string,
+  durationSeconds: number
+): Promise<void> {
+  if (fs.existsSync(filePath)) return;
+  const wavTempPath = `${filePath}.wav`;
+  fs.writeFileSync(wavTempPath, createSilentWavBuffer(durationSeconds));
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg()
+      .input(wavTempPath)
+      .output(filePath)
+      .on('end', () => {
+        try {
+          if (fs.existsSync(wavTempPath)) fs.unlinkSync(wavTempPath);
+        } catch {
+          // ignore
+        }
+        resolve();
+      })
+      .on('error', (err) => {
+        try {
+          if (fs.existsSync(wavTempPath)) fs.unlinkSync(wavTempPath);
+        } catch {
+          // ignore
+        }
+        reject(err);
+      })
+      .run();
+  });
+}
+
 /**
  * Mede a duração exata de qualquer ficheiro de áudio no disco (ex: efeitos sonoros .mp3).
  */
@@ -274,18 +339,194 @@ function extractWordsFromAlignment(
   return words;
 }
 
+const WEAK_END_WORDS = new Set([
+  // Preposições & Contrações
+  'de', 'do', 'da', 'dos', 'das',
+  'em', 'no', 'na', 'nos', 'nas',
+  'a', 'ao', 'aos', 'à', 'às',
+  'com', 'por', 'pelo', 'pela', 'pelos', 'pelas',
+  'para', 'pra', 'pro', 'pras', 'pros',
+  'sem', 'sob', 'sobre', 'até', 'contra', 'desde', 'entre',
+  'dum', 'duma', 'duns', 'dumas', 'num', 'numa', 'nuns', 'numas',
+  // Conjunções & Conectivos
+  'que', 'e', 'mas', 'ou', 'se', 'porque', 'pois', 'como', 'quando', 'enquanto',
+  // Artigos & Demonstrativos / Possessivos
+  'o', 'os', 'um', 'uma', 'uns', 'umas',
+  'meu', 'minha', 'meus', 'minhas',
+  'seu', 'sua', 'seus', 'suas',
+  'nosso', 'nossa', 'nossos', 'nossas',
+  'este', 'esta', 'estes', 'estas',
+  'esse', 'essa', 'esses', 'essas',
+  'aquele', 'aquela', 'aqueles', 'aquelas'
+]);
+
+function isTerminalPunctuation(word: string): boolean {
+  return /[.!?…;:]+$/.test(word.trim());
+}
+
+function isClausePausePunctuation(word: string): boolean {
+  return /[,–—]+$/.test(word.trim());
+}
+
+function isWeakEndingWord(word: string): boolean {
+  const clean = word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  return WEAK_END_WORDS.has(clean);
+}
+
+function getItemWordText<T extends string | { word: string }>(item: T): string {
+  return typeof item === 'string' ? item : item.word;
+}
+
+function splitClauseIntoSemanticChunks<T extends string | { word: string }>(words: T[]): T[][] {
+  const N = words.length;
+  if (N === 0) return [];
+  if (N <= 5) return [words];
+
+  // Se tem 6 palavras, divide em 3 + 3 caso a palavra divisora não seja fraca
+  if (N === 6) {
+    const wordAt2 = getItemWordText(words[2]);
+    if (!isWeakEndingWord(wordAt2)) {
+      return [words.slice(0, 3), words.slice(3)];
+    }
+    return [words];
+  }
+
+  const k = Math.max(2, Math.round(N / 4.2));
+
+  if (k === 2) {
+    let bestSplit = Math.round(N / 2);
+    let bestScore = -Infinity;
+
+    for (let split = 3; split <= N - 3; split++) {
+      let score = 0;
+      const leftLen = split;
+      const rightLen = N - split;
+
+      const diff = Math.abs(leftLen - rightLen);
+      score -= diff * 1.5;
+
+      if (leftLen > 5) score -= (leftLen - 5) * 1.0;
+      if (rightLen > 5) score -= (rightLen - 5) * 1.0;
+
+      const lastLeftWord = getItemWordText(words[split - 1]);
+      if (isWeakEndingWord(lastLeftWord)) {
+        score -= 5.0;
+      }
+
+      const nextWord = getItemWordText(words[split]);
+      if (isWeakEndingWord(nextWord)) {
+        score += 2.0;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestSplit = split;
+      }
+    }
+
+    return [words.slice(0, bestSplit), words.slice(bestSplit)];
+  }
+
+  // k >= 3:
+  let bestFirstSize = Math.round(N / k);
+  let bestFirstScore = -Infinity;
+
+  for (let size = 3; size <= Math.min(5, N - (k - 1) * 3); size++) {
+    let score = 0;
+    const remaining = N - size;
+    const remainingTarget = (k - 1) * 4;
+    score -= Math.abs(remaining - remainingTarget) * 1.2;
+
+    const endWord = getItemWordText(words[size - 1]);
+    if (isWeakEndingWord(endWord)) score -= 5.0;
+
+    const nextWord = getItemWordText(words[size]);
+    if (isWeakEndingWord(nextWord)) score += 2.0;
+
+    if (score > bestFirstScore) {
+      bestFirstScore = score;
+      bestFirstSize = size;
+    }
+  }
+
+  const firstChunk = words.slice(0, bestFirstSize);
+  const remainingChunks = splitClauseIntoSemanticChunks(words.slice(bestFirstSize));
+  return [firstChunk, ...remainingChunks];
+}
+
+export function splitWordsSemantically<T extends string | { word: string }>(words: T[]): T[][] {
+  if (!words || words.length === 0) return [];
+
+  const sentences: T[][] = [];
+  let currentSentence: T[] = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const item = words[i];
+    const text = getItemWordText(item);
+    currentSentence.push(item);
+    if (isTerminalPunctuation(text) || i === words.length - 1) {
+      sentences.push(currentSentence);
+      currentSentence = [];
+    }
+  }
+
+  const chunks: T[][] = [];
+
+  for (const sentence of sentences) {
+    if (sentence.length === 0) continue;
+
+    if (sentence.length <= 5) {
+      chunks.push(sentence);
+      continue;
+    }
+
+    const pauseIndices: number[] = [];
+    for (let i = 0; i < sentence.length - 1; i++) {
+      if (isClausePausePunctuation(getItemWordText(sentence[i]))) {
+        pauseIndices.push(i);
+      }
+    }
+
+    let chosenPause = -1;
+    for (const pIdx of pauseIndices) {
+      const leftLen = pIdx + 1;
+      const rightLen = sentence.length - leftLen;
+      if (leftLen >= 3 && rightLen >= 3) {
+        chosenPause = pIdx;
+        break;
+      }
+    }
+
+    if (chosenPause !== -1) {
+      const leftClause = sentence.slice(0, chosenPause + 1);
+      const rightClause = sentence.slice(chosenPause + 1);
+      chunks.push(...splitClauseIntoSemanticChunks(leftClause));
+      chunks.push(...splitClauseIntoSemanticChunks(rightClause));
+    } else {
+      chunks.push(...splitClauseIntoSemanticChunks(sentence));
+    }
+  }
+
+  return chunks;
+}
+
 /**
- * Agrupa palavras soltas em blocos curtos (ex: 4 palavras por tela) e converte segundos em frames (x 30 FPS).
+ * Agrupa palavras soltas em blocos semânticos e equilibrados (3 a 5 palavras por tela, respeitando pontuações e pausas)
+ * e converte segundos em frames (x 30 FPS).
  */
 function buildSubtitlesFromWords(
   words: WordTimestamp[],
-  wordsPerChunk = WORDS_PER_SUBTITLE_CHUNK,
-  sceneIndex?: number
+  _wordsPerChunk = WORDS_PER_SUBTITLE_CHUNK,
+  sceneIndex?: number,
+  speaker?: SpeakerType,
+  characterGender?: 'male' | 'female'
 ): SubtitleItem[] {
+  if (!words || words.length === 0) return [];
+
+  const chunks = splitWordsSemantically(words);
   const subtitles: SubtitleItem[] = [];
 
-  for (let i = 0; i < words.length; i += wordsPerChunk) {
-    const chunk = words.slice(i, i + wordsPerChunk);
+  for (const chunk of chunks) {
     if (chunk.length === 0) continue;
 
     const startSecond = chunk[0].startSecond;
@@ -310,14 +551,19 @@ function buildSubtitlesFromWords(
       text: chunk.map((w) => w.word).join(' '),
       words: wordTimings,
       ...(typeof sceneIndex === 'number' ? { sceneIndex } : {}),
+      ...(speaker ? { speaker } : {}),
+      ...(characterGender ? { characterGender } : {}),
     });
   }
 
-  // Evita sobreposição de frame entre legendas consecutivas
+  // Evita sobreposição de frame entre legendas consecutivas sem esmagar nenhum bloco
   for (let i = 0; i < subtitles.length - 1; i++) {
+    if (subtitles[i + 1].frameStart <= subtitles[i].frameStart) {
+      subtitles[i + 1].frameStart = subtitles[i].frameStart + 10;
+    }
     if (subtitles[i].frameEnd >= subtitles[i + 1].frameStart) {
       subtitles[i].frameEnd = Math.max(
-        subtitles[i].frameStart,
+        subtitles[i].frameStart + 5,
         subtitles[i + 1].frameStart - 1
       );
     }
@@ -473,9 +719,11 @@ export async function generateNarrationWithTimestamps(
 
   let cumulativeDurationSeconds = 0;
   let chunkCounter = 0;
+  let nextVisualStartSecond = 0;
 
   for (let index = 0; index < scenes.length; index++) {
     const scene = scenes[index];
+    const sceneVisualStartSecond = nextVisualStartSecond;
     const rawDialogues =
       scene.dialogues && scene.dialogues.length > 0
         ? scene.dialogues
@@ -501,8 +749,6 @@ export async function generateNarrationWithTimestamps(
               text: scene.text?.trim() || '...',
             },
           ];
-
-    const sceneStartSecond = cumulativeDurationSeconds;
 
     for (let dIdx = 0; dIdx < dialoguesToSynthesize.length; dIdx++) {
       const dialogue = dialoguesToSynthesize[dIdx];
@@ -580,10 +826,19 @@ export async function generateNarrationWithTimestamps(
 
       // Extrai as palavras e legendas desta fala já com os timestamps deslocados
       const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
+      const charGender: 'male' | 'female' | undefined =
+        dialogue.speaker === 'character'
+          ? (findVoiceById(dialogue.voiceId)?.gender === 'female'
+              ? 'female'
+              : 'male')
+          : undefined;
+
       const sceneSubtitles = buildSubtitlesFromWords(
         sceneWords,
         WORDS_PER_SUBTITLE_CHUNK,
-        index
+        index,
+        dialogue.speaker,
+        charGender
       );
       allSubtitles.push(...sceneSubtitles);
 
@@ -614,19 +869,40 @@ export async function generateNarrationWithTimestamps(
       cumulativeDurationSeconds += chunkDurationSeconds;
     }
 
-    const sceneEndSecond = cumulativeDurationSeconds;
+    const sceneSpeechEndSecond = cumulativeDurationSeconds;
+    let sceneVisualEndSecond: number;
+
+    if (index < scenes.length - 1) {
+      const silenceFilePath = path.join(
+        chunksDir,
+        `silence_inter_scene_${index}.mp3`
+      );
+      await ensureSilentMp3File(silenceFilePath, INTER_SCENE_PADDING_SECONDS);
+      chunkFilePaths.push(silenceFilePath);
+
+      const postRoll =
+        INTER_SCENE_PADDING_SECONDS * INTER_SCENE_POST_ROLL_RATIO;
+      sceneVisualEndSecond = sceneSpeechEndSecond + postRoll;
+      nextVisualStartSecond = sceneVisualEndSecond;
+      cumulativeDurationSeconds += INTER_SCENE_PADDING_SECONDS;
+    } else {
+      sceneVisualEndSecond = sceneSpeechEndSecond;
+    }
 
     rawSceneTimings.push({
-      startSecond: sceneStartSecond,
-      endSecond: sceneEndSecond,
+      startSecond: sceneVisualStartSecond,
+      endSecond: sceneVisualEndSecond,
     });
   }
 
-  // Evita sobreposição de frame entre legendas na transição entre cenas
+  // Evita sobreposição de frame entre legendas na transição entre cenas sem esmagar nenhum bloco
   for (let i = 0; i < allSubtitles.length - 1; i++) {
+    if (allSubtitles[i + 1].frameStart <= allSubtitles[i].frameStart) {
+      allSubtitles[i + 1].frameStart = allSubtitles[i].frameStart + 10;
+    }
     if (allSubtitles[i].frameEnd >= allSubtitles[i + 1].frameStart) {
       allSubtitles[i].frameEnd = Math.max(
-        allSubtitles[i].frameStart,
+        allSubtitles[i].frameStart + 5,
         allSubtitles[i + 1].frameStart - 1
       );
     }
@@ -723,9 +999,7 @@ export async function rebuildNarrationFromChunks({
   publicBaseUrl: string;
 }): Promise<NarrationSyncResult> {
   const chunksDir = path.join(storageVideoDir, 'chunks');
-  const chunkFilePaths: string[] = manifestItems.map((item) =>
-    path.join(chunksDir, item.fileName)
-  );
+  const chunkFilePaths: string[] = [];
   const allSubtitles: SubtitleItem[] = [];
   const rawSceneTimings: Array<{ startSecond: number; endSecond: number }> = [];
 
@@ -736,12 +1010,14 @@ export async function rebuildNarrationFromChunks({
   };
 
   let cumulativeDurationSeconds = 0;
+  let nextVisualStartSecond = 0;
 
   for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
-    const sceneStartSecond = cumulativeDurationSeconds;
+    const sceneVisualStartSecond = nextVisualStartSecond;
     const sceneChunks = manifestItems.filter((m) => m.sceneIndex === sIdx);
 
     for (const chunk of sceneChunks) {
+      chunkFilePaths.push(path.join(chunksDir, chunk.fileName));
       const alignment = chunk.alignment;
       const shiftedStartTimes = alignment.character_start_times_seconds.map(
         (t) => t + cumulativeDurationSeconds
@@ -774,27 +1050,58 @@ export async function rebuildNarrationFromChunks({
       );
 
       const sceneWords = extractWordsFromAlignment(shiftedChunkAlignment);
+      const charGender: 'male' | 'female' | undefined =
+        chunk.speaker === 'character'
+          ? (findVoiceById(chunk.voiceId)?.gender === 'female'
+              ? 'female'
+              : 'male')
+          : undefined;
+
       const sceneSubtitles = buildSubtitlesFromWords(
         sceneWords,
         WORDS_PER_SUBTITLE_CHUNK,
-        index
+        sIdx,
+        chunk.speaker,
+        charGender
       );
       allSubtitles.push(...sceneSubtitles);
 
       cumulativeDurationSeconds += chunk.durationSeconds;
     }
 
-    const sceneEndSecond = cumulativeDurationSeconds;
+    const sceneSpeechEndSecond = cumulativeDurationSeconds;
+    let sceneVisualEndSecond: number;
+
+    if (sIdx < scenes.length - 1) {
+      const silenceFilePath = path.join(
+        chunksDir,
+        `silence_inter_scene_${sIdx}.mp3`
+      );
+      await ensureSilentMp3File(silenceFilePath, INTER_SCENE_PADDING_SECONDS);
+      chunkFilePaths.push(silenceFilePath);
+
+      const postRoll =
+        INTER_SCENE_PADDING_SECONDS * INTER_SCENE_POST_ROLL_RATIO;
+      sceneVisualEndSecond = sceneSpeechEndSecond + postRoll;
+      nextVisualStartSecond = sceneVisualEndSecond;
+      cumulativeDurationSeconds += INTER_SCENE_PADDING_SECONDS;
+    } else {
+      sceneVisualEndSecond = sceneSpeechEndSecond;
+    }
+
     rawSceneTimings.push({
-      startSecond: sceneStartSecond,
-      endSecond: sceneEndSecond,
+      startSecond: sceneVisualStartSecond,
+      endSecond: sceneVisualEndSecond,
     });
   }
 
   for (let i = 0; i < allSubtitles.length - 1; i++) {
+    if (allSubtitles[i + 1].frameStart <= allSubtitles[i].frameStart) {
+      allSubtitles[i + 1].frameStart = allSubtitles[i].frameStart + 10;
+    }
     if (allSubtitles[i].frameEnd >= allSubtitles[i + 1].frameStart) {
       allSubtitles[i].frameEnd = Math.max(
-        allSubtitles[i].frameStart,
+        allSubtitles[i].frameStart + 5,
         allSubtitles[i + 1].frameStart - 1
       );
     }
@@ -1079,7 +1386,7 @@ async function optimizeSoundEffectAudio(rawBuffer: Buffer): Promise<Buffer> {
         .on('error', (err) => reject(err));
     });
 
-    if (fs.existsSync(tmpOut) && fs.statSync(tmpOut).size > 0) {
+    if (fs.existsSync(tmpOut) && fs.statSync(tmpOut).size > 1000) {
       return fs.readFileSync(tmpOut);
     }
     return rawBuffer;

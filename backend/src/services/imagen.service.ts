@@ -226,3 +226,126 @@ export async function generateAllSceneBackgrounds(
     })
   );
 }
+/**
+ * Gera 2 variações de imagem vertical (9:16) para a Thumbnail (Capa) do vídeo.
+ */
+export async function generateThumbnailBrollImages(
+  videoId: string,
+  imagePrompt: string,
+  storageVideoDir: string,
+  publicBaseUrl: string
+): Promise<string[]> {
+  const provider = (process.env.IMAGE_PROVIDER || 'pollinations').toLowerCase();
+  const cacheBust = Date.now();
+  fs.mkdirSync(storageVideoDir, { recursive: true });
+
+  const savedUrls: string[] = [];
+
+  // 1. Fal.ai se configurado
+  if (provider === 'fal') {
+    const falKey = process.env.FALL_AI_KEY || process.env.FAL_KEY;
+    const imageModel = (process.env.IMAGE_MODEL || 'schnell').toLowerCase();
+    const endpoint =
+      imageModel === 'dev' ? 'fal-ai/flux/dev' : 'fal-ai/flux/schnell';
+
+    if (falKey) {
+      try {
+        fal.config({ credentials: falKey });
+        console.log(`[Fal.ai] Gerando 2 variações para Thumbnail com ${endpoint}...`);
+
+        const result: any = await fal.subscribe(endpoint, {
+          input: {
+            prompt: `${imagePrompt}. ${MIXED_MEDIA_STYLE_SUFFIX}`,
+            image_size: 'portrait_16_9',
+            num_images: 2,
+            enable_safety_checker: true,
+          },
+          logs: false,
+        });
+
+        const images = result.data?.images;
+        if (Array.isArray(images) && images.length > 0) {
+          for (let optIdx = 0; optIdx < Math.min(2, images.length); optIdx++) {
+            const imageUrl = images[optIdx]?.url;
+            if (!imageUrl) continue;
+            const res = await fetch(imageUrl);
+            if (res.ok) {
+              const fileName = `thumbnail_opt_${optIdx}_${cacheBust}.jpg`;
+              const filePath = path.join(storageVideoDir, fileName);
+              fs.writeFileSync(filePath, Buffer.from(await res.arrayBuffer()));
+              savedUrls.push(
+                `${publicBaseUrl}/storage/${videoId}/${fileName}`
+              );
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Fal.ai] Erro ao gerar thumbnail (${err.message}). Recorrendo ao Pollinations...`);
+      }
+    }
+  }
+
+  // 2. Pollinations.ai (FLUX Gratuito)
+  if (savedUrls.length === 0) {
+    const pollinationsKey = process.env.POLLINATIONS_API_KEY;
+    console.log('[Pollinations] Gerando variações de Thumbnail com FLUX...');
+
+    const seed0 = Math.floor(Math.random() * 9000000) + 1000000;
+    const buf0 = await generateImageWithPollinations(
+      imagePrompt,
+      720,
+      1280,
+      seed0,
+      pollinationsKey
+    );
+
+    if (buf0) {
+      const fileName0 = `thumbnail_opt_0_${cacheBust}.jpg`;
+      fs.writeFileSync(path.join(storageVideoDir, fileName0), buf0);
+      savedUrls.push(`${publicBaseUrl}/storage/${videoId}/${fileName0}`);
+    }
+
+    const seed1 = Math.floor(Math.random() * 9000000) + 1000000;
+    const buf1 = await generateImageWithPollinations(
+      imagePrompt,
+      720,
+      1280,
+      seed1,
+      pollinationsKey
+    );
+
+    if (buf1) {
+      const fileName1 = `thumbnail_opt_1_${cacheBust}.jpg`;
+      fs.writeFileSync(path.join(storageVideoDir, fileName1), buf1);
+      savedUrls.push(`${publicBaseUrl}/storage/${videoId}/${fileName1}`);
+    }
+  }
+
+  // 3. Fallback gracioso garantindo 2 slots
+  for (let optIdx = savedUrls.length; optIdx < 2; optIdx++) {
+    const fileName = `thumbnail_opt_${optIdx}_${cacheBust}.jpg`;
+    const filePath = path.join(storageVideoDir, fileName);
+
+    if (savedUrls.length > 0) {
+      const firstFileName = path.basename(savedUrls[0].split('?')[0]);
+      const firstPath = path.join(storageVideoDir, firstFileName);
+      if (fs.existsSync(firstPath)) {
+        fs.copyFileSync(firstPath, filePath);
+      }
+    } else {
+      const fallbackSource = path.join(MOCK_STORAGE_DIR, 'scene_0.jpg');
+      if (fs.existsSync(fallbackSource)) {
+        fs.copyFileSync(fallbackSource, filePath);
+      } else {
+        const dummyJpg = Buffer.from(
+          '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+          'base64'
+        );
+        fs.writeFileSync(filePath, dummyJpg);
+      }
+    }
+    savedUrls.push(`${publicBaseUrl}/storage/${videoId}/${fileName}`);
+  }
+
+  return savedUrls;
+}

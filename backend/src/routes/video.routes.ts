@@ -22,6 +22,9 @@ import {
   saveStoryboardController,
   updateVideoTitleController,
   uploadSceneImageController,
+  generateThumbnailController,
+  uploadThumbnailController,
+  saveThumbnailConfigController,
 } from '../controllers/video.controller.ts';
 
 export const videoRoutes = Router();
@@ -53,6 +56,20 @@ videoRoutes.post(
   '/videos/:id/regenerate-dialogue-audio',
   regenerateDialogueAudioController
 );
+// Thumbnail (Capa) do Vídeo
+videoRoutes.post(
+  '/videos/:id/generate-thumbnail',
+  generateThumbnailController
+);
+videoRoutes.post(
+  '/videos/:id/upload-thumbnail',
+  uploadThumbnailController
+);
+videoRoutes.post(
+  '/videos/:id/thumbnail-config',
+  saveThumbnailConfigController
+);
+
 videoRoutes.put('/videos/:id/storyboard', saveStoryboardController);
 videoRoutes.patch('/videos/:id/title', updateVideoTitleController);
 videoRoutes.delete('/videos/:id', deleteVideoController);

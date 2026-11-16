@@ -1,3 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Montserrat:ital,wght@0,800;0,900;1,800;1,900&family=Russo+One&family=Luckiest+Guy&family=Bangers&display=swap');
+@import url('https://fonts.cdnfonts.com/css/the-bold-font');
+@import url('https://fonts.cdnfonts.com/css/komika-axis');
+
+/* Font-faces abrangentes para garantir suporte a todos os pesos no Canvas 2D */
+@font-face {
+  font-family: 'Komika Axis';
+  font-style: normal;
+  font-weight: 100 900;
+  src: local('Komika Axis'), url('https://fonts.cdnfonts.com/s/251/KOMIKAX_.woff') format('woff');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'The Bold Font';
+  font-style: normal;
+  font-weight: 100 900;
+  src: local('The Bold Font'), url('https://fonts.cdnfonts.com/s/15153/theboldfont.woff') format('woff');
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

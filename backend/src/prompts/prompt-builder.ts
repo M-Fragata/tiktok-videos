@@ -157,6 +157,11 @@ Exemplos de bons títulos virais:
 - "3 Segundos Antes de Pompeia Desaparecer ⏳" (Corrida Contra o Tempo)
 NUNCA uses títulos genéricos como "Opção 1" ou "Loop". Cria sempre um título focado no tema e gancho do vídeo!
 
+THUMBNAIL E CAPA VIRAL POR OPÇÃO (CAMPOS "thumbnail_prompt" e "thumbnail_title_hook"):
+Para CADA uma das 4 opções, deves gerar:
+1. "thumbnail_prompt": Prompt visual descritivo e cinematográfico em inglês para a geração de imagem vertical 9:16 da capa do vídeo. Deve retratar o Billy (2D stickman doodle com expressão ultra dramática, assustada ou eufórica) interagindo com um elemento histórico imponente no ambiente 3D realista, com alto contraste, iluminação de contorno (rim lighting) e foco que chame atenção imediata no feed.
+2. "thumbnail_title_hook": Texto de impacto curto (2 a 5 palavras em MAIÚSCULAS) para estampar diretamente na thumbnail, gerando curiosidade e clique (ex: "PIOR IDEIA DE TODAS!", "COMO SOBREVIVER?", "NÃO FOI ELE?! 😱").
+
 ${CORE_IDENTITY_AND_BILLY_BLOCK}
 
 ${getCharacterVoicesPromptPart()}
@@ -342,7 +347,10 @@ ${systemPromptPart}
 
 10. ESTILO DO PROTAGONISTA (BILLY) E DINÂMICA EM DUPLA:
    - O protagonista ("protagonist" / Billy) expressa-se em português coloquial brasileiro, com reações viscerais ("Peraí...", "O quê?!", "Caramba...", "deu ruim"), contrações ("pra", "tá", "né") e zero afetação de professor.
-   - O narrador ("narrator") mantém a postura documental e sóbria dos fatos, contracenando em bate-bola com o protagonista.
+   - BLACKLIST DE PALAVRAS PROIBIDAS PARA O BILLY: É proibido o Billy usar termos rebuscados ou teatrais ("alçapões", "ensurdecedores", "babando", "perecer", "destarte", "outrossim"). Use termos ágeis e diretos de pânico ("veio louco pra cima", "chão cedendo", "sem saída").
+   - PROIBIÇÃO ABSOLUTA DE ONOMATOPEIAS NO TEXTO: NUNCA coloque onomatopeias escritas no texto falado (ex: "CRAQUE!", "POW!", "BUM!"). Mova qualquer ruído físico ou impacto para o array "sfx_list" da cena.
+   - O narrador ("narrator") mantém a postura documental e sóbria dos fatos e contexto histórico, contracenando em bate-bola com o protagonista na mesma cena.
+   - Personagens secundários ("character") devem dar ordens curtas e autoritárias de época que engatilham a reação do Billy.
 
 11. VOZES E NOMES DE PERSONAGENS SECUNDÁRIOS:
 ${getCharacterVoicesPromptPart()}

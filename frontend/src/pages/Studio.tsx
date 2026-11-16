@@ -8,9 +8,11 @@ import {
   AvatarSegment,
   BackgroundSegment,
   BgmVibe,
+  BGM_VIBE_OPTIONS,
   BriefingBgmOption,
   ContentBalance,
   DEFAULT_AVATAR_CONFIG,
+  DEFAULT_SPEAKER_STYLES,
   DEFAULT_SUBTITLE_STYLE,
   DurationPreset,
   ensureSubtitleWordTimings,
@@ -27,11 +29,13 @@ import {
   injectAvatarConfigIntoPrompt,
   ProtagonistAgency,
   resolveAssetSrc,
+  resolveSpeakerForSubtitle,
   SceneFrameTiming,
   SeriesContext,
   SeriesSummary,
   SfxOption,
   SFX_OPTIONS,
+  SpeakerStyleKey,
   SpeakerType,
   splitSceneTextIntoSubtitleChunks,
   StoryboardScene,
@@ -40,6 +44,7 @@ import {
   SubtitleItem,
   SubtitleStyleConfig,
   SubtitleWordTiming,
+  ThumbnailConfig,
   TimeMachineVideoProps,
   VideoRecord,
   VoiceCatalog,
@@ -54,6 +59,7 @@ import {
   SelectedFinalSceneItem,
 } from '../components/IdeationDressingRoomTab';
 import { SceneSfxSlotCard } from '../components/SceneSfxSlotCard';
+import { ThumbnailCard } from '../components/ThumbnailCard';
 import { clearStudioVideoCache } from '../services/studioCache';
 
 type InspectorTab =
@@ -170,6 +176,75 @@ function buildMp4DownloadFileName(themeTitle: string): string {
       .replace(/(^-|-$)/g, '')
       .slice(0, 50) || 'video';
   return `fragata-shorts-${slug}.mp4`;
+}
+
+interface ErrorToastData {
+  id: number;
+  title: string;
+  details?: string[];
+}
+
+/**
+ * Traduz erros retornados pelas rotas da API e schemas do Zod em mensagens claras e amigáveis.
+ */
+function parseApiError(
+  data: unknown,
+  fallbackMessage: string
+): { title: string; details?: string[] } {
+  if (!data || typeof data !== 'object') {
+    return { title: fallbackMessage };
+  }
+
+  const errObj = data as Record<string, unknown>;
+  const rawTitle =
+    (typeof errObj.error === 'string' && errObj.error) ||
+    (typeof errObj.message === 'string' && errObj.message) ||
+    fallbackMessage;
+  const rawDetails = errObj.details;
+
+  if (!rawDetails || typeof rawDetails !== 'object') {
+    return { title: rawTitle };
+  }
+
+  const formattedDetails: string[] = [];
+
+  for (const [fieldPath, errors] of Object.entries(rawDetails)) {
+    if (!Array.isArray(errors) || errors.length === 0) continue;
+    const errorText = errors.join('; ');
+
+    let friendlyField = fieldPath;
+
+    const sceneMatch = fieldPath.match(/scenes\.(\d+)\.(.+)/);
+    if (sceneMatch) {
+      const sceneNum = parseInt(sceneMatch[1], 10) + 1;
+      const subProp = sceneMatch[2];
+      const propLabels: Record<string, string> = {
+        imagePrompt: 'Prompt de Imagem',
+        avatarSprite: 'Sprite do Avatar',
+        text: 'Texto da Fala',
+        speaker: 'Locutor',
+        sfx_list: 'Efeitos Sonoros',
+        selectedImage: 'Imagem Selecionada',
+        dialogues: 'Diálogos',
+      };
+      friendlyField = `Cena #${sceneNum} (${propLabels[subProp] || subProp})`;
+    } else if (fieldPath.startsWith('subtitles.')) {
+      const subMatch = fieldPath.match(/subtitles\.(\d+)/);
+      const subNum = subMatch ? parseInt(subMatch[1], 10) + 1 : '';
+      friendlyField = `Legenda #${subNum}`;
+    } else if (fieldPath === 'theme') {
+      friendlyField = 'Tema';
+    } else if (fieldPath === 'title') {
+      friendlyField = 'Título';
+    }
+
+    formattedDetails.push(`${friendlyField}: ${errorText}`);
+  }
+
+  return {
+    title: rawTitle,
+    details: formattedDetails.length > 0 ? formattedDetails : undefined,
+  };
 }
 
 export const Studio: React.FC = () => {
@@ -335,6 +410,7 @@ export const Studio: React.FC = () => {
 
   // Etapa 2 & 3: Storyboard e Fábrica Granular
   const [scenes, setScenes] = useState<StoryboardScene[]>([]);
+  const [thumbnailConfig, setThumbnailConfig] = useState<ThumbnailConfig | undefined>(undefined);
   const [generatingImageForScene, setGeneratingImageForScene] = useState<
     Record<number, boolean>
   >({});
@@ -368,6 +444,7 @@ export const Studio: React.FC = () => {
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(
     DEFAULT_SUBTITLE_STYLE
   );
+  const [characterGenderTab, setCharacterGenderTab] = useState<'male' | 'female'>('male');
   const [avatarTimeline, setAvatarTimeline] = useState<AvatarSegment[]>([]);
 
   // Estados de Mixagem Global de Áudio (Aba Inferior "Áudio")
@@ -715,8 +792,53 @@ export const Studio: React.FC = () => {
   const [voiceCatalog, setVoiceCatalog] = useState<VoiceCatalog>(
     getCachedVoiceCatalog()
   );
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<ErrorToastData | null>(null);
   const [successToast, setSuccessToast] = useState<{ id: number; text: string } | null>(null);
+
+  const showErrorToast = useCallback(
+    (titleOrError: unknown, details?: string[]) => {
+      if (!titleOrError) {
+        setErrorToast(null);
+        return;
+      }
+      if (typeof titleOrError === 'string') {
+        setErrorToast({ id: Date.now(), title: titleOrError, details });
+      } else if (titleOrError instanceof Error) {
+        setErrorToast({ id: Date.now(), title: titleOrError.message, details });
+      } else if (typeof titleOrError === 'object') {
+        const parsed = parseApiError(
+          titleOrError,
+          'Ocorreu um erro na operação.'
+        );
+        setErrorToast({
+          id: Date.now(),
+          title: parsed.title,
+          details: parsed.details || details,
+        });
+      }
+    },
+    []
+  );
+
+  const setErrorMsg = useCallback(
+    (msg: string | null) => {
+      if (!msg) {
+        setErrorToast(null);
+      } else {
+        showErrorToast(msg);
+      }
+    },
+    [showErrorToast]
+  );
+
+  useEffect(() => {
+    if (!errorToast) return;
+    const timer = setTimeout(() => {
+      setErrorToast(null);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [errorToast]);
+
   const setSuccessMsg = useCallback((msg: string | null) => {
     if (!msg) {
       setSuccessToast(null);
@@ -782,9 +904,18 @@ export const Studio: React.FC = () => {
   }, [isEditingTitle]);
 
   const hydrateFromProps = (
-    props: TimeMachineVideoProps,
+    rawProps: TimeMachineVideoProps | string,
     recordTheme?: string
   ) => {
+    let props = rawProps as TimeMachineVideoProps;
+    if (typeof rawProps === 'string') {
+      try {
+        props = JSON.parse(rawProps) as TimeMachineVideoProps;
+      } catch {
+        /* ignore */
+      }
+    }
+
     const isDefaultTheme = (t?: string) =>
       !t ||
       t === 'Novo Vídeo — Fragata Shorts' ||
@@ -833,6 +964,10 @@ export const Studio: React.FC = () => {
       setSubtitleStyle({
         ...DEFAULT_SUBTITLE_STYLE,
         ...props.subtitleStyle,
+        speakerStyles: {
+          ...DEFAULT_SPEAKER_STYLES,
+          ...(props.subtitleStyle.speakerStyles || {}),
+        },
       });
     }
     if (props.avatarTimeline) setAvatarTimeline(props.avatarTimeline);
@@ -878,6 +1013,9 @@ export const Studio: React.FC = () => {
         props.storyboard.ideationOptions.length > 0
       ) {
         setIdeationOptions(props.storyboard.ideationOptions);
+      }
+      if (props.thumbnailConfig || props.storyboard.thumbnailConfig) {
+        setThumbnailConfig(props.thumbnailConfig || props.storyboard.thumbnailConfig);
       }
 
       const loadedScenes = props.storyboard.scenes || [];
@@ -1051,10 +1189,21 @@ export const Studio: React.FC = () => {
     }
   };
 
-  const handlePromoteStoryboardSceneSfx = async (sceneIndex: number) => {
+  const handlePromoteStoryboardSceneSfx = async (
+    sceneIndex: number,
+    slot: 'action' | 'ambient' = 'action'
+  ) => {
     if (!id) return;
     const scene = scenes[sceneIndex];
-    if (!scene?.custom_sfx_url) return;
+    if (!scene) return;
+
+    const sfxItem =
+      slot === 'ambient' ? getSceneAmbientSfx(scene) : getSceneActionSfx(scene);
+    const targetUrl = sfxItem?.audio_url || (slot === 'action' ? scene.custom_sfx_url : null);
+    if (!targetUrl) return;
+
+    const targetPrompt = sfxItem?.sound_prompt || scene.sfx_prompt || '';
+    const targetLabel = sfxItem?.label || scene.sfx_label || '';
 
     setPromotingSfxSceneIndex(sceneIndex);
     try {
@@ -1064,30 +1213,40 @@ export const Studio: React.FC = () => {
         body: JSON.stringify({
           videoId: id,
           sceneIndex,
-          customSfxUrl: scene.custom_sfx_url,
-          sfxPrompt: scene.sfx_prompt || '',
-          sfxLabel: scene.sfx_label || '',
+          customSfxUrl: targetUrl,
+          sfxPrompt: targetPrompt,
+          sfxLabel: targetLabel,
+          sfxSlot: slot,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Falha ao salvar som na biblioteca.');
+        showErrorToast(data);
+        return;
       }
 
-      handleSceneFieldChange(sceneIndex, 'sfx_suggestion', data.slug);
-      handleSceneFieldChange(
-        sceneIndex,
-        'sfx_label',
-        data.label || scene.sfx_label || ''
-      );
-      handleSceneFieldChange(sceneIndex, 'custom_sfx_url', null);
+      handleUpdateSceneSfxSlot(sceneIndex, slot, {
+        audio_url: null,
+        sfx_key: data.slug,
+        label: data.label || targetLabel,
+      });
+
+      if (slot === 'action') {
+        handleSceneFieldChange(sceneIndex, 'sfx_suggestion', data.slug);
+        handleSceneFieldChange(
+          sceneIndex,
+          'sfx_label',
+          data.label || scene.sfx_label || ''
+        );
+        handleSceneFieldChange(sceneIndex, 'custom_sfx_url', null);
+      }
 
       await loadSfxLibrary();
       setSuccessMsg('Efeito sonoro salvo na biblioteca global com sucesso!');
     } catch (err) {
       console.error('[Promote SFX Error]', err);
-      setErrorMsg(
+      showErrorToast(
         err instanceof Error
           ? err.message
           : 'Erro ao salvar efeito sonoro na biblioteca.'
@@ -1179,9 +1338,8 @@ export const Studio: React.FC = () => {
       }
 
       if (!res.ok) {
-        throw new Error(
-          data.error || 'Falha ao gerar ideias de roteiro no Gemini'
-        );
+        showErrorToast(data);
+        return;
       }
 
       if (data.video) {
@@ -1244,18 +1402,23 @@ export const Studio: React.FC = () => {
             body: JSON.stringify({
               theme: approvedTitle?.trim() || theme,
               avatarConfig,
-              scenes: finalMixScenes.map((item) => ({
-                id: item.uid,
-                speaker: item.scene.speaker,
-                text: item.scene.text,
-                dialogues: getSceneDialogues(item.scene),
-                avatarSprite: item.scene.avatarSprite,
-                visual_description: item.scene.visual_description || '',
-                imagePrompt: item.scene.imagePrompt || '',
-                sfx_suggestion: item.scene.sfx_suggestion || '',
-                sfx_prompt: item.scene.sfx_prompt || '',
-                isCustom: item.sourceOptionId === 'custom',
-              })),
+              scenes: finalMixScenes.map((item) => {
+                const actionSfx = getSceneActionSfx(item.scene);
+                return {
+                  id: item.uid,
+                  speaker: item.scene.speaker,
+                  text: item.scene.text,
+                  dialogues: getSceneDialogues(item.scene),
+                  avatarSprite: item.scene.avatarSprite,
+                  visual_description: item.scene.visual_description || '',
+                  imagePrompt: item.scene.imagePrompt || '',
+                  sfx_list: item.scene.sfx_list || (actionSfx ? [actionSfx] : []),
+                  sfx_suggestion: item.scene.sfx_suggestion || actionSfx?.sfx_key || '',
+                  sfx_prompt: item.scene.sfx_prompt || actionSfx?.sound_prompt || '',
+                  sfx_label: item.scene.sfx_label || actionSfx?.label || '',
+                  isCustom: item.sourceOptionId === 'custom',
+                };
+              }),
             }),
           }
         );
@@ -1267,17 +1430,56 @@ export const Studio: React.FC = () => {
             reviewData.scenes.length === finalMixScenes.length
           ) {
             consolidatedScenes = reviewData.scenes.map(
-              (revScene: StoryboardScene, idx: number) => ({
-                ...revScene,
-                dialogues:
-                  revScene.dialogues && revScene.dialogues.length > 0
-                    ? revScene.dialogues
-                    : getSceneDialogues(finalMixScenes[idx]?.scene),
-                candidateImages:
-                  finalMixScenes[idx]?.scene.candidateImages || [],
-                selectedImage:
-                  finalMixScenes[idx]?.scene.selectedImage || null,
-              })
+              (revScene: StoryboardScene, idx: number) => {
+                const origScene = finalMixScenes[idx]?.scene;
+                const origSfxList = origScene?.sfx_list;
+                const resolvedSfxList =
+                  Array.isArray(revScene.sfx_list) && revScene.sfx_list.length > 0
+                    ? revScene.sfx_list
+                    : Array.isArray(origSfxList) && origSfxList.length > 0
+                      ? origSfxList
+                      : [];
+
+                const actionItem =
+                  resolvedSfxList.find((s) => s.slot === 'action') ||
+                  resolvedSfxList[0] ||
+                  origScene?.sfx_action ||
+                  null;
+                const ambientItem =
+                  resolvedSfxList.find((s) => s.slot === 'ambient') ||
+                  origScene?.sfx_ambient ||
+                  null;
+
+                return {
+                  ...revScene,
+                  dialogues:
+                    revScene.dialogues && revScene.dialogues.length > 0
+                      ? revScene.dialogues
+                      : getSceneDialogues(origScene),
+                  candidateImages:
+                    origScene?.candidateImages || [],
+                  selectedImage:
+                    origScene?.selectedImage || null,
+                  sfx_list: resolvedSfxList,
+                  sfx_action: actionItem,
+                  sfx_ambient: ambientItem,
+                  sfx_prompt:
+                    revScene.sfx_prompt ||
+                    origScene?.sfx_prompt ||
+                    actionItem?.sound_prompt ||
+                    '',
+                  sfx_label:
+                    revScene.sfx_label ||
+                    origScene?.sfx_label ||
+                    actionItem?.label ||
+                    '',
+                  sfx_suggestion:
+                    revScene.sfx_suggestion ||
+                    origScene?.sfx_suggestion ||
+                    actionItem?.sfx_key ||
+                    'none',
+                };
+              }
             );
           }
         }
@@ -1325,6 +1527,34 @@ export const Studio: React.FC = () => {
         setTheme(approvedTitle.trim());
       }
 
+      const matchedOption = ideationOptions.find(
+        (opt) => opt.title === approvedTitle || opt.thumbnail_prompt
+      );
+      const initialThumbPrompt =
+        matchedOption?.thumbnail_prompt ||
+        `Mixed media 2D/3D illustration, a 2D cartoon stickman protagonist with a round white head, orange messy spiky hair, aviator goggles and red adventurer scarf, looking shocked and excited pointing at historical elements of ${finalTitle}, realistic 3D background environment with dramatic cinematic lighting, 9:16 vertical composition.`;
+      const initialThumbHook =
+        matchedOption?.thumbnail_title_hook || finalTitle;
+
+      const effectiveThumbConfig: ThumbnailConfig = thumbnailConfig || {
+        prompt: initialThumbPrompt,
+        titleHook: initialThumbHook,
+        selectedImage: null,
+        candidateImages: [],
+        textConfig: {
+          text: initialThumbHook,
+          fontFamily: 'Komika Axis',
+          fontSize: 64,
+          textColor: '#EF4444',
+          strokeColor: '#000000',
+          strokeWidth: 12,
+          position: 'center',
+          xPercent: 50,
+          yPercent: 50,
+        },
+      };
+      setThumbnailConfig(effectiveThumbConfig);
+
       const payload: TimeMachineVideoProps = {
         theme: finalTitle,
         durationInFrames: targetDurationFrames,
@@ -1335,6 +1565,8 @@ export const Studio: React.FC = () => {
         subtitles: [],
         subtitleStyle,
         avatarTimeline: [],
+        thumbnailUrl: effectiveThumbConfig.selectedImage,
+        thumbnailConfig: effectiveThumbConfig,
         storyboard: {
           durationPreset,
           scenes: consolidatedScenes,
@@ -1344,6 +1576,7 @@ export const Studio: React.FC = () => {
           avatarConfig,
           ideationOptions,
           bgmVibe: effectiveBgmVibe,
+          thumbnailConfig: effectiveThumbConfig,
           episodeFormat,
           seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
           protagonistAgency,
@@ -1639,9 +1872,8 @@ export const Studio: React.FC = () => {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(
-          data.error || 'Falha ao sintetizar efeito sonoro na ElevenLabs'
-        );
+        showErrorToast(data);
+        return;
       }
 
       const audioUrl = data.audioUrl;
@@ -1929,11 +2161,9 @@ export const Studio: React.FC = () => {
 
     try {
       const sanitizedScenes = scenes.map((s) => ({
-        speaker: s.speaker,
-        text: s.text,
-        avatarSprite: s.avatarSprite,
-        imagePrompt: s.imagePrompt,
-        sfx_suggestion: s.sfx_suggestion || '',
+        ...s,
+        dialogues: getSceneDialogues(s),
+        sfx_list: s.sfx_list || [],
       }));
 
       const res = await fetch(`/api/videos/${id}/generate-scene-images`, {
@@ -1948,9 +2178,8 @@ export const Studio: React.FC = () => {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(
-          data.error || `Falha ao gerar imagens para a cena #${sceneIndex + 1}`
-        );
+        showErrorToast(data);
+        return;
       }
 
       const generatedUrls: string[] = data.images || [];
@@ -2216,11 +2445,9 @@ export const Studio: React.FC = () => {
 
     try {
       const sanitizedScenes = scenes.map((s) => ({
-        speaker: s.speaker,
-        text: s.text,
-        avatarSprite: s.avatarSprite,
-        imagePrompt: s.imagePrompt,
-        sfx_suggestion: s.sfx_suggestion || '',
+        ...s,
+        dialogues: getSceneDialogues(s),
+        sfx_list: s.sfx_list || [],
       }));
 
       const res = await fetch(`/api/videos/${id}/generate-audio`, {
@@ -2231,7 +2458,8 @@ export const Studio: React.FC = () => {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Falha ao gravar narração na ElevenLabs');
+        showErrorToast(data);
+        return;
       }
 
       const narration = data.narration;
@@ -2307,6 +2535,33 @@ export const Studio: React.FC = () => {
     }));
   };
 
+  const handleSpeakerColorChange = (
+    speakerKey: SpeakerStyleKey,
+    field: 'primaryColor' | 'highlightColor',
+    value: string
+  ) => {
+    setSubtitleStyle((prev) => {
+      const currentSpeakerStyles =
+        prev.speakerStyles || DEFAULT_SPEAKER_STYLES;
+      const targetSpeaker =
+        currentSpeakerStyles[speakerKey] || DEFAULT_SPEAKER_STYLES[speakerKey];
+
+      const updatedSpeakerStyles = {
+        ...currentSpeakerStyles,
+        [speakerKey]: {
+          ...targetSpeaker,
+          [field]: value,
+        },
+      };
+
+      return {
+        ...prev,
+        speakerStyles: updatedSpeakerStyles,
+        ...(speakerKey === 'protagonist' ? { [field]: value } : {}),
+      };
+    });
+  };
+
   const handleSubtitleChange = (
     index: number,
     field: keyof SubtitleItem,
@@ -2316,10 +2571,14 @@ export const Studio: React.FC = () => {
       const baseList = prev.length > 0 ? prev : effectiveSubtitles;
       return baseList.map((item, idx) => {
         if (idx !== index) return item;
-        return {
+        const updated = {
           ...item,
           [field]: value,
         };
+        if (field === 'text' || field === 'frameStart' || field === 'frameEnd') {
+          updated.words = ensureSubtitleWordTimings(updated);
+        }
+        return updated;
       });
     });
   };
@@ -2455,13 +2714,69 @@ export const Studio: React.FC = () => {
     }
     if (scenes.length > 0) {
       return effectiveBackgroundTimeline.flatMap((seg, idx) => {
-        const sceneText = scenes[idx]?.text || `Cena ${idx + 1}`;
-        return splitSceneTextIntoSubtitleChunks(
-          sceneText,
-          seg.frameStart,
-          seg.frameEnd,
-          4
-        );
+        const scene = scenes[idx];
+        const sceneDialogues =
+          scene?.dialogues && scene.dialogues.length > 0
+            ? scene.dialogues
+            : [{ text: scene?.text || `Cena ${idx + 1}`, speaker: scene?.speaker }];
+
+        const sceneTotalWords =
+          sceneDialogues.reduce((acc, d) => {
+            return (
+              acc +
+              (d.text ? d.text.trim().split(/\s+/).filter(Boolean).length : 0)
+            );
+          }, 0) || 1;
+
+        const preRoll = idx === 0 ? 0 : 7;
+        const postRoll = idx === scenes.length - 1 ? 0 : 7;
+        const speechStart = Math.min(seg.frameEnd - 15, seg.frameStart + preRoll);
+        const speechEnd = Math.max(speechStart + 15, seg.frameEnd - postRoll);
+        const speechFrames = Math.max(1, speechEnd - speechStart + 1);
+        const dialogueChunks: SubtitleItem[] = [];
+        let accumulatedWords = 0;
+
+        for (let dIdx = 0; dIdx < sceneDialogues.length; dIdx++) {
+          const d = sceneDialogues[dIdx];
+          const dText = d.text?.trim() || '';
+          if (!dText) continue;
+          const dWordsCount = dText.split(/\s+/).filter(Boolean).length;
+
+          const dStart =
+            dIdx === 0
+              ? speechStart
+              : Math.min(
+                  speechEnd,
+                  Math.round(
+                    speechStart +
+                      (accumulatedWords / sceneTotalWords) * speechFrames
+                  )
+                );
+
+          const dEnd =
+            dIdx === sceneDialogues.length - 1
+              ? speechEnd
+              : Math.max(
+                  dStart,
+                  Math.round(
+                    speechStart +
+                      ((accumulatedWords + dWordsCount) / sceneTotalWords) *
+                        speechFrames
+                  ) - 1
+                );
+
+          const chunks = splitSceneTextIntoSubtitleChunks(dText, dStart, dEnd);
+          chunks.forEach((chunk) => {
+            chunk.sceneIndex = idx;
+            if (d.speaker) {
+              chunk.speaker = d.speaker;
+            }
+          });
+          dialogueChunks.push(...chunks);
+          accumulatedWords += dWordsCount;
+        }
+
+        return dialogueChunks;
       });
     }
     return [];
@@ -2797,12 +3112,22 @@ export const Studio: React.FC = () => {
             assignedWords[assignedWords.length - 1].frameEnd
           );
 
+          const targetScene = scenes[sceneIdx];
+          const blockSpeakerInfo = resolveSpeakerForSubtitle(
+            { ...block, text: rawWords.join(' ') },
+            targetScene
+          );
+
           updatedSceneBlocks.push({
             frameStart: blockStart,
             frameEnd: blockEnd,
             text: rawWords.join(' '),
             words: assignedWords,
             sceneIndex: sceneIdx,
+            speaker: blockSpeakerInfo.speaker,
+            ...(blockSpeakerInfo.characterGender
+              ? { characterGender: blockSpeakerInfo.characterGender }
+              : {}),
           });
         }
       }
@@ -2810,46 +3135,110 @@ export const Studio: React.FC = () => {
       // Estende cada bloco confortavelmente até o início do próximo bloco ou até o fim da fala da cena
       const sceneTiming = sceneTimings[sceneIdx];
       const bgSegment = effectiveBackgroundTimeline[sceneIdx];
+      const sceneStartFrame = bgSegment
+        ? bgSegment.frameStart
+        : sceneTiming
+          ? sceneTiming.frameStart
+          : updatedSceneBlocks[0]?.frameStart ?? 0;
       const maxAllowedSceneEnd = bgSegment
         ? bgSegment.frameEnd
         : sceneTiming?.frameEnd;
-      const sceneEndFrame = sceneTiming
-        ? sceneTiming.frameEnd
-        : normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
+      const sceneEndFrame =
+        maxAllowedSceneEnd ??
+        sceneTiming?.frameEnd ??
+        normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
 
-      for (let i = 0; i < updatedSceneBlocks.length; i++) {
+      // Detecta anomalia de tempo (blocos colidindo no mesmo frameStart, frameEnd <= frameStart ou ordem invertida)
+      const hasTimingAnomaly = updatedSceneBlocks.some((b, i) => {
+        if (b.frameEnd <= b.frameStart) return true;
         if (i < updatedSceneBlocks.length - 1) {
-          // Bloco intermediário: permanece visível até 1 frame antes do próximo bloco começar
-          const nextStart = updatedSceneBlocks[i + 1].frameStart;
-          if (nextStart > updatedSceneBlocks[i].frameStart) {
-            updatedSceneBlocks[i].frameEnd = Math.max(
-              updatedSceneBlocks[i].frameEnd,
-              nextStart - 1
-            );
+          const nextB = updatedSceneBlocks[i + 1];
+          return nextB.frameStart <= b.frameStart;
+        }
+        return false;
+      });
+
+      if (hasTimingAnomaly && updatedSceneBlocks.length > 0) {
+        const totalWords =
+          updatedSceneBlocks.reduce((acc, b) => {
+            const count = b.text.trim().split(/\s+/).filter(Boolean).length;
+            return acc + (count > 0 ? count : 1);
+          }, 0) || 1;
+        const targetSceneEnd = sceneEndFrame ?? sceneStartFrame + 120;
+        const availableFrames = Math.max(
+          updatedSceneBlocks.length * 15,
+          targetSceneEnd - sceneStartFrame + 1
+        );
+
+        let curStart = sceneStartFrame;
+        let consumedSceneWords = 0;
+
+        for (let i = 0; i < updatedSceneBlocks.length; i++) {
+          const b = updatedSceneBlocks[i];
+          const bWordsCount =
+            b.text.trim().split(/\s+/).filter(Boolean).length || 1;
+          const isLast = i === updatedSceneBlocks.length - 1;
+          const bEnd = isLast
+            ? targetSceneEnd
+            : Math.min(
+                targetSceneEnd - (updatedSceneBlocks.length - 1 - i) * 15,
+                Math.round(
+                  sceneStartFrame +
+                    ((consumedSceneWords + bWordsCount) / totalWords) *
+                      availableFrames
+                ) - 1
+              );
+          b.frameStart = curStart;
+          b.frameEnd = Math.max(curStart + 14, bEnd);
+          b.words = ensureSubtitleWordTimings(b);
+          consumedSceneWords += bWordsCount;
+          curStart = b.frameEnd + 1;
+        }
+      } else {
+        for (let i = 0; i < updatedSceneBlocks.length; i++) {
+          if (i < updatedSceneBlocks.length - 1) {
+            // Bloco intermediário: permanece visível até 1 frame antes do próximo bloco começar
+            const nextStart = updatedSceneBlocks[i + 1].frameStart;
+            if (nextStart > updatedSceneBlocks[i].frameStart) {
+              updatedSceneBlocks[i].frameEnd = Math.max(
+                updatedSceneBlocks[i].frameEnd,
+                nextStart - 1
+              );
+            }
+          } else {
+            // Último bloco da cena: estende até o final da fala da cena
+            if (sceneEndFrame && sceneEndFrame > updatedSceneBlocks[i].frameStart) {
+              updatedSceneBlocks[i].frameEnd = Math.max(
+                updatedSceneBlocks[i].frameEnd,
+                sceneEndFrame
+              );
+            }
           }
-        } else {
-          // Último bloco da cena: estende até o final da fala da cena
-          if (sceneEndFrame && sceneEndFrame > updatedSceneBlocks[i].frameStart) {
-            updatedSceneBlocks[i].frameEnd = Math.max(
-              updatedSceneBlocks[i].frameEnd,
-              sceneEndFrame
-            );
+
+          // Clamp estrito: nenhum bloco pode ultrapassar o limite final da cena
+          if (maxAllowedSceneEnd && updatedSceneBlocks[i].frameEnd > maxAllowedSceneEnd) {
+            updatedSceneBlocks[i].frameEnd = maxAllowedSceneEnd;
           }
         }
 
-        // Clamp estrito: nenhum bloco pode ultrapassar o limite final da cena
-        if (maxAllowedSceneEnd && updatedSceneBlocks[i].frameEnd > maxAllowedSceneEnd) {
-          updatedSceneBlocks[i].frameEnd = maxAllowedSceneEnd;
+        // Previne sobreposição de frames entre blocos consecutivos sem esmagar nenhum bloco
+        for (let i = 0; i < updatedSceneBlocks.length - 1; i++) {
+          const cur = updatedSceneBlocks[i];
+          const next = updatedSceneBlocks[i + 1];
+          if (next.frameStart <= cur.frameStart) {
+            next.frameStart = cur.frameStart + 15;
+          }
+          if (cur.frameEnd >= next.frameStart) {
+            cur.frameEnd = Math.max(cur.frameStart + 10, next.frameStart - 1);
+            if (cur.frameEnd >= next.frameStart) {
+              next.frameStart = cur.frameEnd + 1;
+            }
+          }
+          cur.words = ensureSubtitleWordTimings(cur);
         }
-      }
-
-      // Previne sobreposição de frames entre blocos consecutivos
-      for (let i = 0; i < updatedSceneBlocks.length - 1; i++) {
-        if (updatedSceneBlocks[i].frameEnd >= updatedSceneBlocks[i + 1].frameStart) {
-          updatedSceneBlocks[i].frameEnd = Math.max(
-            updatedSceneBlocks[i].frameStart,
-            updatedSceneBlocks[i + 1].frameStart - 1
-          );
+        if (updatedSceneBlocks.length > 0) {
+          const last = updatedSceneBlocks[updatedSceneBlocks.length - 1];
+          last.words = ensureSubtitleWordTimings(last);
         }
       }
 
@@ -2885,6 +3274,7 @@ export const Studio: React.FC = () => {
       sceneTimings,
       effectiveBackgroundTimeline,
       videoRecord,
+      scenes,
     ]
   );
 
@@ -3071,11 +3461,21 @@ export const Studio: React.FC = () => {
                   bStart + 1,
                   assignedWords[assignedWords.length - 1].frameEnd
                 );
+                const targetScene = scenes[sIdx];
+                const blockSpeakerInfo = resolveSpeakerForSubtitle(
+                  { ...block, text: rawWords.join(' ') },
+                  targetScene
+                );
                 updatedBlocks.push({
                   frameStart: bStart,
                   frameEnd: bEnd,
                   text: rawWords.join(' '),
                   words: assignedWords,
+                  sceneIndex: sIdx,
+                  speaker: blockSpeakerInfo.speaker,
+                  ...(blockSpeakerInfo.characterGender
+                    ? { characterGender: blockSpeakerInfo.characterGender }
+                    : {}),
                 });
               }
             }
@@ -3100,16 +3500,24 @@ export const Studio: React.FC = () => {
               }
             }
 
-            // Previne sobreposição de frames
+            // Previne sobreposição de frames sem esmagar nenhum bloco
             for (let i = 0; i < updatedBlocks.length - 1; i++) {
-              if (
-                updatedBlocks[i].frameEnd >= updatedBlocks[i + 1].frameStart
-              ) {
-                updatedBlocks[i].frameEnd = Math.max(
-                  updatedBlocks[i].frameStart,
-                  updatedBlocks[i + 1].frameStart - 1
-                );
+              const cur = updatedBlocks[i];
+              const next = updatedBlocks[i + 1];
+              if (next.frameStart <= cur.frameStart) {
+                next.frameStart = cur.frameStart + 15;
               }
+              if (cur.frameEnd >= next.frameStart) {
+                cur.frameEnd = Math.max(cur.frameStart + 10, next.frameStart - 1);
+                if (cur.frameEnd >= next.frameStart) {
+                  next.frameStart = cur.frameEnd + 1;
+                }
+              }
+              cur.words = ensureSubtitleWordTimings(cur);
+            }
+            if (updatedBlocks.length > 0) {
+              const last = updatedBlocks[updatedBlocks.length - 1];
+              last.words = ensureSubtitleWordTimings(last);
             }
 
             reconciledSubtitles.push(...updatedBlocks);
@@ -3120,10 +3528,22 @@ export const Studio: React.FC = () => {
           }
         }
 
-        // Se não é compatível ou é cena nova, usa os blocos vindos da ElevenLabs
-        reconciledSubtitles.push(...incomingSceneSubs);
+        // Se não é compatível ou é cena nova, usa os blocos vindos da ElevenLabs garantindo sceneIndex e speaker
+        const ensuredSceneSubs = incomingSceneSubs.map((sub) => {
+          const targetScene = scenes[sIdx];
+          const speakerInfo = resolveSpeakerForSubtitle(sub, targetScene);
+          return {
+            ...sub,
+            sceneIndex: sIdx,
+            speaker: speakerInfo.speaker,
+            ...(speakerInfo.characterGender
+              ? { characterGender: speakerInfo.characterGender }
+              : {}),
+          };
+        });
+        reconciledSubtitles.push(...ensuredSceneSubs);
         newSyncedMap[sIdx] = getSceneBlocksSignature(
-          incomingSceneSubs.map((b) => ({ sub: b, globalIndex: 0 }))
+          ensuredSceneSubs.map((b) => ({ sub: b, globalIndex: 0 }))
         );
       });
 
@@ -3135,7 +3555,7 @@ export const Studio: React.FC = () => {
         newSyncedMap,
       };
     },
-    [sceneSubtitleGroups, getSceneBlocksSignature]
+    [sceneSubtitleGroups, getSceneBlocksSignature, scenes]
   );
 
   const handleAddSubtitleBlock = (sceneIdx: number) => {
@@ -3185,11 +3605,18 @@ export const Studio: React.FC = () => {
       newEnd = Math.min(sceneEnd, sceneStart + 30);
     }
 
+    const targetScene = scenes[sceneIdx];
+    const defaultSpeakerInfo = resolveSpeakerForSubtitle({}, targetScene);
+
     const newBlock: SubtitleItem = {
       text: '',
       frameStart: newStart,
       frameEnd: newEnd,
       sceneIndex: sceneIdx,
+      speaker: defaultSpeakerInfo.speaker,
+      ...(defaultSpeakerInfo.characterGender
+        ? { characterGender: defaultSpeakerInfo.characterGender }
+        : {}),
       words: [],
     };
 
@@ -3306,9 +3733,17 @@ export const Studio: React.FC = () => {
           }
         }
       }
+      const targetScene =
+        resolvedSceneIndex !== undefined ? scenes[resolvedSceneIndex] : undefined;
+      const speakerInfo = resolveSpeakerForSubtitle(sub, targetScene);
+
       return {
         ...sub,
         sceneIndex: resolvedSceneIndex,
+        speaker: speakerInfo.speaker,
+        ...(speakerInfo.characterGender
+          ? { characterGender: speakerInfo.characterGender }
+          : {}),
         words: ensureSubtitleWordTimings(sub),
       };
     });
@@ -3354,8 +3789,13 @@ export const Studio: React.FC = () => {
 
     setScenes(synchronizedScenes);
 
+    const currentViralTitle =
+      (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.title || theme || 'Vlog de Viagem no Tempo';
+    const recStoryboard = (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.storyboard;
+
     const payload: TimeMachineVideoProps = {
       theme: theme || 'Vlog de Viagem no Tempo',
+      title: currentViralTitle,
       durationInFrames: totalFrames,
       backgroundSrc: primaryBg,
       backgroundTimeline: assembledBackgroundTimeline,
@@ -3368,6 +3808,12 @@ export const Studio: React.FC = () => {
       subtitles: subtitlesToPersist,
       subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
+      thumbnailUrl:
+        thumbnailConfig?.selectedImage ||
+        (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailUrl,
+      thumbnailConfig:
+        thumbnailConfig ||
+        (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailConfig,
       storyboard: {
         durationPreset,
         scenes: synchronizedScenes,
@@ -3377,10 +3823,15 @@ export const Studio: React.FC = () => {
         avatarConfig,
         ideationOptions,
         bgmVibe: effectiveBgmVibe,
+        thumbnailConfig:
+          thumbnailConfig ||
+          (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailConfig,
         episodeFormat,
         seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
         protagonistAgency,
         contentBalance,
+        narrative_plan: recStoryboard?.narrative_plan,
+        description: recStoryboard?.description,
       },
     };
 
@@ -3390,13 +3841,22 @@ export const Studio: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showErrorToast(data);
+        return;
+      }
+      if (data.video) {
         setVideoRecord(data.video);
       }
       setSuccessMsg('Vídeo montado!');
     } catch (err) {
-      console.warn('Aviso ao persistir montagem no banco:', err);
+      console.error('Erro ao persistir montagem no banco:', err);
+      showErrorToast(
+        err instanceof Error
+          ? err.message
+          : 'Erro ao persistir montagem no banco de dados.'
+      );
     }
   };
 
@@ -4064,7 +4524,7 @@ export const Studio: React.FC = () => {
       <div className="flex h-screen w-screen items-center justify-center bg-[#0f0f11] text-slate-200">
         <div className="flex items-center gap-3 text-sm font-semibold">
           <span className="h-3 w-3 animate-ping rounded-full bg-amber-500" />
-          <span>A carregar Fragata Shorts Studio...</span>
+          <span>FSS - Fragata Short Studio</span>
         </div>
       </div>
     );
@@ -4141,20 +4601,6 @@ export const Studio: React.FC = () => {
             >
               {theme || 'Sem Título'}
             </h1>
-          )}
-
-          {/* Notificação de Erro */}
-          {errorMsg && (
-            <div className="hidden xl:flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1 text-[11px] text-rose-200">
-              <span className="truncate max-w-[240px]">{errorMsg}</span>
-              <button
-                type="button"
-                onClick={() => setErrorMsg(null)}
-                className="text-rose-400 hover:text-white font-bold"
-              >
-                ×
-              </button>
-            </div>
           )}
         </div>
 
@@ -4301,22 +4747,6 @@ export const Studio: React.FC = () => {
             </button>
           </div>
 
-          {/* Feedback Mobile/Tablet */}
-          {errorMsg && (
-            <div className="xl:hidden px-4 pt-3 shrink-0">
-              <div className="flex items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-2 text-xs text-rose-200">
-                <span>{errorMsg}</span>
-                <button
-                  type="button"
-                  onClick={() => setErrorMsg(null)}
-                  className="ml-2 font-bold"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Conteúdo Scrollável da Sidebar */}
           <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
             {/* ==============================================================
@@ -4382,6 +4812,15 @@ export const Studio: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-4 max-h-[calc(100vh-210px)] overflow-y-auto pr-1.5 custom-scrollbar">
+                    {/* Bloco de Capa / Thumbnail do Vídeo (Topo da Aba 2) */}
+                    <ThumbnailCard
+                      videoId={id || ''}
+                      theme={theme}
+                      thumbnailConfig={thumbnailConfig}
+                      onUpdateThumbnailConfig={(newConf) => setThumbnailConfig(newConf)}
+                      resolveAssetSrc={resolveAssetSrc}
+                    />
+
                     {scenes.map((scene, index) => {
                       const isGeneratingImg = Boolean(
                         generatingImageForScene[index]
@@ -5043,97 +5482,264 @@ export const Studio: React.FC = () => {
                         />
                       </div>
 
-                      {/* 4. Paleta de Cores (Cor Principal + Cor de Destaque) */}
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* Cor Principal */}
-                        <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2.5 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-300">
-                              Cor Principal
-                            </span>
-                            <input
-                              type="color"
-                              value={subtitleStyle.primaryColor}
-                              onChange={(e) =>
-                                handleSubtitleStyleChange(
-                                  'primaryColor',
-                                  e.target.value
-                                )
-                              }
-                              className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {['#FFFFFF', '#F8FAFC', '#FEF08A', '#A7F3D0'].map(
-                              (hex) => (
-                                <button
-                                  key={hex}
-                                  type="button"
-                                  onClick={() =>
-                                    handleSubtitleStyleChange(
-                                      'primaryColor',
-                                      hex
-                                    )
-                                  }
-                                  style={{ backgroundColor: hex }}
-                                  className={`h-5 w-5 rounded-full border transition ${
-                                    subtitleStyle.primaryColor.toLowerCase() ===
-                                    hex.toLowerCase()
-                                      ? 'scale-110 border-amber-400 ring-2 ring-amber-400/40'
-                                      : 'border-white/25 opacity-80 hover:opacity-100'
-                                  }`}
-                                />
-                              )
-                            )}
-                          </div>
+                      {/* 4. Paleta de Cores por Personagem (3 Linhas: Protagonista, Narrador, Personagens) */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-semibold text-slate-300">
+                            Cores por Personagem
+                          </label>
+                          <span className="text-[10px] text-slate-500">
+                            Principal / Destaque
+                          </span>
                         </div>
 
-                        {/* Cor de Destaque */}
-                        <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2.5 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-300">
-                              Cor de Destaque
-                            </span>
-                            <input
-                              type="color"
-                              value={subtitleStyle.highlightColor}
-                              onChange={(e) =>
-                                handleSubtitleStyleChange(
-                                  'highlightColor',
-                                  e.target.value
-                                )
-                              }
-                              className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {[
-                              '#FBBF24',
-                              '#22C55E',
-                              '#EF4444',
-                              '#38BDF8',
-                              '#F472B6',
-                            ].map((hex) => (
-                              <button
-                                key={hex}
-                                type="button"
-                                onClick={() =>
-                                  handleSubtitleStyleChange(
-                                    'highlightColor',
-                                    hex
-                                  )
-                                }
-                                style={{ backgroundColor: hex }}
-                                className={`h-5 w-5 rounded-full border transition ${
-                                  subtitleStyle.highlightColor.toLowerCase() ===
-                                  hex.toLowerCase()
-                                    ? 'scale-110 border-white ring-2 ring-amber-400/50'
-                                    : 'border-white/25 opacity-80 hover:opacity-100'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
+                        {/* Linha 1: Protagonista */}
+                        {(() => {
+                          const pair =
+                            subtitleStyle.speakerStyles?.protagonist ||
+                            DEFAULT_SPEAKER_STYLES.protagonist;
+                          return (
+                            <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-red-300">
+                                  <span>🧑</span> Protagonista (Billy)
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  Destaque: <strong className="text-red-400 font-semibold">Vermelho</strong>
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* Cor Principal */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Principal</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {['#FFFFFF', '#FEF08A'].map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange('protagonist', 'primaryColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.primaryColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-amber-400 ring-1 ring-amber-400/50'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.primaryColor}
+                                      onChange={(e) => handleSpeakerColorChange('protagonist', 'primaryColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor principal"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Cor de Destaque */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Destaque</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {['#EF4444', '#FBBF24', '#22C55E'].map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange('protagonist', 'highlightColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.highlightColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-white ring-1 ring-red-400/70'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.highlightColor}
+                                      onChange={(e) => handleSpeakerColorChange('protagonist', 'highlightColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor de destaque"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Linha 2: Narrador */}
+                        {(() => {
+                          const pair =
+                            subtitleStyle.speakerStyles?.narrator ||
+                            DEFAULT_SPEAKER_STYLES.narrator;
+                          return (
+                            <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-300">
+                                  <span>🎙️</span> Narrador
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  Destaque: <strong className="text-amber-400 font-semibold">Amarelo</strong>
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* Cor Principal */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Principal</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {['#FFFFFF', '#FEF08A'].map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange('narrator', 'primaryColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.primaryColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-amber-400 ring-1 ring-amber-400/50'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.primaryColor}
+                                      onChange={(e) => handleSpeakerColorChange('narrator', 'primaryColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor principal"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Cor de Destaque */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Destaque</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {['#FBBF24', '#38BDF8', '#22C55E'].map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange('narrator', 'highlightColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.highlightColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-white ring-1 ring-amber-400/70'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.highlightColor}
+                                      onChange={(e) => handleSpeakerColorChange('narrator', 'highlightColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor de destaque"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Linha 3: Personagens com Segmentação Interna (Tabs Masc/Fem) */}
+                        {(() => {
+                          const activeKey: SpeakerStyleKey =
+                            characterGenderTab === 'male'
+                              ? 'character_male'
+                              : 'character_female';
+                          const pair =
+                            subtitleStyle.speakerStyles?.[activeKey] ||
+                            DEFAULT_SPEAKER_STYLES[activeKey];
+                          return (
+                            <div className="rounded-lg border border-[#2c2c32]/70 bg-[#141418] p-2 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300">
+                                  <span>🎭</span> Personagens
+                                </span>
+                                {/* Tabs / Chips Masc e Fem */}
+                                <div className="flex items-center rounded-md bg-[#1f1f26] p-0.5 border border-white/10">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCharacterGenderTab('male')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition ${
+                                      characterGenderTab === 'male'
+                                        ? 'bg-blue-600/80 text-white shadow'
+                                        : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                  >
+                                    ⚔️ Masc (Azul)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCharacterGenderTab('female')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition ${
+                                      characterGenderTab === 'female'
+                                        ? 'bg-pink-600/80 text-white shadow'
+                                        : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                  >
+                                    👑 Fem (Rosa)
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* Cor Principal */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Principal</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {['#FFFFFF', '#FEF08A'].map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange(activeKey, 'primaryColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.primaryColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-amber-400 ring-1 ring-amber-400/50'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.primaryColor}
+                                      onChange={(e) => handleSpeakerColorChange(activeKey, 'primaryColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor principal"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Cor de Destaque */}
+                                <div className="flex items-center justify-between rounded bg-[#1b1b22] px-2 py-1 border border-white/5">
+                                  <span className="text-[10px] text-slate-400 font-medium">Destaque</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {(characterGenderTab === 'male'
+                                      ? ['#38BDF8', '#3B82F6', '#22C55E']
+                                      : ['#F472B6', '#EC4899', '#A855F7']
+                                    ).map((hex) => (
+                                      <button
+                                        key={hex}
+                                        type="button"
+                                        onClick={() => handleSpeakerColorChange(activeKey, 'highlightColor', hex)}
+                                        style={{ backgroundColor: hex }}
+                                        className={`h-4 w-4 rounded-full border transition ${
+                                          pair.highlightColor.toLowerCase() === hex.toLowerCase()
+                                            ? 'scale-110 border-white ring-1 ring-blue-400/70'
+                                            : 'border-white/20 opacity-75'
+                                        }`}
+                                      />
+                                    ))}
+                                    <input
+                                      type="color"
+                                      value={pair.highlightColor}
+                                      onChange={(e) => handleSpeakerColorChange(activeKey, 'highlightColor', e.target.value)}
+                                      className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0"
+                                      title="Escolher cor de destaque"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* 5. Efeitos de Estilo (Switches: Sombra, Borda Preta, Fundo Translúcido) */}
@@ -5906,6 +6512,75 @@ export const Studio: React.FC = () => {
 
                   {!isAudioMixerCollapsed && (
                     <>
+                      {/* 1. Seletor de Trilha Sonora BGM com Pré-Escuta */}
+                      <div className="space-y-1.5 pb-2 border-b border-[#2c2c32]/60">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                            <span>🎵</span>
+                            <span>Trilha Sonora</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1 min-w-0">
+                            <select
+                              value={effectiveBgmVibe}
+                              onChange={(e) => {
+                                const newVibe = e.target.value as BgmVibe;
+                                setBgmVibe(newVibe);
+                                if (playingSfxPreview === 'bgm-preview') {
+                                  stopSfxPreview();
+                                }
+                              }}
+                              className="w-full rounded-lg border border-[#2c2c32] bg-[#121216] px-2.5 py-2 text-xs font-medium text-slate-200 focus:border-amber-500 focus:outline-none transition truncate"
+                            >
+                              {BGM_VIBE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label.replace(/\s*\(\d+%\)/, '')}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {effectiveBgmVibe !== 'none' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (playingSfxPreview === 'bgm-preview') {
+                                  stopSfxPreview();
+                                } else {
+                                  const selectedOption = BGM_VIBE_OPTIONS.find(
+                                    (b) => b.value === effectiveBgmVibe
+                                  );
+                                  if (selectedOption?.file) {
+                                    handlePlaySfxPreview(
+                                      resolveAssetSrc(selectedOption.file),
+                                      'bgm-preview',
+                                      {
+                                        targetDurationSec: 20.0,
+                                        volume: Math.max(0.25, bgmVolume),
+                                      }
+                                    );
+                                  }
+                                }
+                              }}
+                              title={
+                                playingSfxPreview === 'bgm-preview'
+                                  ? 'Pausar pré-escuta da trilha sonora'
+                                  : 'Ouvir prévia desta trilha sonora'
+                              }
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition active:scale-95 ${
+                                playingSfxPreview === 'bgm-preview'
+                                  ? 'border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse'
+                                  : 'border-white/10 bg-[#16161c] text-slate-300 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-300'
+                              }`}
+                            >
+                              {playingSfxPreview === 'bgm-preview' ? '⏹' : '▶'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Slider: SFX Multiplier */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
@@ -6151,7 +6826,7 @@ export const Studio: React.FC = () => {
                                         handleRemoveCustomSfxSlot(sceneIdx, 'action')
                                       }
                                       onPromote={() =>
-                                        void handlePromoteStoryboardSceneSfx(sceneIdx)
+                                        void handlePromoteStoryboardSceneSfx(sceneIdx, 'action')
                                       }
                                     />
 
@@ -6185,6 +6860,9 @@ export const Studio: React.FC = () => {
                                       onStopPreview={stopSfxPreview}
                                       onRemoveCustom={() =>
                                         handleRemoveCustomSfxSlot(sceneIdx, 'ambient')
+                                      }
+                                      onPromote={() =>
+                                        void handlePromoteStoryboardSceneSfx(sceneIdx, 'ambient')
                                       }
                                     />
                                   </div>
@@ -6930,38 +7608,81 @@ export const Studio: React.FC = () => {
         </div>
       )}
 
-      {/* Toast Flutuante de Sucesso com Efeito de Vôo */}
-      {successToast && (
-        <div
-          key={successToast.id}
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-semibold text-emerald-300 shadow-2xl shadow-black/80 backdrop-blur-md animate-toast-fly pointer-events-auto"
-        >
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-          <span className="text-slate-100">{successToast.text}</span>
-          <button
-            type="button"
-            onClick={() => setSuccessToast(null)}
-            className="ml-2 text-slate-400 hover:text-white transition-colors"
-            title="Fechar notificação"
+      {/* Toasts Flutuantes Empilhados (Sucesso e Erro Detalhado) */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2.5 items-end pointer-events-none">
+        {successToast && (
+          <div
+            key={successToast.id}
+            className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-xs font-semibold text-emerald-300 shadow-2xl shadow-black/80 backdrop-blur-md animate-toast-fly pointer-events-auto"
           >
-            ✕
-          </button>
-        </div>
-      )}
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <span className="text-slate-100">{successToast.text}</span>
+            <button
+              type="button"
+              onClick={() => setSuccessToast(null)}
+              className="ml-2 text-slate-400 hover:text-white transition-colors"
+              title="Fechar notificação"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {errorToast && (
+          <div
+            key={errorToast.id}
+            className="flex max-w-md items-start gap-3 rounded-xl border border-rose-500/40 bg-slate-900/95 p-4 text-xs font-semibold text-rose-300 shadow-2xl shadow-black/80 backdrop-blur-md animate-toast-fly pointer-events-auto"
+          >
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-400 mt-0.5">
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <div className="flex-1 space-y-1">
+              <p className="text-slate-100 font-bold">{errorToast.title}</p>
+              {errorToast.details && errorToast.details.length > 0 && (
+                <ul className="mt-1 space-y-1 text-[11px] font-normal text-slate-300 list-disc list-inside">
+                  {errorToast.details.map((d, dIdx) => (
+                    <li key={`err-detail-${dIdx}`}>{d}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorToast(null)}
+              className="ml-2 text-slate-400 hover:text-white transition-colors"
+              title="Fechar notificação de erro"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

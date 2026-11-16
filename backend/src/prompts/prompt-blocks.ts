@@ -53,13 +53,28 @@ O Billy é um aventureiro curioso, expressivo, com energia caótica e humor SARC
    - Use português brasileiro coloquial, fluído e dinâmico, exatamente como alguém contando um absurdo ou fofoca inacreditável para um amigo.
    - Use contrações e gírias leves do cotidiano: "pra", "tá", "né", "olha só", "peraí", "cara", "sério", "deu ruim", "bizarro".
    - Frases curtas e diretas. Evite construções rebuscadas (proibido usar mesóclise, termos como "outrossim", "portanto", "com efeito" ou vocabulário pedante).
+   - BLACKLIST DE PALAVRAS PROIBIDAS PARA O BILLY (NUNCA USAR NA FALA DO PROTAGONISTA):
+     É TERMINANTEMENTE PROIBIDO o Billy usar termos rebuscados, poéticos, arcaicos ou teatrais como: "alçapões", "ensurdecedores", "babando", "perecer", "destarte", "doravante", "porventura", "outrossim", "portanto", "com efeito", "regozijo", "delírio", "infortúnio", "adentrando", "sucumbir".
+     Substitua SEMPRE por expressões ágeis de pânico cotidiano brasileiro: "o chão de areia cedendo", "veio louco pra cima", "partida ao meio", "deu ruim", "sem ter pra onde correr", "ficou feio", "na raça".
 2. RITMO E REAÇÕES ESPONTÂNEAS:
    - Inclua reações viscerais e cômicas no meio da fala: "Espera aí...", "O quê?!", "Caramba...", "Não, sério mesmo?", "Bom... deu ruim."
    - Quando confrontado com perigo ou erro, a fala deve transmitir desespero cômico ou cara de pau ("Bom, a culpa não foi totalmente minha...").
 3. DINÂMICA EM DUPLA (NARRADOR SÉRIO x BILLY ATRAPALHADO):
-   - "narrator": Estilo documental e voz da razão. Expõe fatos históricos exatos, datas, locais e contexto real com precisão e sobriedade.
-   - "protagonist" (Billy): O protagonista leigo e caótico. Interrompe, questiona o narrador, tira conclusões precipitadas e se mete em apuros físicos na cena.
-   - "character": Personagens de época (generais, imperadores, líderes) falam com pompa histórica ou solenidade de época. O humor surge do choque imediato entre a solenidade histórica e as respostas sarcásticas/rápidas do Billy.
+   - REGRA DE CO-PRESENÇA E DISTRIBUIÇÃO HARMONIOSA (50/50): O Narrador e o Billy devem contracenar juntos em várias cenas ao longo de TODO o roteiro (NUNCA deixe o Narrador confinado apenas à Cena 2!).
+   - Em cenas de desenvolvimento (especialmente abertura, viradas e clímax), utilize a estrutura de bate-bola na mesma cena (array "dialogues"):
+     1) "narrator" (Estilo documental e voz da razão): Expõe o ambiente histórico, os fatos, nomes, locais ou ações de terceiros com precisão e sobriedade (ex: "Cinquenta mil romanos berravam nas arquibancadas sob o calor escaldante...", "Às ordens do imperador, comportas se abriam enquanto se ouviam os rugidos dos predadores.").
+     2) "protagonist" (Billy - protagonista leigo e caótico): Quebra a 4ª parede imediatamente com uma reação visceral, pânico cômico ou comentário em primeira pessoa (ex: "...enquanto dois guerreiros trocavam golpes de espada velozes... e sobrou tudo pra mim!").
+   - "character" (Personagens de época): Generais, imperadores, guardas ou líderes devem dar ordens e falas curtas, imperativas e autoritárias de 5 a 10 palavras (ex: "Não fique parado! Vá varrer toda essa areia!" ou "Atenção! Soltem os leões!"), servindo de gatilho causal imediato para o desespero e a resposta rápida do Billy ("Varrer?! Mas estou só de passagem!" ou "Espera aí... ele mandou soltar quem?!").
+   - REGRA DE OURO DA EXPOSIÇÃO HISTÓRICA — QUEM CONTA OS FATOS:
+     * O BILLY (PROTAGONISTA) NUNCA EXPLICA FATOS OU COSTUMES HISTÓRICOS: O Billy é um viajante leigo contemporâneo que acabou de cair na época histórica. Ele NÃO sabe e NÃO DEVE explicar por que os piratas misturavam rum na água, por que comiam no escuro, por que o imperador fazia tal coisa ou como funcionava uma lei antiga!
+     * PROIBIDO: O Billy dizer falas explicativas/didáticas como: "A água apodrecia, então misturavam rum pra não morrer de escorbuto!" ou "Eles mastigavam no escuro pra não ver a nojeira!".
+     * QUEM CONTA OS FATOS E CURIOSIDADES É SEMPRE:
+       a) O NARRADOR ("narrator"): Com tom documental contextualizando o fato histórico real com sobriedade e precisão (ex: "A água estragava nos barris, e o rum com limão evitava que os dentes caíssem!").
+       b) OU O PERSONAGEM DA ÉPOCA ("character"): Revelando o costume com a naturalidade de quem vive na época ou zombando da ignorância do Billy (ex: "No escuro a gente não vê os vermes se mexendo, novato!").
+     * ESTRUTURA REAÇÃO/ESTRANHAMENTO (BILLY) ➔ EXPLICAÇÃO (NARRADOR OU PERSONAGEM DE ÉPOCA):
+       Sempre que houver uma curiosidade histórica insólita, use esta dobradinha dinâmica:
+       1º) Billy estranha, sente dor, nojo ou faz uma pergunta leiga: "Eca! Aquele pirata tá misturando bebida na água?!" ou "Quase quebrei dois dentes! Por que você tá comendo no escuro?!".
+       2º) Narrador ou Personagem revela o fato histórico: "A água estragava nos barris..." ou "No escuro a gente não vê os vermes, novato!".
 4. RITMO VISUAL ORGÂNICO (ORGANIC PACING):
    - Alterne organicamente entre cenas rápidas de impacto/ação (1 fala direta de 5 a 8 palavras do Billy com corte veloz) e cenas de desenvolvimento em bate-bola com o Narrador (2 a 3 falas de 10 a 16 palavras cada).
    - Respeite rigorosamente a contagem global de palavras calculada para o preset de duração.`;
@@ -99,15 +114,23 @@ bridge_full_sentence = loop_closing_fragment + " " + loop_opening_fragment.
   * loop_opening_fragment: "Napoleão nunca atirou canhões contra a Esfinge!"
   * bridge_full_sentence: "E foi essa gravura de 1737 que provou para os historiadores que Napoleão nunca atirou canhões contra a Esfinge!"
 - "witness_pov":
-  * loop_closing_fragment: "...se você estivesse no meu lugar em 44 antes de Cristo, a única coisa que você veria era"
-  * loop_opening_fragment: "a coroa de César rolando no chão de mármore do Senado!"
-  * bridge_full_sentence: "Se você estivesse no meu lugar em 44 antes de Cristo, a única coisa que você veria era a coroa de César rolando no chão de mármore do Senado!"
+  * Variação A (Momento de Choque / Evento Histórico):
+    - loop_closing_fragment: "...se você estivesse no meu lugar em 44 antes de Cristo, a única coisa que você veria era"
+    - loop_opening_fragment: "a coroa de César rolando no chão de mármore do Senado!"
+    - bridge_full_sentence: "Se você estivesse no meu lugar em 44 antes de Cristo, a única coisa que você veria era a coroa de César rolando no chão de mármore do Senado!"
+  * Variação B (Rotina Diária / 24 Horas / "Um Dia na Pele de..."):
+    - loop_closing_fragment: "...e se você passasse um dia inteiro no navio do Barba Negra, a primeira coisa que você faria era"
+    - loop_opening_fragment: "acordar às cinco da manhã com uma ratazana mordendo o seu cadarço no porão!"
+    - bridge_full_sentence: "E se você passasse um dia inteiro no navio do Barba Negra, a primeira coisa que você faria era acordar às cinco da manhã com uma ratazana mordendo o seu cadarço no porão!"
 - "ticking_clock":
   * loop_closing_fragment: "...e faltando três segundos para a erupção engolir Pompeia, o único reflexo que me restava era"
   * loop_opening_fragment: "correr em direção ao mar antes da cinza cobrir o céu!"
   * bridge_full_sentence: "E faltando três segundos para a erupção engolir Pompeia, o único reflexo que me restava era correr em direção ao mar antes da cinza cobrir o céu!"
 
 4. BLACKLIST RÍGIDA DE ANTI-PADRÕES (DIRETRIZES NEGATIVAS ESTRITAS):
+- PROIBIÇÃO ABSOLUTA DE ONOMATOPEIAS E RUÍDOS ESCRITOS NO TEXTO FALADO:
+  NUNCA coloque onomatopeias, barulhos mecânicos, quebras ou sons de impacto escritos dentro de "text" ou "dialogues[].text" (ex: É EXPRESSAMENTE PROIBIDO escrever "CRAQUE!", "POW!", "BUM!", "BOOM!", "CLANG!", "TCHIBUM!", "CABUM!", "SPLASH!", "VRUM!", "TOC-TOC!", "CRASH!", "BANG!").
+  O sintetizador de voz (TTS) lê essas onomatopeias literalmente em voz alta ("Craque!"), o que destrói a imersão da dublagem! Qualquer som de impacto ou ruído físico DEVE ser colocado exclusivamente no array "sfx_list" da cena como efeito sonoro. No texto falado, o narrador ou personagem deve relatar a ação verbalmente com naturalidade (ex: "A espada partiu minha vassoura ao meio!", e NUNCA "CRAQUE! A espada partiu minha vassoura...").
 - PROIBIÇÃO ABSOLUTA DE PONTUAÇÃO FINAL NA CENA FINAL:
   A última fala da última cena (em "text" e no último item de "dialogues") e o "loop_closing_fragment" NUNCA PODEM TERMINAR COM PONTO FINAL (.), EXCLAMAÇÃO (!), INTERROGAÇÃO (?) OU RETICÊNCIAS (…). Devem terminar na palavra conectiva sem pontuação terminal (ex: "...que provou que" ou "...por que eu estava"). Pontuações forçam o sintetizador de voz (TTS) a decair o tom e criar silêncio, destruindo o loop!
 - PROIBIÇÃO ABSOLUTA DE CTAs:
@@ -134,7 +157,7 @@ O "imagePrompt" e a "visual_description" devem mostrá-lo espiando atrás de col
  */
 export const CONTENT_BALANCE_BLOCKS: Record<ContentBalance, string> = {
   balanced: `DENSIDADE DE CONTEÚDO: EQUILIBRADA (50/50).
-Divida o peso narrativo harmonicamente: ~50% de contextualização histórica documental exposta com clareza pelo Narrador e ~50% de comédia, reações caóticas e comentários do Billy.`,
+Divida o peso narrativo harmonicamente: ~50% de contextualização histórica documental exposta com clareza pelo Narrador e ~50% de comédia, reações caóticas e comentários do Billy. O Narrador e o Billy devem contracenar na mesma cena em múltiplos momentos ao longo do vídeo, mantendo o tom documental e a comédia interligados do início ao clímax.`,
   comedy_action: `DENSIDADE DE CONTEÚDO: FOCO EM COMÉDIA & AÇÃO FÍSICA (~70% Gags / ~30% Fatos).
 Priorize o ritmo veloz de humor físico, gags visuais absurdas, mal-entendidos hilários e efeitos sonoros de impacto (SFX). A contextualização histórica deve ser sucinta e servir de pretexto para o caos e as trapalhadas do Billy.`,
   historical_focus: `DENSIDADE DE CONTEÚDO: FOCO EM CURIOSIDADE HISTÓRICA (~70% Fatos / ~30% Humor).
@@ -269,6 +292,8 @@ export const FEW_SHOT_IDEATION_EXAMPLE = `EXEMPLO FEW-SHOT DA ESTRUTURA DE UMA O
   "badge": "🔍 Quebra de Mito",
   "description": "Desconstrução do boato de Napoleão com gravuras anteriores a 1798.",
   "bgmVibe": "fun",
+  "thumbnail_prompt": "Mixed media 2D/3D illustration, a 2D cartoon stickman protagonist with a smooth round white head, orange messy spiky hair, retro aviator goggles and fluttering red adventurer scarf, looking utterly terrified with wide open eyes pointing towards a giant ancient Egyptian sandstone statue in dramatic golden sunset, cinematic volumetric rim lighting, 9:16 vertical composition.",
+  "thumbnail_title_hook": "NÃO FOI ELE?! 😱",
   "narrative_plan": {
     "architecture_id": "myth_buster",
     "hook_type": "paradox_split",

@@ -16,7 +16,11 @@ import {
   reviewFinalScriptSchema,
   updateVideoTitleSchema,
   uploadSceneImageSchema,
+  generateThumbnailSchema,
+  uploadThumbnailSchema,
+  saveThumbnailConfigSchema,
   type RenderVideoInput,
+  type ThumbnailConfig,
 } from '../schemas/video.schema.ts';
 import {
   renderTimeMachineVideoOnDisk,
@@ -39,6 +43,7 @@ import {
 import {
   generateAllSceneBackgrounds,
   generateSceneBrollImages,
+  generateThumbnailBrollImages,
 } from '../services/imagen.service.ts';
 import {
   deleteCustomSfxFromLibrary,
@@ -384,8 +389,24 @@ export async function generateSceneImagesController(
         : currentStoryboard.scenes;
 
     const updatedScenes = baseScenes.map((scene, idx) => {
-      if (idx !== sceneIndex) return scene;
+      const exScene = currentStoryboard.scenes?.[idx];
+      const existingCandidateImages =
+        Array.isArray(scene.candidateImages) && scene.candidateImages.length > 0
+          ? scene.candidateImages
+          : exScene?.candidateImages || [];
+      const existingSelectedImage =
+        scene.selectedImage || exScene?.selectedImage || null;
+
+      if (idx !== sceneIndex) {
+        return {
+          ...exScene,
+          ...scene,
+          candidateImages: existingCandidateImages,
+          selectedImage: existingSelectedImage,
+        };
+      }
       return {
+        ...exScene,
         ...scene,
         imagePrompt,
         candidateImages: candidateUrls,
@@ -471,7 +492,35 @@ export async function generateAudioController(
     const publicBaseUrl = getPublicBaseUrl();
     const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
 
-    const scriptScenesForTts: ScriptScene[] = scenes.map((s) => ({
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const currentStoryboard = currentProps.storyboard || {
+      durationPreset: 'short' as const,
+      scenes: [],
+      audioGenerated: false,
+      isAssembled: false,
+      sceneTimings: [],
+    };
+
+    const mergedScenes = scenes.map((s, idx) => {
+      const existingScene = currentStoryboard.scenes?.[idx];
+      return {
+        ...existingScene,
+        ...s,
+        dialogues:
+          s.dialogues && s.dialogues.length > 0
+            ? s.dialogues
+            : existingScene?.dialogues && existingScene.dialogues.length > 0
+              ? existingScene.dialogues
+              : s.dialogues || [],
+        candidateImages: s.candidateImages || existingScene?.candidateImages || [],
+        selectedImage:
+          s.selectedImage !== undefined
+            ? s.selectedImage
+            : (existingScene?.selectedImage ?? null),
+      };
+    });
+
+    const scriptScenesForTts: ScriptScene[] = mergedScenes.map((s) => ({
       speaker: s.speaker,
       text: s.text,
       dialogues: s.dialogues,
@@ -488,14 +537,6 @@ export async function generateAudioController(
     );
 
     const cacheBustedAudioUrl = `${narrationResult.audioUrl}?v=${Date.now()}`;
-    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
-    const currentStoryboard = currentProps.storyboard || {
-      durationPreset: 'short' as const,
-      scenes: [],
-      audioGenerated: false,
-      isAssembled: false,
-      sceneTimings: [],
-    };
 
     const updatedProps: RenderVideoInput = {
       ...currentProps,
@@ -506,7 +547,7 @@ export async function generateAudioController(
       avatarTimeline: narrationResult.avatarTimeline,
       storyboard: {
         ...currentStoryboard,
-        scenes,
+        scenes: mergedScenes,
         audioGenerated: true,
         sceneTimings: narrationResult.sceneTimings,
       },
@@ -686,6 +727,18 @@ export async function regenerateDialogueAudioController(
       };
     });
 
+    const updatedBackgroundTimeline = (
+      currentProps.backgroundTimeline || []
+    ).map((seg, idx) => {
+      const timing = narrationResult.sceneTimings[idx];
+      if (!timing) return seg;
+      return {
+        ...seg,
+        frameStart: timing.frameStart,
+        frameEnd: timing.frameEnd,
+      };
+    });
+
     const updatedProps: RenderVideoInput = {
       ...currentProps,
       theme: existingVideo.theme,
@@ -693,6 +746,10 @@ export async function regenerateDialogueAudioController(
       audioSrc: cacheBustedAudioUrl,
       subtitles: narrationResult.subtitles,
       avatarTimeline: narrationResult.avatarTimeline,
+      backgroundTimeline:
+        updatedBackgroundTimeline.length > 0
+          ? updatedBackgroundTimeline
+          : currentProps.backgroundTimeline,
       storyboard: {
         ...currentStoryboard,
         scenes: updatedScenes,
@@ -756,12 +813,81 @@ export async function saveStoryboardController(
       return;
     }
 
+    const existingProps = (existingVideo.remotionProps || {}) as Record<string, unknown>;
+    const incomingProps = parsedBody.data;
+
+    // Merge inteligente do storyboard preservando metadados ricos prévios e imagens
+    const existingStoryboard = (existingProps.storyboard || {}) as Record<string, unknown>;
+    const incomingStoryboard = (incomingProps.storyboard || {}) as Record<string, unknown>;
+
+    const existingScenes = (existingStoryboard.scenes || []) as Array<Record<string, unknown>>;
+    const incomingScenes = (incomingStoryboard.scenes || []) as Array<Record<string, unknown>>;
+
+    const mergedScenes = (incomingScenes.length > 0 ? incomingScenes : existingScenes).map((inScene, idx) => {
+      const exScene = existingScenes[idx] || {};
+      const mergedSfxList =
+        Array.isArray(inScene.sfx_list) && inScene.sfx_list.length > 0
+          ? inScene.sfx_list
+          : Array.isArray(exScene.sfx_list) && (exScene.sfx_list as unknown[]).length > 0
+            ? exScene.sfx_list
+            : [];
+
+      return {
+        ...exScene,
+        ...inScene,
+        candidateImages:
+          Array.isArray(inScene.candidateImages) && inScene.candidateImages.length > 0
+            ? inScene.candidateImages
+            : exScene.candidateImages || [],
+        selectedImage: inScene.selectedImage || exScene.selectedImage || null,
+        imagePrompt: inScene.imagePrompt || exScene.imagePrompt || '',
+        avatarSprite: inScene.avatarSprite || exScene.avatarSprite || '',
+        sfx_prompt:
+          typeof inScene.sfx_prompt === 'string' && inScene.sfx_prompt.trim() !== ''
+            ? inScene.sfx_prompt
+            : (exScene.sfx_prompt as string) || '',
+        sfx_label:
+          typeof inScene.sfx_label === 'string' && inScene.sfx_label.trim() !== ''
+            ? inScene.sfx_label
+            : (exScene.sfx_label as string) || '',
+        sfx_suggestion:
+          typeof inScene.sfx_suggestion === 'string' && inScene.sfx_suggestion.trim() !== ''
+            ? inScene.sfx_suggestion
+            : (exScene.sfx_suggestion as string) || 'none',
+        sfx_list: mergedSfxList,
+        sfx_action: inScene.sfx_action ?? (exScene.sfx_action ?? null),
+        sfx_ambient: inScene.sfx_ambient ?? (exScene.sfx_ambient ?? null),
+      };
+    });
+
+    const mergedStoryboard = {
+      ...existingStoryboard,
+      ...incomingStoryboard,
+      scenes: mergedScenes,
+      narrative_plan:
+        incomingStoryboard.narrative_plan ||
+        existingStoryboard.narrative_plan,
+      description:
+        incomingStoryboard.description || existingStoryboard.description,
+    };
+
+    const mergedProps = {
+      ...existingProps,
+      ...incomingProps,
+      title:
+        incomingProps.title ||
+        existingProps.title ||
+        incomingProps.theme ||
+        existingVideo.theme,
+      storyboard: mergedStoryboard,
+    };
+
     const updatedVideo = await prisma.video.update({
       where: { id },
       data: {
         theme: parsedBody.data.theme,
         status: 'DRAFT',
-        remotionProps: parsedBody.data,
+        remotionProps: mergedProps,
       },
     });
 
@@ -1073,8 +1199,18 @@ export async function getVideoByIdController(
       return;
     }
 
+    let parsedRemotionProps = video.remotionProps;
+    if (typeof parsedRemotionProps === 'string') {
+      try {
+        parsedRemotionProps = JSON.parse(parsedRemotionProps);
+      } catch {
+        /* ignore parsing error */
+      }
+    }
+
     res.status(200).json({
       ...video,
+      remotionProps: parsedRemotionProps,
       renderProgress:
         activeRenderProgressMap[id] ??
         (video.status === 'RENDERED' ? 100 : null),
@@ -1751,5 +1887,266 @@ export async function listSeriesController(
     res
       .status(500)
       .json({ error: 'Erro ao listar séries existentes.', details: msg });
+  }
+}
+
+/**
+ * POST /api/videos/:id/generate-thumbnail
+ * Gera 2 variações de imagem vertical (9:16) para a Thumbnail com IA
+ */
+export async function generateThumbnailController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = generateThumbnailSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para geração de thumbnail',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { prompt } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+
+    const candidateUrls = await generateThumbnailBrollImages(
+      id,
+      prompt,
+      storageVideoDir,
+      publicBaseUrl
+    );
+
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const existingThumbConfig = currentProps.thumbnailConfig || {
+      prompt,
+      titleHook: '',
+      selectedImage: null,
+      candidateImages: [],
+      textConfig: {
+        text: '',
+        fontFamily: 'The Bold Font',
+        fontSize: 64,
+        textColor: '#FACC15',
+        strokeColor: '#000000',
+        strokeWidth: 6,
+        position: 'center' as const,
+      },
+    };
+
+    const updatedThumbConfig: ThumbnailConfig = {
+      ...existingThumbConfig,
+      prompt,
+      candidateImages: candidateUrls,
+      selectedImage: candidateUrls[0] || existingThumbConfig.selectedImage,
+    };
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      thumbnailUrl: updatedThumbConfig.selectedImage,
+      thumbnailConfig: updatedThumbConfig,
+      storyboard: {
+        ...currentProps.storyboard,
+        thumbnailConfig: updatedThumbConfig,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Imagens para Thumbnail geradas com sucesso!',
+      thumbnailConfig: updatedThumbConfig,
+      candidateImages: candidateUrls,
+      selectedImage: updatedThumbConfig.selectedImage,
+      video: updatedVideo,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Generate Thumbnail Error]:', err);
+    res.status(500).json({
+      error: 'Falha ao gerar imagens de Thumbnail.',
+      message: msg,
+    });
+  }
+}
+
+/**
+ * POST /api/videos/:id/upload-thumbnail
+ * Upload de imagem personalizada do computador para a Thumbnail
+ */
+export async function uploadThumbnailController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = uploadThumbnailSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para envio de imagem de thumbnail',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const { imageBase64, fileName } = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const storageVideoDir = path.join(STORAGE_OUTPUT_DIR, id);
+    fs.mkdirSync(storageVideoDir, { recursive: true });
+
+    let ext = 'png';
+    const matchExt = fileName?.match(/\.(jpe?g|png|webp|avif)$/i);
+    if (matchExt) {
+      ext = matchExt[1].toLowerCase().replace('jpeg', 'jpg');
+    }
+
+    const base64Data = imageBase64.replace(/^data:image\/[a-z0-9-+.]+;base64,/i, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const outputFileName = `manual_thumbnail_${Date.now()}.${ext}`;
+    const outputFilePath = path.join(storageVideoDir, outputFileName);
+    fs.writeFileSync(outputFilePath, buffer);
+
+    const publicBaseUrl = getPublicBaseUrl();
+    const publicImageUrl = `${publicBaseUrl}/storage/${id}/${outputFileName}`;
+
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const existingThumbConfig = currentProps.thumbnailConfig || {
+      prompt: '',
+      titleHook: '',
+      selectedImage: null,
+      candidateImages: [],
+      textConfig: {
+        text: '',
+        fontFamily: 'The Bold Font',
+        fontSize: 64,
+        textColor: '#FACC15',
+        strokeColor: '#000000',
+        strokeWidth: 6,
+        position: 'center' as const,
+      },
+    };
+
+    const newCandidates = [publicImageUrl, ...(existingThumbConfig.candidateImages || [])].slice(0, 4);
+    const updatedThumbConfig: ThumbnailConfig = {
+      ...existingThumbConfig,
+      candidateImages: newCandidates,
+      selectedImage: publicImageUrl,
+    };
+
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      thumbnailUrl: publicImageUrl,
+      thumbnailConfig: updatedThumbConfig,
+      storyboard: {
+        ...currentProps.storyboard,
+        thumbnailConfig: updatedThumbConfig,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Thumbnail personalizada enviada com sucesso!',
+      imageUrl: publicImageUrl,
+      thumbnailConfig: updatedThumbConfig,
+      video: updatedVideo,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Upload Thumbnail Error]:', err);
+    res.status(500).json({
+      error: 'Falha ao salvar thumbnail manual.',
+      message: msg,
+    });
+  }
+}
+
+/**
+ * POST /api/videos/:id/thumbnail-config
+ * Salva as configurações de texto, prompt e imagem ativa da Thumbnail
+ */
+export async function saveThumbnailConfigController(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> {
+  const { id } = req.params;
+  const parsedBody = saveThumbnailConfigSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: 'Parâmetros inválidos para salvar configuração de thumbnail',
+      details: parsedBody.error.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  const thumbConfig = parsedBody.data;
+
+  try {
+    const existingVideo = await prisma.video.findUnique({ where: { id } });
+    if (!existingVideo) {
+      res.status(404).json({ error: 'Vídeo não encontrado.' });
+      return;
+    }
+
+    const currentProps = (existingVideo.remotionProps || {}) as RenderVideoInput;
+    const updatedProps: RenderVideoInput = {
+      ...currentProps,
+      thumbnailUrl: thumbConfig.selectedImage || currentProps.thumbnailUrl,
+      thumbnailConfig: thumbConfig,
+      storyboard: {
+        ...currentProps.storyboard,
+        thumbnailConfig: thumbConfig,
+      },
+    };
+
+    const updatedVideo = await prisma.video.update({
+      where: { id },
+      data: {
+        remotionProps: updatedProps,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Configuração da Thumbnail salva com sucesso!',
+      thumbnailConfig: thumbConfig,
+      video: updatedVideo,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[Save Thumbnail Config Error]:', err);
+    res.status(500).json({
+      error: 'Falha ao salvar configurações de thumbnail.',
+      message: msg,
+    });
   }
 }
