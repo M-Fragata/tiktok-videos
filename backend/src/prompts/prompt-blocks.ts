@@ -59,12 +59,16 @@ O Billy é um aventureiro curioso, expressivo, com energia caótica e humor SARC
 2. RITMO E REAÇÕES ESPONTÂNEAS:
    - Inclua reações viscerais e cômicas no meio da fala: "Espera aí...", "O quê?!", "Caramba...", "Não, sério mesmo?", "Bom... deu ruim."
    - Quando confrontado com perigo ou erro, a fala deve transmitir desespero cômico ou cara de pau ("Bom, a culpa não foi totalmente minha...").
-3. DINÂMICA EM DUPLA (NARRADOR SÉRIO x BILLY ATRAPALHADO):
-   - REGRA DE CO-PRESENÇA E DISTRIBUIÇÃO HARMONIOSA (50/50): O Narrador e o Billy devem contracenar juntos em várias cenas ao longo de TODO o roteiro (NUNCA deixe o Narrador confinado apenas à Cena 2!).
-   - Em cenas de desenvolvimento (especialmente abertura, viradas e clímax), utilize a estrutura de bate-bola na mesma cena (array "dialogues"):
-     1) "narrator" (Estilo documental e voz da razão): Expõe o ambiente histórico, os fatos, nomes, locais ou ações de terceiros com precisão e sobriedade (ex: "Cinquenta mil romanos berravam nas arquibancadas sob o calor escaldante...", "Às ordens do imperador, comportas se abriam enquanto se ouviam os rugidos dos predadores.").
-     2) "protagonist" (Billy - protagonista leigo e caótico): Quebra a 4ª parede imediatamente com uma reação visceral, pânico cômico ou comentário em primeira pessoa (ex: "...enquanto dois guerreiros trocavam golpes de espada velozes... e sobrou tudo pra mim!").
-   - "character" (Personagens de época): Generais, imperadores, guardas ou líderes devem dar ordens e falas curtas, imperativas e autoritárias de 5 a 10 palavras (ex: "Não fique parado! Vá varrer toda essa areia!" ou "Atenção! Soltem os leões!"), servindo de gatilho causal imediato para o desespero e a resposta rápida do Billy ("Varrer?! Mas estou só de passagem!" ou "Espera aí... ele mandou soltar quem?!").
+3. DINÂMICA EM DUPLA / TRIO — BATE-BOLA OBRIGATÓRIO DENTRO DE CADA CENA (NARRADOR x BILLY x PERSONAGEM):
+   - REGRA INEGOCIÁVEL DE BATE-BOLA POR CENA: É TERMINANTEMENTE PROIBIDO gerar o roteiro como uma sequência de monólogos isolados (onde uma cena tem só 1 fala do Narrador e a próxima tem só 1 fala do Billy).
+   - Pelo menos 80% a 100% das cenas de cada opção DEVEM conter 2 a 3 falas curtas no array "dialogues" trocando entre locutores diferentes NA MESMA CENA (bate-bola rápido):
+     * Padrão A (Narrador ➔ Billy): O "narrator" contextualiza o fato/perigo histórico com seriedade documental e o "protagonist" (Billy) rebate na mesma cena com pânico cômico, ironia ou quebra da 4ª parede.
+     * Padrão B (Billy ➔ Narrador): O "protagonist" faz uma besteira física ou pergunta leiga e o "narrator" revela imediatamente na mesma cena o fato histórico ou a consequência fatal.
+     * Padrão C (Personagem ➔ Billy / Narrador): O "character" (guarda, vigia, habitante local, líder histórico) dá uma ordem ou alerta curto de 4 a 8 palavras e o "protagonist" responde na lata com desespero ou cara de pau.
+   - COMO SE REFERIR AO BILLY (REGRA OBRIGATÓRIA DE VOCATIVO E NARRAÇÃO):
+     * PELO NARRADOR ("narrator"): Quando o Narrador se referir ao Billy, DEVE usar "nosso protagonista" (ex: "Minutos antes, nosso protagonista só queria gravar um vlog..."), "Billy" ou "ele". É EXPRESSAMENTE PROIBIDO o Narrador chamá-lo de "nosso turista", "o turista" ou "o viajante".
+     * PELOS PERSONAGENS ("character"): Quando um personagem secundário interpela o Billy, DEVE usar chamadas diretas e naturais como "Ei, você aí!", "Ei, você!", "Parado aí!", "Alto lá!" (ex: "Ei, você aí! Fique longe das frestas na pedra!"). É EXPRESSAMENTE PROIBIDO que personagens chamem o Billy de "turista" ou "estrangeiro".
+   - "character" (Personagens de época): Generais, imperadores, guardas ou vigias devem dar ordens e falas curtas, imperativas e autoritárias de 4 a 8 palavras (ex: "Ei, você aí! Longe das frestas na pedra!" ou "Atenção! Soltem os leões!"), servindo de gatilho causal imediato para o desespero e a resposta rápida do Billy ("Relaxa, chefia, é só uma selfie!" ou "Espera aí... ele mandou soltar quem?!").
    - REGRA DE OURO DA EXPOSIÇÃO HISTÓRICA — QUEM CONTA OS FATOS:
      * O BILLY (PROTAGONISTA) NUNCA EXPLICA FATOS OU COSTUMES HISTÓRICOS: O Billy é um viajante leigo contemporâneo que acabou de cair na época histórica. Ele NÃO sabe e NÃO DEVE explicar por que os piratas misturavam rum na água, por que comiam no escuro, por que o imperador fazia tal coisa ou como funcionava uma lei antiga!
      * PROIBIDO: O Billy dizer falas explicativas/didáticas como: "A água apodrecia, então misturavam rum pra não morrer de escorbuto!" ou "Eles mastigavam no escuro pra não ver a nojeira!".
@@ -72,11 +76,11 @@ O Billy é um aventureiro curioso, expressivo, com energia caótica e humor SARC
        a) O NARRADOR ("narrator"): Com tom documental contextualizando o fato histórico real com sobriedade e precisão (ex: "A água estragava nos barris, e o rum com limão evitava que os dentes caíssem!").
        b) OU O PERSONAGEM DA ÉPOCA ("character"): Revelando o costume com a naturalidade de quem vive na época ou zombando da ignorância do Billy (ex: "No escuro a gente não vê os vermes se mexendo, novato!").
      * ESTRUTURA REAÇÃO/ESTRANHAMENTO (BILLY) ➔ EXPLICAÇÃO (NARRADOR OU PERSONAGEM DE ÉPOCA):
-       Sempre que houver uma curiosidade histórica insólita, use esta dobradinha dinâmica:
+       Sempre que houver uma curiosidade histórica insólita, use esta dobradinha dinâmica na mesma cena:
        1º) Billy estranha, sente dor, nojo ou faz uma pergunta leiga: "Eca! Aquele pirata tá misturando bebida na água?!" ou "Quase quebrei dois dentes! Por que você tá comendo no escuro?!".
        2º) Narrador ou Personagem revela o fato histórico: "A água estragava nos barris..." ou "No escuro a gente não vê os vermes, novato!".
-4. RITMO VISUAL ORGÂNICO (ORGANIC PACING):
-   - Alterne organicamente entre cenas rápidas de impacto/ação (1 fala direta de 5 a 8 palavras do Billy com corte veloz) e cenas de desenvolvimento em bate-bola com o Narrador (2 a 3 falas de 10 a 16 palavras cada).
+4. RITMO DE DIÁLOGO ÁGIL (FAST PING-PONG PACING):
+   - Em vez de frases longas de um único locutor, divida a cena em 2 falas curtas e ágeis (ex: 6 a 9 palavras para o Narrador/Personagem + 6 a 9 palavras para o Billy, totalizando 12 a 17 palavras na cena).
    - Respeite rigorosamente a contagem global de palavras calculada para o preset de duração.`;
 
 /**

@@ -150,9 +150,8 @@ export const Subtitles: React.FC<SubtitlesProps> = ({
       ? interpolate(wordPopProgress, [0, 1], [0.76, 1.05])
       : interpolate(blockPopProgress, [0, 1], [0.82, 1]);
 
-  const opacity = interpolate(blockRelativeFrame, [0, 4], [0, 1], {
-    extrapolateRight: 'clamp',
-  });
+  // Opacidade instantânea (100% no frame 0) para casar perfeitamente com o ataque vocal sem delay visual
+  const opacity = 1;
 
   const strokeWidthPx = styleConfig.hasStroke
     ? Math.max(4, Math.round(styleConfig.fontSize * 0.15))

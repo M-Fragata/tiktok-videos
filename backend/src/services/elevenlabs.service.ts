@@ -532,12 +532,18 @@ function buildSubtitlesFromWords(
     const startSecond = chunk[0].startSecond;
     const endSecond = chunk[chunk.length - 1].endSecond;
 
-    const frameStart = Math.floor(startSecond * FPS);
+    // Calibração de Sincronia: antecipa 10 frames (~333ms) para casar o impacto visual da legenda
+    // e o realce das palavras no karaokê com a percepção acústica do espectador
+    const SUBTITLE_LEAD_IN_FRAMES = 10;
+    const rawFrameStart = Math.floor(startSecond * FPS);
+    const frameStart = Math.max(0, rawFrameStart - SUBTITLE_LEAD_IN_FRAMES);
     const frameEnd = Math.max(frameStart + 1, Math.ceil(endSecond * FPS));
 
     const wordTimings: SubtitleWordTiming[] = chunk.map((w) => {
-      const wStart = Math.floor(w.startSecond * FPS);
-      const wEnd = Math.max(wStart + 1, Math.ceil(w.endSecond * FPS));
+      const wRawStart = Math.floor(w.startSecond * FPS);
+      const wRawEnd = Math.ceil(w.endSecond * FPS);
+      const wStart = Math.max(0, wRawStart - SUBTITLE_LEAD_IN_FRAMES);
+      const wEnd = Math.max(wStart + 1, wRawEnd - SUBTITLE_LEAD_IN_FRAMES);
       return {
         word: w.word,
         frameStart: wStart,

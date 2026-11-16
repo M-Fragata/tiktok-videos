@@ -193,6 +193,8 @@ export async function generateScriptController(
       badge: opt.badge,
       description: opt.description,
       bgmVibe: opt.bgmVibe || 'epic',
+      thumbnail_prompt: opt.thumbnail_prompt,
+      thumbnail_title_hook: opt.thumbnail_title_hook,
       narrative_plan: opt.narrative_plan,
       scenes: opt.scenes.map((scene, sIdx) => {
         const dialogues =
@@ -871,9 +873,16 @@ export async function saveStoryboardController(
         incomingStoryboard.description || existingStoryboard.description,
     };
 
+    // Preserva audioSrc real se o incoming for vazio ou o fallback fictício 'audio.mp3'
+    const resolvedAudioSrc =
+      incomingProps.audioSrc && incomingProps.audioSrc !== 'audio.mp3'
+        ? incomingProps.audioSrc
+        : (existingProps.audioSrc as string) || incomingProps.audioSrc || 'audio.mp3';
+
     const mergedProps = {
       ...existingProps,
       ...incomingProps,
+      audioSrc: resolvedAudioSrc,
       title:
         incomingProps.title ||
         existingProps.title ||
@@ -1199,12 +1208,28 @@ export async function getVideoByIdController(
       return;
     }
 
-    let parsedRemotionProps = video.remotionProps;
+    let parsedRemotionProps = video.remotionProps as Record<string, unknown> | null;
     if (typeof parsedRemotionProps === 'string') {
       try {
         parsedRemotionProps = JSON.parse(parsedRemotionProps);
       } catch {
         /* ignore parsing error */
+      }
+    }
+
+    // Auto-recupera audioSrc caso aponte para o fallback fictício mas o arquivo real exista em storage/<id>/audio.mp3
+    if (
+      parsedRemotionProps &&
+      (!parsedRemotionProps.audioSrc || parsedRemotionProps.audioSrc === 'audio.mp3')
+    ) {
+      const diskAudioPath = path.join(STORAGE_OUTPUT_DIR, id, 'audio.mp3');
+      if (fs.existsSync(diskAudioPath)) {
+        const publicBaseUrl = getPublicBaseUrl(req);
+        const mtime = fs.statSync(diskAudioPath).mtimeMs;
+        parsedRemotionProps = {
+          ...parsedRemotionProps,
+          audioSrc: `${publicBaseUrl}/storage/${id}/audio.mp3?v=${Math.round(mtime)}`,
+        };
       }
     }
 

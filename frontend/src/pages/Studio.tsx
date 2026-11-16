@@ -441,6 +441,8 @@ export const Studio: React.FC = () => {
   const [syncedSceneBlocksMap, setSyncedSceneBlocksMap] = useState<
     Record<number, string>
   >({});
+  const [isSynchronizingAllSubtitles, setIsSynchronizingAllSubtitles] =
+    useState<boolean>(false);
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(
     DEFAULT_SUBTITLE_STYLE
   );
@@ -3033,6 +3035,21 @@ export const Studio: React.FC = () => {
         return currentList.filter((_, idx) => !sceneBlockIndexes.includes(idx));
       }
 
+      const sceneTiming = sceneTimings[sceneIdx];
+      const bgSegment = effectiveBackgroundTimeline[sceneIdx];
+      const sceneStartFrame = bgSegment
+        ? bgSegment.frameStart
+        : sceneTiming
+          ? sceneTiming.frameStart
+          : 0;
+      const maxAllowedSceneEnd = bgSegment
+        ? bgSegment.frameEnd
+        : sceneTiming?.frameEnd;
+      const sceneEndFrame =
+        maxAllowedSceneEnd ??
+        sceneTiming?.frameEnd ??
+        normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
+
       let masterPointer = 0;
       const updatedSceneBlocks: SubtitleItem[] = [];
 
@@ -3066,8 +3083,13 @@ export const Studio: React.FC = () => {
 
           if (matchedIdx >= 0) {
             const mw = normalizedMasterWords[matchedIdx];
+            // Restaura palavra completa caso o texto do bloco estivesse truncado/cortado
+            const resolvedWord =
+              mw.norm.startsWith(normW) && mw.norm.length > normW.length
+                ? mw.word
+                : rawW;
             assignedWords.push({
-              word: rawW,
+              word: resolvedWord,
               frameStart: mw.frameStart,
               frameEnd: mw.frameEnd,
             });
@@ -3106,6 +3128,22 @@ export const Studio: React.FC = () => {
         }
 
         if (assignedWords.length > 0) {
+          // Calibração de Sincronia: antecipa 10 frames (~333ms) em todas as palavras e no bloco
+          // para casar a leitura visual e o realce do karaokê com o ataque vocal acústico
+          const SUBTITLE_LEAD_IN_FRAMES = 10;
+          const minAllowedStart = sceneStartFrame ?? 0;
+          assignedWords.forEach((w) => {
+            const calibratedWordStart = Math.max(
+              minAllowedStart,
+              w.frameStart - SUBTITLE_LEAD_IN_FRAMES
+            );
+            const calibratedWordEnd = Math.max(
+              calibratedWordStart + 1,
+              w.frameEnd - SUBTITLE_LEAD_IN_FRAMES
+            );
+            w.frameStart = calibratedWordStart;
+            w.frameEnd = calibratedWordEnd;
+          });
           const blockStart = assignedWords[0].frameStart;
           const blockEnd = Math.max(
             blockStart + 1,
@@ -3113,15 +3151,16 @@ export const Studio: React.FC = () => {
           );
 
           const targetScene = scenes[sceneIdx];
+          const restoredText = assignedWords.map((w) => w.word).join(' ');
           const blockSpeakerInfo = resolveSpeakerForSubtitle(
-            { ...block, text: rawWords.join(' ') },
+            { ...block, text: restoredText },
             targetScene
           );
 
           updatedSceneBlocks.push({
             frameStart: blockStart,
             frameEnd: blockEnd,
-            text: rawWords.join(' '),
+            text: restoredText,
             words: assignedWords,
             sceneIndex: sceneIdx,
             speaker: blockSpeakerInfo.speaker,
@@ -3133,20 +3172,6 @@ export const Studio: React.FC = () => {
       }
 
       // Estende cada bloco confortavelmente até o início do próximo bloco ou até o fim da fala da cena
-      const sceneTiming = sceneTimings[sceneIdx];
-      const bgSegment = effectiveBackgroundTimeline[sceneIdx];
-      const sceneStartFrame = bgSegment
-        ? bgSegment.frameStart
-        : sceneTiming
-          ? sceneTiming.frameStart
-          : updatedSceneBlocks[0]?.frameStart ?? 0;
-      const maxAllowedSceneEnd = bgSegment
-        ? bgSegment.frameEnd
-        : sceneTiming?.frameEnd;
-      const sceneEndFrame =
-        maxAllowedSceneEnd ??
-        sceneTiming?.frameEnd ??
-        normalizedMasterWords[normalizedMasterWords.length - 1]?.frameEnd;
 
       // Detecta anomalia de tempo (blocos colidindo no mesmo frameStart, frameEnd <= frameStart ou ordem invertida)
       const hasTimingAnomaly = updatedSceneBlocks.some((b, i) => {
@@ -3300,6 +3325,91 @@ export const Studio: React.FC = () => {
     setSuccessMsg('Legenda sincronizada com o áudio da cena!');
   };
 
+  const handleSynchronizeAllScenesSubtitles = async () => {
+    setIsSynchronizingAllSubtitles(true);
+    try {
+      const currentList = subtitles.length > 0 ? subtitles : effectiveSubtitles;
+      if (currentList.length === 0) {
+        showErrorToast({ message: 'Nenhuma legenda encontrada para sincronizar.' });
+        return;
+      }
+
+      // 1. Remove blocos vazios (ex: bloco #4 vazio deixado pelo usuário)
+      let cleanedList = currentList.filter(
+        (sub) => sub.text && sub.text.trim().length > 0
+      );
+
+      // 2. Executa a sincronização cena por cena
+      for (let sIdx = 0; sIdx < scenes.length; sIdx++) {
+        cleanedList = performSceneSubtitlesSync(sIdx, cleanedList);
+      }
+
+      // 3. Garante ordenação cronológica estrita e de-overlap
+      cleanedList.sort((a, b) => a.frameStart - b.frameStart);
+      for (let i = 0; i < cleanedList.length - 1; i++) {
+        const cur = cleanedList[i];
+        const next = cleanedList[i + 1];
+        if (next.frameStart <= cur.frameStart) {
+          next.frameStart = cur.frameStart + 12;
+        }
+        if (cur.frameEnd >= next.frameStart) {
+          cur.frameEnd = Math.max(cur.frameStart + 8, next.frameStart - 1);
+        }
+        cur.words = ensureSubtitleWordTimings(cur);
+      }
+      if (cleanedList.length > 0) {
+        const last = cleanedList[cleanedList.length - 1];
+        last.words = ensureSubtitleWordTimings(last);
+      }
+
+      // 4. Atualiza estado local
+      setSubtitles(cleanedList);
+
+      // 5. Atualiza o mapa de assinaturas de todas as cenas para marcar como sincronizadas
+      const updatedSyncedMap: Record<number, string> = {};
+      scenes.forEach((_, sIdx) => {
+        const sceneTiming = sceneTimings[sIdx];
+        const frameStartThreshold = sceneTiming ? sceneTiming.frameStart : 0;
+        const frameEndThreshold = sceneTiming ? sceneTiming.frameEnd : Infinity;
+        const sceneSubs = cleanedList.filter(
+          (s) =>
+            s.frameStart >= frameStartThreshold && s.frameStart <= frameEndThreshold
+        );
+        updatedSyncedMap[sIdx] = getSceneBlocksSignature(
+          sceneSubs.map((sub) => ({ sub, globalIndex: 0 }))
+        );
+      });
+      setSyncedSceneBlocksMap(updatedSyncedMap);
+
+      // 6. Persiste no banco de dados
+      if (id) {
+        await fetch(`/api/videos/${id}/storyboard`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            theme: theme || 'Sem tema',
+            audioSrc: audioSrc && audioSrc !== 'audio.mp3' ? audioSrc : undefined,
+            subtitles: cleanedList,
+          }),
+        });
+      }
+
+      setSuccessMsg(
+        `✓ ${cleanedList.length} blocos sincronizados com precisão acústica (-2f calibração e limpeza de vazios)!`
+      );
+    } catch (err: unknown) {
+      console.error('[Sync All Subtitles Error]', err);
+      showErrorToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Erro ao sincronizar todas as legendas',
+      });
+    } finally {
+      setIsSynchronizingAllSubtitles(false);
+    }
+  };
+
   /**
    * Reconcilia as legendas retornadas pela ElevenLabs com os blocos de legenda existentes,
    * preservando a organização de quebras e blocos customizados pelo usuário na Aba Legendas.
@@ -3417,8 +3527,13 @@ export const Studio: React.FC = () => {
 
                 if (matchedIdx >= 0) {
                   const mw = normalizedMaster[matchedIdx];
+                  // Restaura palavra completa caso o texto do bloco estivesse truncado/cortado
+                  const resolvedWord =
+                    mw.norm.startsWith(normW) && mw.norm.length > normW.length
+                      ? mw.word
+                      : rawW;
                   assignedWords.push({
-                    word: rawW,
+                    word: resolvedWord,
                     frameStart: mw.frameStart,
                     frameEnd: mw.frameEnd,
                   });
@@ -3456,20 +3571,37 @@ export const Studio: React.FC = () => {
               }
 
               if (assignedWords.length > 0) {
+                // Calibração de Sincronia: antecipa 10 frames (~333ms) em todas as palavras e no bloco
+                // para casar a leitura visual e o realce do karaokê com o ataque vocal acústico
+                const SUBTITLE_LEAD_IN_FRAMES = 10;
+                const minAllowedStart = timing.frameStart;
+                assignedWords.forEach((w) => {
+                  const calibratedWordStart = Math.max(
+                    minAllowedStart,
+                    w.frameStart - SUBTITLE_LEAD_IN_FRAMES
+                  );
+                  const calibratedWordEnd = Math.max(
+                    calibratedWordStart + 1,
+                    w.frameEnd - SUBTITLE_LEAD_IN_FRAMES
+                  );
+                  w.frameStart = calibratedWordStart;
+                  w.frameEnd = calibratedWordEnd;
+                });
                 const bStart = assignedWords[0].frameStart;
                 const bEnd = Math.max(
                   bStart + 1,
                   assignedWords[assignedWords.length - 1].frameEnd
                 );
                 const targetScene = scenes[sIdx];
+                const restoredText = assignedWords.map((w) => w.word).join(' ');
                 const blockSpeakerInfo = resolveSpeakerForSubtitle(
-                  { ...block, text: rawWords.join(' ') },
+                  { ...block, text: restoredText },
                   targetScene
                 );
                 updatedBlocks.push({
                   frameStart: bStart,
                   frameEnd: bEnd,
-                  text: rawWords.join(' '),
+                  text: restoredText,
                   words: assignedWords,
                   sceneIndex: sIdx,
                   speaker: blockSpeakerInfo.speaker,
@@ -5916,6 +6048,21 @@ export const Studio: React.FC = () => {
                         </div>
                       ) : (
                         <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1.5 custom-scrollbar">
+                          {/* Botão Sincronizar Legenda/Voz (w-full acima da cena #1) */}
+                          <button
+                            type="button"
+                            onClick={handleSynchronizeAllScenesSubtitles}
+                            disabled={isSynchronizingAllSubtitles}
+                            className="w-full mb-2 flex items-center justify-center rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 border border-amber-500/35 px-4 py-2.5 text-xs font-bold text-amber-300 hover:from-amber-500/30 hover:to-orange-500/25 hover:border-amber-500/60 hover:text-white transition-all shadow-sm active:scale-[0.99] disabled:opacity-50 select-none cursor-pointer"
+                            title="Audita todas as legendas, remove blocos vazios, restaura falas cortadas e calibra os tempos com o áudio"
+                          >
+                            <span>
+                              {isSynchronizingAllSubtitles
+                                ? 'Sincronizando...'
+                                : 'Sincronizar Legenda/Voz'}
+                            </span>
+                          </button>
+
                           {sceneSubtitleGroups.map((group) => {
                             const isCollapsed =
                               collapsedSubtitleScenes[group.sceneIndex] !== undefined

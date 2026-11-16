@@ -209,17 +209,20 @@ DIRETRIZES DE TRILHA SONORA (BGM) E DESIGN DE SOM (SFX):
 ${systemPromptPart}
 
 DIRETRIZES DE DIÁLOGOS E INTERAÇÃO MULTI-VOZ POR CENA ("dialogues"):
-Na nossa arquitetura, cada cena pode conter UMA FALA DIRETA ou UMA INTERAÇÃO ENTRE PERSONAGENS (1 a 3 falas sequenciais no array "dialogues").
-1. DECISÃO ORGÂNICA / CONTEXTUAL:
-   - Cenas com 1 fala única: Quando um personagem narra ou expressa um pensamento contínuo.
-     Exemplo: dialogues: [{ "speaker": "protagonist", "text": "..." }]
-   - Cenas com Diálogo / Interação (2 a 3 falas): Quando a cena pede um confronto, réplica, pergunta e resposta ou comentário irônico.
-     Qualquer combinação entre "protagonist", "character" e "narrator" é bem-vinda (Protagonista x Personagem, Personagem x Personagem, ou Protagonista x Narrador pontuando).
-     Exemplo:
+Na nossa arquitetura, cada cena DEVE priorizar o BATE-BOLA DINÂMICO ENTRE PERSONAGENS (2 a 3 falas sequenciais no array "dialogues" dentro da mesma cena).
+1. REGRA PADRÃO DE BATE-BOLA POR CENA (80% A 100% DAS CENAS):
+   - Cenas com Diálogo / Interação (2 a 3 falas na mesma cena): É o formato padrão obrigatório! Cada cena deve combinar locutores diferentes interagindo ("narrator" + "protagonist", "protagonist" + "narrator", "character" + "protagonist", ou "narrator" + "character" + "protagonist").
+     Exemplo 1 (Narrador + Billy):
        dialogues: [
-         { "speaker": "protagonist", "text": "Espera aí... foram vocês mesmos que quebraram a estátua?!" },
-         { "speaker": "character", "text": "Ninguém tocou nela! Foi um tiro de canhão perdido das tropas de Napoleão!" }
+         { "speaker": "narrator", "text": "Por milênios, entradas secretas atraíram saqueadores que nunca voltaram." },
+         { "speaker": "protagonist", "text": "Opa, achei uma fresta escura! O ângulo vai ficar perfeito!" }
        ]
+     Exemplo 2 (Personagem + Billy):
+       dialogues: [
+         { "speaker": "character", "characterName": "Vigia de Gizé", "voiceId": "N2lVS1w4EtoT3dr4eOWO", "text": "Ei, você aí! Fique longe das frestas na pedra!" },
+         { "speaker": "protagonist", "text": "Relaxa, chefia, é só um take rapidinho na sombra!" }
+       ]
+   - Cenas com 1 fala única (Exceção pontual, máx. 1 ou 2 cenas no vídeo): Apenas na abertura de 1 frase rápida se necessário, mas mesmo na abertura e no clímax prefira dividir a cena em 2 falas (ex: Narrador prepara a ação e o Billy fecha com o gancho do loop).
 2. RITMO E LIMITE DE PALAVRAS:
    - A divisão de palavras entre as falas do diálogo é livre pelo roteirista para soar natural, mas a soma de todas as falas de todas as cenas da opção DEVE obrigatoriamente respeitar o piso e teto global (${durationRule.minWords} a ${durationRule.maxWords} palavras).
 3. INTERAÇÃO VISUAL OBRIGATÓRIA NO "imagePrompt" E "visual_description":

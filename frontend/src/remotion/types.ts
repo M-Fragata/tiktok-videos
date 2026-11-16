@@ -949,17 +949,26 @@ export const ensureSubtitleWordTimings = (
   }
 
   if (item.words && item.words.length === rawWords.length) {
-    const isMatching = item.words.every(
+    const existingWords = item.words;
+    const isMatching = existingWords.every(
       (w, idx) =>
         normalizeSubtitleTextForMatching(w.word) ===
         normalizeSubtitleTextForMatching(rawWords[idx])
     );
     const boundsMatch =
-      item.words[0]?.frameStart === item.frameStart &&
-      item.words[item.words.length - 1]?.frameEnd === item.frameEnd;
+      existingWords[0]?.frameStart === item.frameStart &&
+      existingWords[existingWords.length - 1]?.frameEnd === item.frameEnd;
 
-    if (isMatching && boundsMatch) {
-      return item.words;
+    if (isMatching) {
+      if (boundsMatch) {
+        return existingWords;
+      }
+      // Preserva os timestamps acústicos reais da ElevenLabs ajustando com precisão as bordas do bloco
+      return existingWords.map((w, idx) => ({
+        ...w,
+        frameStart: idx === 0 ? item.frameStart : Math.max(item.frameStart, w.frameStart),
+        frameEnd: idx === existingWords.length - 1 ? item.frameEnd : Math.min(item.frameEnd, w.frameEnd),
+      }));
     }
   }
 

@@ -418,7 +418,7 @@ export const renderVideoSchema = z.object({
   durationInFrames: z.number().int().min(30).max(5400).optional(),
   backgroundSrc: z.string().optional().default('background.jpg'),
   backgroundTimeline: z.array(backgroundSegmentSchema).optional(),
-  audioSrc: z.string().optional().default('audio.mp3'),
+  audioSrc: z.string().optional(),
   bgmVibe: bgmVibeSchema.optional().default('epic'),
   bgmVolume: z.number().min(0).max(1).optional().default(0.1),
   sfxEnabled: z.boolean().optional().default(true),
