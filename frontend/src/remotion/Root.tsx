@@ -10,6 +10,11 @@ export const RemotionRoot: React.FC = () => {
         id="TimeMachineVideo"
         component={TimeMachineVideo}
         durationInFrames={450}
+        calculateMetadata={({ props }) => {
+          return {
+            durationInFrames: props.durationInFrames || 450,
+          };
+        }}
         fps={30}
         width={1080}
         height={1920}

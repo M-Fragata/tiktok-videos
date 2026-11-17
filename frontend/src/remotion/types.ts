@@ -780,6 +780,17 @@ export interface ThumbnailTextConfig {
   yPercent?: number; // 0 a 100% (padrão 50)
 }
 
+export const AVAILABLE_THUMBNAIL_FONTS = [
+  { id: 'Komika Axis', label: 'Komika Axis (Estilo HQ / Padrão)', family: '"Komika Axis", Impact, sans-serif', weight: 'normal' },
+  { id: 'The Bold Font', label: 'The Bold Font (Impactante)', family: '"The Bold Font", Impact, sans-serif', weight: 'bold' },
+  { id: 'Impact', label: 'Impact (Clássico Memes / Shorts)', family: 'Impact, sans-serif', weight: 'normal' },
+  { id: 'Montserrat', label: 'Montserrat 900 (Moderno)', family: '"Montserrat", sans-serif', weight: '900' },
+  { id: 'Anton', label: 'Anton (Vertical Condensado)', family: '"Anton", sans-serif', weight: 'normal' },
+  { id: 'Bebas Neue', label: 'Bebas Neue (Cinematográfico)', family: '"Bebas Neue", sans-serif', weight: 'normal' },
+  { id: 'Russo One', label: 'Russo One (Gamer / Épico)', family: '"Russo One", sans-serif', weight: 'normal' },
+  { id: 'Luckiest Guy', label: 'Luckiest Guy (Cartoon Divertido)', family: '"Luckiest Guy", cursive', weight: 'normal' },
+];
+
 export interface ThumbnailConfig {
   prompt?: string;
   titleHook?: string;

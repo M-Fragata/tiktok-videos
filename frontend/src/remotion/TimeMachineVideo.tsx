@@ -1,10 +1,11 @@
 import React from 'react';
-import { AbsoluteFill } from 'remotion';
+import { AbsoluteFill, Sequence, useVideoConfig } from 'remotion';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { AudioTrack } from './components/AudioTrack';
 import { Avatar } from './components/Avatar';
 import { Subtitles } from './components/Subtitles';
 import { TitleBadge } from './components/TitleBadge';
+import { ThumbnailIntro } from './components/ThumbnailIntro';
 import {
   DEFAULT_AVATAR_TIMELINE,
   DEFAULT_BACKGROUND_TIMELINE,
@@ -28,42 +29,70 @@ export const TimeMachineVideo: React.FC<TimeMachineVideoProps> = ({
   avatarTimeline = DEFAULT_AVATAR_TIMELINE,
   showAvatarOverlay = false,
   storyboard,
+  thumbnailUrl,
+  thumbnailConfig,
 }) => {
+  const { fps } = useVideoConfig();
+
+  const effectiveThumbnailSrc =
+    thumbnailUrl ||
+    thumbnailConfig?.selectedImage ||
+    storyboard?.thumbnailConfig?.selectedImage;
+
+  const effectiveThumbnailConfig =
+    thumbnailConfig || storyboard?.thumbnailConfig;
+
+  // Cena #0: Capa / Thumbnail nos primeiros 0.5s (15 frames a 30 FPS)
+  const introDurationFrames = effectiveThumbnailSrc ? Math.round(fps * 0.5) : 0;
+
   const effectiveBgmVibe = bgmVibe || storyboard?.bgmVibe || 'epic';
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000000' }}>
-      {/* Camada 1: Cenários dinâmicos com Movimento Matemático Ken Burns (index % 4) */}
-      <AnimatedBackground
-        src={backgroundSrc}
-        backgroundTimeline={backgroundTimeline}
-        theme={theme}
-      />
+      {/* Camada 0: Cena #0 (Capa / Thumbnail) exibida nos primeiros 0.5s */}
+      {effectiveThumbnailSrc && introDurationFrames > 0 && (
+        <Sequence from={0} durationInFrames={introDurationFrames}>
+          <ThumbnailIntro
+            imageSrc={effectiveThumbnailSrc}
+            textConfig={effectiveThumbnailConfig?.textConfig}
+          />
+        </Sequence>
+      )}
 
-      {/* Camada 2: Design de Som (Narração + Música de Fundo em Loop 10% + SFX por cena) */}
-      <AudioTrack
-        src={audioSrc}
-        bgmVibe={effectiveBgmVibe}
-        bgmVolume={bgmVolume}
-        sfxEnabled={sfxEnabled}
-        globalSfxMultiplier={globalSfxMultiplier}
-        autoDucking={autoDucking}
-        backgroundTimeline={backgroundTimeline}
-        scenes={storyboard?.scenes}
-      />
+      {/* Conteúdo Principal do Vídeo (Cena #1 em diante), deslocado por 0.5s se houver Cena #0 */}
+      <Sequence from={introDurationFrames}>
+        {/* Camada 1: Cenários dinâmicos com Movimento Matemático Ken Burns (index % 4) */}
+        <AnimatedBackground
+          src={backgroundSrc}
+          backgroundTimeline={backgroundTimeline}
+          theme={theme}
+        />
 
-      {/* Camada 3: Overlay opcional do Avatar 2D (desativado por padrão pois o personagem já está integrado na cena Mixed Media) */}
-      {showAvatarOverlay && <Avatar timeline={avatarTimeline} />}
+        {/* Camada 2: Design de Som (Narração + Música de Fundo em Loop 10% + SFX por cena) */}
+        <AudioTrack
+          src={audioSrc}
+          bgmVibe={effectiveBgmVibe}
+          bgmVolume={bgmVolume}
+          sfxEnabled={sfxEnabled}
+          globalSfxMultiplier={globalSfxMultiplier}
+          autoDucking={autoDucking}
+          backgroundTimeline={backgroundTimeline}
+          scenes={storyboard?.scenes}
+        />
 
-      {/* Camada 4: Legendas dinâmicas customizáveis (Karaokê, Pop TikTok ou Hormozi) */}
-      <Subtitles
-        subtitles={subtitles}
-        subtitleStyle={subtitleStyle}
-        scenes={storyboard?.scenes}
-      />
+        {/* Camada 3: Overlay opcional do Avatar 2D (desativado por padrão pois o personagem já está integrado na cena Mixed Media) */}
+        {showAvatarOverlay && <Avatar timeline={avatarTimeline} />}
 
-      {/* Camada 5: Badge do título viral (Pop Elástico + Zoom Out Fade nos primeiros 4s / 120 frames) */}
-      <TitleBadge theme={theme} durationInFrames={120} />
+        {/* Camada 4: Legendas dinâmicas customizáveis (Karaokê, Pop TikTok ou Hormozi) */}
+        <Subtitles
+          subtitles={subtitles}
+          subtitleStyle={subtitleStyle}
+          scenes={storyboard?.scenes}
+        />
+
+        {/* Camada 5: Badge do título viral (Pop Elástico + Zoom Out Fade nos primeiros 4s / 120 frames) */}
+        <TitleBadge theme={theme} durationInFrames={120} />
+      </Sequence>
     </AbsoluteFill>
   );
 };

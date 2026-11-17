@@ -2631,12 +2631,30 @@ export const Studio: React.FC = () => {
     simulatedRenderProgress,
   ]);
 
-  const effectiveTotalFrames = useMemo(() => {
+  // Cena #0: Capa / Thumbnail do Vídeo (0.5s = 15 frames a 30 FPS)
+  const effectiveThumbnailSrc = useMemo(() => {
+    return (
+      thumbnailConfig?.selectedImage ||
+      (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailUrl ||
+      (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailConfig?.selectedImage ||
+      null
+    );
+  }, [thumbnailConfig, videoRecord?.remotionProps]);
+
+  const thumbnailIntroFrames = useMemo(() => {
+    return effectiveThumbnailSrc ? 15 : 0;
+  }, [effectiveThumbnailSrc]);
+
+  const baseTotalFrames = useMemo(() => {
     if (durationInFrames && durationInFrames > 0) return durationInFrames;
     if (durationPreset === 'long') return 1800;
     if (durationPreset === 'medium') return 900;
     return 450;
   }, [durationInFrames, durationPreset]);
+
+  const effectiveTotalFrames = useMemo(() => {
+    return baseTotalFrames + thumbnailIntroFrames;
+  }, [baseTotalFrames, thumbnailIntroFrames]);
 
   const effectiveBackgroundTimeline = useMemo<BackgroundSegment[]>(() => {
     if (
@@ -2650,14 +2668,14 @@ export const Studio: React.FC = () => {
       }));
     }
     if (scenes.length > 0) {
-      const framesPerScene = Math.floor(effectiveTotalFrames / scenes.length);
+      const framesPerScene = Math.floor(baseTotalFrames / scenes.length);
       return scenes.map((scene, idx) => {
         const timing = sceneTimings[idx];
         const frameStart = timing ? timing.frameStart : idx * framesPerScene;
         const frameEnd = timing
           ? timing.frameEnd
           : idx === scenes.length - 1
-            ? effectiveTotalFrames
+            ? baseTotalFrames
             : (idx + 1) * framesPerScene - 1;
         return {
           imageSrc:
@@ -2670,7 +2688,7 @@ export const Studio: React.FC = () => {
       });
     }
     return backgroundTimeline;
-  }, [backgroundTimeline, scenes, sceneTimings, effectiveTotalFrames]);
+  }, [backgroundTimeline, scenes, sceneTimings, baseTotalFrames]);
 
   const effectiveAvatarTimeline = useMemo<AvatarSegment[]>(() => {
     if (avatarTimeline.length > 0 && avatarTimeline.length === scenes.length) {
@@ -2680,7 +2698,7 @@ export const Studio: React.FC = () => {
       }));
     }
     if (scenes.length > 0) {
-      const secPerScene = effectiveTotalFrames / 30 / scenes.length;
+      const secPerScene = baseTotalFrames / 30 / scenes.length;
       return scenes.map((scene, idx) => {
         const timing = sceneTimings[idx];
         return {
@@ -2691,7 +2709,7 @@ export const Studio: React.FC = () => {
       });
     }
     return avatarTimeline;
-  }, [avatarTimeline, scenes, sceneTimings, effectiveTotalFrames]);
+  }, [avatarTimeline, scenes, sceneTimings, baseTotalFrames]);
 
   const effectiveSubtitles = useMemo<SubtitleItem[]>(() => {
     if (subtitles.length > 0) {
@@ -3791,7 +3809,7 @@ export const Studio: React.FC = () => {
     if (!id || scenes.length === 0) return;
     setErrorMsg(null);
 
-    const totalFrames = Math.max(30, durationInFrames);
+    const totalFrames = Math.max(30, baseTotalFrames);
     const framesPerScene = Math.floor(totalFrames / scenes.length);
 
     const assembledBackgroundTimeline: BackgroundSegment[] = scenes.map(
@@ -3928,7 +3946,7 @@ export const Studio: React.FC = () => {
     const payload: TimeMachineVideoProps = {
       theme: theme || 'Vlog de Viagem no Tempo',
       title: currentViralTitle,
-      durationInFrames: totalFrames,
+      durationInFrames: effectiveTotalFrames,
       backgroundSrc: primaryBg,
       backgroundTimeline: assembledBackgroundTimeline,
       audioSrc,
@@ -3940,12 +3958,8 @@ export const Studio: React.FC = () => {
       subtitles: subtitlesToPersist,
       subtitleStyle,
       avatarTimeline: assembledAvatarTimeline,
-      thumbnailUrl:
-        thumbnailConfig?.selectedImage ||
-        (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailUrl,
-      thumbnailConfig:
-        thumbnailConfig ||
-        (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailConfig,
+      thumbnailUrl: effectiveThumbnailSrc,
+      thumbnailConfig,
       storyboard: {
         durationPreset,
         scenes: synchronizedScenes,
@@ -3955,9 +3969,7 @@ export const Studio: React.FC = () => {
         avatarConfig,
         ideationOptions,
         bgmVibe: effectiveBgmVibe,
-        thumbnailConfig:
-          thumbnailConfig ||
-          (videoRecord?.remotionProps as TimeMachineVideoProps | undefined)?.thumbnailConfig,
+        thumbnailConfig,
         episodeFormat,
         seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
         protagonistAgency,
@@ -4082,6 +4094,8 @@ export const Studio: React.FC = () => {
       subtitles: effectiveSubtitles,
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
+      thumbnailUrl: effectiveThumbnailSrc,
+      thumbnailConfig,
       storyboard: {
         durationPreset,
         scenes,
@@ -4091,6 +4105,7 @@ export const Studio: React.FC = () => {
         avatarConfig,
         ideationOptions,
         bgmVibe: effectiveBgmVibe,
+        thumbnailConfig,
         episodeFormat,
         seriesContext: episodeFormat === 'series' ? seriesContext : undefined,
         protagonistAgency,
@@ -4615,18 +4630,27 @@ export const Studio: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScrubbingTimeline, effectiveTotalFrames]);
 
+  // Identifica se a agulha está nos primeiros 0.5s da Cena #0 (Capa)
+  const isCenaZeroActive = useMemo(() => {
+    return thumbnailIntroFrames > 0 && currentFrame < thumbnailIntroFrames;
+  }, [thumbnailIntroFrames, currentFrame]);
+
   // Identifica qual Cena e qual Legenda estão ativas no frame atual da agulha
   const activeSceneIndexAtPlayhead = useMemo(() => {
+    if (isCenaZeroActive) return -1;
+    const shiftedFrame = currentFrame - thumbnailIntroFrames;
     return effectiveBackgroundTimeline.findIndex(
-      (seg) => currentFrame >= seg.frameStart && currentFrame <= seg.frameEnd
+      (seg) => shiftedFrame >= seg.frameStart && shiftedFrame <= seg.frameEnd
     );
-  }, [effectiveBackgroundTimeline, currentFrame]);
+  }, [effectiveBackgroundTimeline, currentFrame, isCenaZeroActive, thumbnailIntroFrames]);
 
   const activeSubtitleIndexAtPlayhead = useMemo(() => {
+    if (isCenaZeroActive) return -1;
+    const shiftedFrame = currentFrame - thumbnailIntroFrames;
     return effectiveSubtitles.findIndex(
-      (sub) => currentFrame >= sub.frameStart && currentFrame <= sub.frameEnd
+      (sub) => shiftedFrame >= sub.frameStart && shiftedFrame <= sub.frameEnd
     );
-  }, [effectiveSubtitles, currentFrame]);
+  }, [effectiveSubtitles, currentFrame, isCenaZeroActive, thumbnailIntroFrames]);
 
   // Marcações da Régua de Tempo (00:00, 00:05, 00:10, 00:15...)
   const rulerMarks = useMemo(() => {
@@ -7163,6 +7187,8 @@ export const Studio: React.FC = () => {
                     subtitles: effectiveSubtitles,
                     subtitleStyle,
                     avatarTimeline: effectiveAvatarTimeline,
+                    thumbnailUrl: effectiveThumbnailSrc,
+                    thumbnailConfig,
                     storyboard: {
                       durationPreset,
                       scenes,
@@ -7172,6 +7198,7 @@ export const Studio: React.FC = () => {
                       avatarConfig,
                       ideationOptions,
                       bgmVibe: effectiveBgmVibe,
+                      thumbnailConfig,
                       episodeFormat,
                       seriesContext:
                         episodeFormat === 'series' ? seriesContext : undefined,
@@ -7377,7 +7404,17 @@ export const Studio: React.FC = () => {
                 <span className="shrink-0 text-xs font-semibold text-slate-200">
                   Linha de Tempo
                 </span>
-                {activeSceneIndexAtPlayhead >= 0 && (
+                {isCenaZeroActive ? (
+                  <div className="flex items-center gap-2 min-w-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px]">
+                    <span className="shrink-0 font-mono font-bold text-red-400">
+                      {formatShortTime(currentFrame)}
+                    </span>
+                    <span className="text-amber-500/40">•</span>
+                    <span className="shrink-0 font-semibold text-amber-300">
+                      Cena #0 - Capa
+                    </span>
+                  </div>
+                ) : activeSceneIndexAtPlayhead >= 0 ? (
                   <div className="flex items-center gap-2 min-w-0 rounded-md border border-white/[0.08] bg-[#121216] px-2.5 py-0.5 text-[11px]">
                     <span className="shrink-0 font-mono font-bold text-red-400">
                       {formatShortTime(currentFrame)}
@@ -7387,9 +7424,10 @@ export const Studio: React.FC = () => {
                       Cena #{activeSceneIndexAtPlayhead + 1}
                     </span>
                   </div>
-                )}
+                ) : null}
               </div>
               <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                {thumbnailIntroFrames > 0 ? '1 capa + ' : ''}
                 {effectiveBackgroundTimeline.length} cenas •{' '}
                 {effectiveSubtitles.length} legendas
               </span>
@@ -7468,9 +7506,36 @@ export const Studio: React.FC = () => {
 
                 {/* FAIXA 1: VÍDEO (Cenários em Teal com Miniatura e Destaque no Momento Atual) */}
                 <div className="relative flex-1 my-1">
+                  {/* Cena #0: Capa / Thumbnail (0.5s) */}
+                  {thumbnailIntroFrames > 0 && effectiveThumbnailSrc && (
+                    <div
+                      style={{
+                        left: '0%',
+                        width: `${Math.max(1, (thumbnailIntroFrames / Math.max(1, effectiveTotalFrames)) * 100 - 0.4)}%`,
+                      }}
+                      className={`absolute inset-y-0 overflow-hidden rounded-lg border flex items-center gap-1.5 pr-1.5 shadow-sm transition ${
+                        isCenaZeroActive
+                          ? 'border-amber-300 bg-[#8c5e26] ring-1 ring-amber-300/50 brightness-110'
+                          : 'border-amber-500/40 bg-[#63441a] hover:brightness-110'
+                      }`}
+                      title="Cena #0 - Capa (0.5s)"
+                    >
+                      <img
+                        src={resolveAssetSrc(effectiveThumbnailSrc)}
+                        alt="Cena #0 - Capa"
+                        draggable={false}
+                        className="h-full w-8 shrink-0 object-cover border-r border-amber-300/30"
+                      />
+                      <span className="truncate text-xs font-semibold text-amber-200 drop-shadow-xs">
+                        Capa
+                      </span>
+                    </div>
+                  )}
+
                   {effectiveBackgroundTimeline.map((seg, idx) => {
                     const leftPct =
-                      (seg.frameStart / Math.max(1, effectiveTotalFrames)) *
+                      ((thumbnailIntroFrames + seg.frameStart) /
+                        Math.max(1, effectiveTotalFrames)) *
                       100;
                     const widthPct =
                       ((seg.frameEnd - seg.frameStart + 1) /
@@ -7509,7 +7574,13 @@ export const Studio: React.FC = () => {
 
                 {/* FAIXA 2: ÁUDIO (Narração em Azul com Ondas Sonoras) */}
                 <div className="relative flex-1 my-1">
-                  <div className="absolute inset-0 overflow-hidden rounded-lg border border-sky-400/35 bg-[#24537a] flex items-center px-2">
+                  <div
+                    style={{
+                      left: `${(thumbnailIntroFrames / Math.max(1, effectiveTotalFrames)) * 100}%`,
+                      width: `${((effectiveTotalFrames - thumbnailIntroFrames) / Math.max(1, effectiveTotalFrames)) * 100}%`,
+                    }}
+                    className="absolute inset-y-0 overflow-hidden rounded-lg border border-sky-400/35 bg-[#24537a] flex items-center px-2"
+                  >
                     {/* Waveform Bars Visual */}
                     <div className="flex w-full items-center justify-between gap-[2px] h-full py-1.5 opacity-85">
                       {WAVEFORM_BARS.map((heightPct, idx) => (
@@ -7527,7 +7598,8 @@ export const Studio: React.FC = () => {
                 <div className="relative flex-1 my-1 rounded-lg bg-[#232329] border border-white/[0.05] overflow-hidden">
                   {effectiveSubtitles.map((sub, idx) => {
                     const leftPct =
-                      (sub.frameStart / Math.max(1, effectiveTotalFrames)) *
+                      ((thumbnailIntroFrames + sub.frameStart) /
+                        Math.max(1, effectiveTotalFrames)) *
                       100;
                     const widthPct =
                       ((sub.frameEnd - sub.frameStart + 1) /
