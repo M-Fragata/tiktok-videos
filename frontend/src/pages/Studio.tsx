@@ -128,6 +128,8 @@ function computeRenderSignature(params: {
     sfx_list?: unknown[];
     custom_sfx_url?: string | null;
   }>;
+  thumbnailUrl?: string | null;
+  thumbnailConfig?: ThumbnailConfig;
 }): string {
   return JSON.stringify({
     durationInFrames: params.durationInFrames,
@@ -163,6 +165,14 @@ function computeRenderSignature(params: {
       sfx_list: sc.sfx_list,
       custom_sfx_url: sc.custom_sfx_url || null,
     })),
+    thumbnailUrl: params.thumbnailUrl || null,
+    thumbnailConfig: params.thumbnailConfig
+      ? {
+          selectedImage: params.thumbnailConfig.selectedImage || null,
+          titleHook: params.thumbnailConfig.titleHook || null,
+          textConfig: params.thumbnailConfig.textConfig || null,
+        }
+      : null,
   });
 }
 
@@ -993,7 +1003,12 @@ export const Studio: React.FC = () => {
         setBgmVibe(props.storyboard.bgmVibe);
       }
       if (props.storyboard.episodeFormat) {
-        setEpisodeFormat(props.storyboard.episodeFormat);
+        const rawFmt = props.storyboard.episodeFormat as string;
+        setEpisodeFormat(
+          rawFmt === 'series_episode' || rawFmt === 'series'
+            ? 'series'
+            : 'single'
+        );
       }
       if (props.storyboard.seriesContext) {
         setSeriesContext(props.storyboard.seriesContext);
@@ -1016,8 +1031,24 @@ export const Studio: React.FC = () => {
       ) {
         setIdeationOptions(props.storyboard.ideationOptions);
       }
-      if (props.thumbnailConfig || props.storyboard.thumbnailConfig) {
-        setThumbnailConfig(props.thumbnailConfig || props.storyboard.thumbnailConfig);
+      const rawThumbConfig =
+        props.thumbnailConfig || props.storyboard?.thumbnailConfig;
+      const initialThumbUrl =
+        props.thumbnailUrl || (videoRecord as any)?.thumbnailUrl || null;
+      if (rawThumbConfig || initialThumbUrl) {
+        const resolvedSelected =
+          rawThumbConfig?.selectedImage || initialThumbUrl || null;
+        const resolvedCandidates =
+          rawThumbConfig?.candidateImages && rawThumbConfig.candidateImages.length > 0
+            ? rawThumbConfig.candidateImages
+            : resolvedSelected
+              ? [resolvedSelected]
+              : [];
+        setThumbnailConfig({
+          ...(rawThumbConfig || {}),
+          selectedImage: resolvedSelected,
+          candidateImages: resolvedCandidates,
+        });
       }
 
       const loadedScenes = props.storyboard.scenes || [];
@@ -4013,7 +4044,9 @@ export const Studio: React.FC = () => {
     setIsDownloadingMp4(true);
     setDownloadProgress(0);
     try {
-      const response = await fetch(videoUrl);
+      const separator = videoUrl.includes('?') ? '&' : '?';
+      const cacheBustedUrl = `${videoUrl}${separator}t=${Date.now()}`;
+      const response = await fetch(cacheBustedUrl, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error('Falha ao obter o arquivo MP4 renderizado.');
       }
@@ -4156,6 +4189,8 @@ export const Studio: React.FC = () => {
       subtitleStyle,
       avatarTimeline: effectiveAvatarTimeline,
       scenes,
+      thumbnailUrl: effectiveThumbnailSrc,
+      thumbnailConfig,
     });
   }, [
     effectiveTotalFrames,
@@ -4170,6 +4205,8 @@ export const Studio: React.FC = () => {
     subtitleStyle,
     effectiveAvatarTimeline,
     scenes,
+    effectiveThumbnailSrc,
+    thumbnailConfig,
   ]);
 
   // Sincroniza a assinatura inicial caso o projeto já venha do banco com status === 'RENDERED'
@@ -4973,6 +5010,7 @@ export const Studio: React.FC = () => {
                       videoId={id || ''}
                       theme={theme}
                       thumbnailConfig={thumbnailConfig}
+                      thumbnailUrl={effectiveThumbnailSrc}
                       onUpdateThumbnailConfig={(newConf) => setThumbnailConfig(newConf)}
                       resolveAssetSrc={resolveAssetSrc}
                     />
@@ -5950,7 +5988,7 @@ export const Studio: React.FC = () => {
                             {[
                               { label: 'Topo', x: 50, y: 20 },
                               { label: 'Centro', x: 50, y: 50 },
-                              { label: 'Base', x: 50, y: 88 },
+                              { label: 'Base', x: 50, y: 84 },
                             ].map((preset) => (
                               <button
                                 key={preset.label}

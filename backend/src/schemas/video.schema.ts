@@ -40,7 +40,7 @@ export const subtitleStyleSchema = z.object({
   hasStroke: z.boolean().optional().default(true),
   hasBackground: z.boolean().optional().default(false),
   positionX: z.number().min(5).max(95).optional().default(50),
-  positionY: z.number().min(5).max(95).optional().default(88),
+  positionY: z.number().min(5).max(95).optional().default(84),
   speakerStyles: z
     .record(
       z.string(),
@@ -78,7 +78,10 @@ export const backgroundSegmentSchema = z
 
 export const durationPresetSchema = z.enum(['short', 'medium', 'long']);
 
-export const episodeFormatSchema = z.enum(['single', 'series']);
+export const episodeFormatSchema = z.preprocess(
+  (val) => (val === 'series_episode' ? 'series' : val),
+  z.enum(['single', 'series'])
+);
 export type EpisodeFormat = z.infer<typeof episodeFormatSchema>;
 
 export const protagonistAgencySchema = z.enum(['chaos_agent', 'observer']);
@@ -151,19 +154,23 @@ export const avatarConfigSchema = z.object({
 export const dialogueItemSchema = z.object({
   id: z
     .string()
+    .nullable()
     .optional()
     .default(() => `dlg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
   speaker: speakerTypeSchema.optional().default('protagonist'),
-  characterName: z.string().optional(),
-  voiceId: z.string().optional(),
-  text: z.string().default(''),
+  characterName: z.string().nullable().optional(),
+  voiceId: z.string().nullable().optional(),
+  text: z.string().nullable().optional().default(''),
 });
 
 export const sfxItemSchema = z.object({
   slot: z.enum(['action', 'ambient']).optional(),
-  label: z.string().optional(),
+  label: z.string().nullable().optional(),
   sound_prompt: z
     .string()
+    .nullable()
+    .optional()
+    .default('')
     .describe(
       "Prompt descritivo para gerar ou buscar o som (ex: 'vento ártico uivando', 'estalo de graveto')."
     ),
@@ -171,14 +178,20 @@ export const sfxItemSchema = z.object({
     .number()
     .min(0)
     .max(100)
+    .optional()
+    .default(90)
     .describe('De 0 a 100, o quão essencial e perfeito é este som para a cena.'),
   start_time_sec: z
     .number()
+    .optional()
+    .default(0)
     .describe(
       'Tempo de INÍCIO do som (em segundos) relativo ao começo da cena (ex: 0.0, 1.5, 2.2).'
     ),
   duration_sec: z
     .number()
+    .optional()
+    .default(1.0)
     .describe(
       'DURAÇÃO do som (em segundos). Ex: 0.5 para impactos, 3.0 para sons contínuos.'
     ),
@@ -186,11 +199,14 @@ export const sfxItemSchema = z.object({
     .number()
     .min(0.1)
     .max(1.0)
+    .optional()
+    .default(0.8)
     .describe(
       'Volume ideal do som (ex: 0.15 para ambientes discretos, 0.8 para ações fortes).'
     ),
   sfx_key: z
     .string()
+    .nullable()
     .optional()
     .describe(
       'Identificador ou slug da biblioteca local de estúdio, se houver correspondência.'
@@ -210,19 +226,20 @@ export const sfxItemSchema = z.object({
   original_duration_sec: z
     .number()
     .positive()
+    .nullable()
     .optional()
     .describe('Duração nativa original do arquivo de áudio (em segundos).'),
 });
 export type SfxItemInput = z.infer<typeof sfxItemSchema>;
 
 export const storyboardSceneSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().nullable().optional(),
   speaker: speakerTypeSchema.optional().default('protagonist'),
-  text: z.string().optional().default(''),
+  text: z.string().nullable().optional().default(''),
   dialogues: z.array(dialogueItemSchema).optional().default([]),
-  avatarSprite: z.string().min(1, 'O sprite do avatar é obrigatório'),
-  visual_description: z.string().optional().default(''),
-  imagePrompt: z.string().min(1, 'O prompt de imagem é obrigatório'),
+  avatarSprite: z.string().nullable().optional().default('avatars/avatar_excited.png'),
+  visual_description: z.string().nullable().optional().default(''),
+  imagePrompt: z.string().nullable().optional().default(''),
   sfx_list: z
     .array(sfxItemSchema)
     .default([])
@@ -231,9 +248,9 @@ export const storyboardSceneSchema = z.object({
     ),
   sfx_action: sfxItemSchema.nullable().optional(),
   sfx_ambient: sfxItemSchema.nullable().optional(),
-  sfx_suggestion: z.string().optional().default(''),
-  sfx_prompt: z.string().optional().default(''),
-  sfx_label: z.string().optional().default(''),
+  sfx_suggestion: z.string().nullable().optional().default(''),
+  sfx_prompt: z.string().nullable().optional().default(''),
+  sfx_label: z.string().nullable().optional().default(''),
   custom_sfx_url: z.string().nullable().optional().default(null),
   candidateImages: z.array(z.string()).optional().default([]),
   selectedImage: z.string().nullable().optional().default(null),

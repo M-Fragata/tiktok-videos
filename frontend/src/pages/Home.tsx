@@ -252,6 +252,9 @@ export const Home: React.FC = () => {
                 )?.selectedImage;
 
               const thumbnailSrc =
+                video.remotionProps?.thumbnailUrl ||
+                video.remotionProps?.thumbnailConfig?.selectedImage ||
+                video.remotionProps?.storyboard?.thumbnailConfig?.selectedImage ||
                 firstSelectedSceneImg ||
                 video.remotionProps?.backgroundTimeline?.[0]?.imageSrc ||
                 video.remotionProps?.backgroundSrc ||

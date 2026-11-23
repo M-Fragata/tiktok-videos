@@ -6,6 +6,7 @@ export interface ThumbnailCardProps {
   videoId: string;
   theme: string;
   thumbnailConfig?: ThumbnailConfig;
+  thumbnailUrl?: string | null;
   onUpdateThumbnailConfig: (config: ThumbnailConfig) => void;
   resolveAssetSrc: (url: string) => string;
 }
@@ -23,6 +24,7 @@ export const ThumbnailCard: React.FC<ThumbnailCardProps> = ({
   videoId,
   theme,
   thumbnailConfig,
+  thumbnailUrl,
   onUpdateThumbnailConfig,
   resolveAssetSrc,
 }) => {
@@ -89,10 +91,22 @@ export const ThumbnailCard: React.FC<ThumbnailCardProps> = ({
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
 
-  // Valores padrão seguros
+  // Valores padrão seguros com fallback para thumbnailUrl
   const currentPrompt = thumbnailConfig?.prompt || '';
-  const currentCandidateImages = thumbnailConfig?.candidateImages || [];
-  const currentSelectedImage = thumbnailConfig?.selectedImage || currentCandidateImages[0] || null;
+  const fallbackUrl = thumbnailUrl || (thumbnailConfig as any)?.thumbnailUrl || null;
+  const currentCandidateImages =
+    thumbnailConfig?.candidateImages && thumbnailConfig.candidateImages.length > 0
+      ? thumbnailConfig.candidateImages
+      : thumbnailConfig?.selectedImage
+        ? [thumbnailConfig.selectedImage]
+        : fallbackUrl
+          ? [fallbackUrl]
+          : [];
+  const currentSelectedImage =
+    thumbnailConfig?.selectedImage ||
+    fallbackUrl ||
+    currentCandidateImages[0] ||
+    null;
 
   const defaultYByPosition =
     thumbnailConfig?.textConfig?.position === 'top'

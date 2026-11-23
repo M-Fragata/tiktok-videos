@@ -471,7 +471,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleConfig = {
   hasStroke: true,
   hasBackground: false,
   positionX: 50,
-  positionY: 92,
+  positionY: 84,
   speakerStyles: DEFAULT_SPEAKER_STYLES,
 };
 
@@ -527,7 +527,7 @@ export interface SfxItem {
   start_time_sec: number;
   duration_sec: number;
   suggested_volume: number;
-  sfx_key?: string;
+  sfx_key?: string | null;
   audio_url?: string | null;
   playback_rate?: number;
   original_duration_sec?: number;
